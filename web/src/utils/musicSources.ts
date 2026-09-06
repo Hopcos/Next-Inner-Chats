@@ -27,6 +27,17 @@ interface MetingItem {
 const METING_API = 'https://api.injahow.cn/meting/'
 const NETEASE_PLAYLISTS = ['3778678', '3779629', '3778678'] // 热歌榜 / 云音乐飙升榜
 
+/** incompetech（Kevin MacLeod）实测可达曲目：file = 文件名（不含扩展名） */
+const INCOMPETECH_TRACKS: { title: string; file: string }[] = [
+  { title: 'Carefree', file: 'Carefree' },
+  { title: 'Fireflies and Stardust', file: 'Fireflies and Stardust' },
+  { title: 'Wallpaper', file: 'Wallpaper' },
+  { title: 'Pixelland', file: 'Pixelland' },
+  { title: 'Sardana', file: 'Sardana' },
+  { title: 'Cheery Monday', file: 'Cheery Monday' },
+  { title: 'Thinking Music', file: 'Thinking Music' },
+]
+
 export const musicSources: MusicSource[] = [
   {
     name: '网易云热歌',
@@ -42,14 +53,14 @@ export const musicSources: MusicSource[] = [
     },
   },
   {
-    name: 'MDN 音源（jsDelivr）',
-    fetchTracks: async () => [
-      {
-        title: "The Outfoxing (Jazz)",
-        artist: 'MDN webaudio-examples',
-        url: 'https://cdn.jsdelivr.net/gh/mdn/webaudio-examples@main/audio-basics/outfoxing.mp3',
-      },
-    ],
+    // Kevin MacLeod 公开曲库（CC-BY；字段里带署名以满足转载规范）。
+    // 文件名为 incompetech 直链实测可达的曲目（2026-09 节点验证）。
+    name: 'Kevin MacLeod（incompetech）',
+    fetchTracks: async () => INCOMPETECH_TRACKS.map((t) => ({
+      title: t.title,
+      artist: 'Kevin MacLeod · incompetech.com (CC-BY)',
+      url: 'https://incompetech.com/music/royalty-free/mp3-royaltyfree/' + encodeURIComponent(t.file) + '.mp3',
+    })),
   },
   {
     name: 'SoundHelix',
@@ -59,12 +70,6 @@ export const musicSources: MusicSource[] = [
         artist: 'SoundHelix (free demo)',
         url: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${i + 1}.mp3`,
       })),
-  },
-  {
-    name: 'W3Schools 演示音源',
-    fetchTracks: async () => [
-      { title: 'Horse (demo)', artist: 'W3Schools', url: 'https://www.w3schools.com/html/horse.mp3' },
-    ],
   },
 ]
 
