@@ -38,7 +38,7 @@ public sealed record LlmToolCall(string Id, string Name, JsonObject? Arguments);
 /// <summary>暴露给模型的工具定义</summary>
 public sealed record LlmToolDef(string Name, string Description, JsonObject? InputSchema);
 
-public sealed record LlmUsage(int PromptTokens, int CompletionTokens)
+public sealed record LlmUsage(int PromptTokens, int CompletionTokens, int ReasoningTokens = 0)
 {
     public int TotalTokens => PromptTokens + CompletionTokens;
 }

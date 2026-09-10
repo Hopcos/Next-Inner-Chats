@@ -54,7 +54,17 @@ export interface UiMessage {
   live: boolean
   images?: { fileName?: string; mimeType?: string; base64: string }[]
   model?: string
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number; cost: number; ttftMs: number; totalMs: number }
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    reasoningTokens: number
+    totalTokens: number
+    rounds: number
+    tools: number
+    cost: number
+    ttftMs: number
+    totalMs: number
+  }
   createdAt: number
   clientMessageId?: string
 }
@@ -528,7 +538,18 @@ export class ChatService extends Service {
       status: (m.status === 'Complete' ? 'complete' : m.status === 'Stopped' ? 'stopped' : m.status === 'Failed' ? 'failed' : 'sending') as UiMessageStatus,
       live: false,
       model: m.model,
-      usage: undefined,
+      // 历史消息：指标已落库，刷新后同样可查看完整 Token 明细
+      usage: {
+        promptTokens: m.promptTokens ?? 0,
+        completionTokens: m.completionTokens ?? 0,
+        reasoningTokens: m.reasoningTokens ?? 0,
+        totalTokens: (m.promptTokens ?? 0) + (m.completionTokens ?? 0),
+        rounds: m.rounds ?? 0,
+        tools: m.toolCalls ?? 0,
+        cost: m.cost ?? 0,
+        ttftMs: m.ttftMs ?? 0,
+        totalMs: m.totalMs ?? 0,
+      },
       createdAt: new Date(m.createdAt).getTime(),
     }
   }
@@ -783,7 +804,10 @@ export class ChatService extends Service {
           pending.usage = {
             promptTokens: ev.promptTokens ?? 0,
             completionTokens: ev.completionTokens ?? 0,
+            reasoningTokens: ev.reasoningTokens ?? 0,
             totalTokens: ev.totalTokens ?? 0,
+            rounds: ev.rounds ?? 0,
+            tools: ev.toolCalls ?? 0,
             cost: ev.cost ?? 0,
             ttftMs: ev.ttftMs ?? 0,
             totalMs: ev.totalMs ?? 0,

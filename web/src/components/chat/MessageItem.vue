@@ -44,6 +44,29 @@ async function copyContent() {
   }
 }
 
+// ---- Token 使用情况浮窗明细 ----
+const usageStats = computed(() => {
+  const u = props.message.usage
+  if (!u) return null
+  const reasoning = u.reasoningTokens > 0 ? u.reasoningTokens : null
+  const generated = reasoning != null ? Math.max(0, u.completionTokens - reasoning) : u.completionTokens
+  const speed = generated > 0 && u.totalMs > 0 ? (generated / (u.totalMs / 1000)).toFixed(1) : null
+  const rows: { label: string; value: string }[] = [
+    { label: t('chat.tokenInput'), value: String(u.promptTokens) },
+    { label: t('chat.tokenOutput'), value: String(u.completionTokens) },
+  ]
+  if (reasoning != null) rows.push({ label: t('chat.tokenReasoning'), value: String(reasoning) })
+  rows.push({ label: t('chat.tokenGenerated'), value: String(generated) })
+  if (speed != null) rows.push({ label: t('chat.tokenSpeed'), value: `${speed} tok/s` })
+  if (u.ttftMs > 0) rows.push({ label: t('chat.tokenTtft'), value: `${u.ttftMs} ms` })
+  if (u.totalMs > 0) rows.push({ label: t('chat.tokenTotal'), value: `${u.totalMs} ms` })
+  if (props.message.model) rows.push({ label: t('chat.tokenModel'), value: props.message.model })
+  if (u.rounds > 1) rows.push({ label: t('chat.tokenRounds'), value: String(u.rounds) })
+  if (u.tools > 0) rows.push({ label: t('chat.tokenTools'), value: String(u.tools) })
+  if (u.cost > 0) rows.push({ label: t('chat.tokenCost'), value: '$' + u.cost.toFixed(4) })
+  return rows
+})
+
 // ---- 回答生成图片下载 ----
 const bubbleRef = ref<HTMLElement | null>(null)
 const downloading = ref(false)
@@ -494,6 +517,15 @@ function prettyArgs(raw?: string): string {
       <div v-if="actionReady" class="actions">
         <button class="act nc-dim" :title="t('chat.favorite')" @click="emit('favorite', message)">⭐ {{ t('chat.favorite') }}</button>
         <button class="act nc-dim" :title="t('chat.copy')" @click="copyContent">📋 {{ t('chat.copy') }}</button>
+        <el-tooltip v-if="isAssistant && message.usage && usageStats" placement="top" :show-after="150" transition="false" popper-class="token-pop">
+          <template #content>
+            <div class="tp-title">{{ t('chat.tokenTitle') }}</div>
+            <div v-for="r in usageStats" :key="r.label" class="tp-row">
+              <span class="tp-label">{{ r.label }}</span><b class="tp-val">{{ r.value }}</b>
+            </div>
+          </template>
+          <button class="act nc-dim" :title="t('chat.tokenTitle')">{{ t('chat.tokenAction') }} ⚡</button>
+        </el-tooltip>
         <button v-if="isAssistant" class="act nc-dim" :title="t('chat.download')" :disabled="downloading" @click="downloadImage">{{ downloading ? '⏳' : '⬇️' }} {{ t('chat.download') }}</button>
         <button v-if="isAssistant" class="act nc-dim" :title="t('chat.regenerate')" @click="emit('regenerate', message.id)">🔄 {{ t('chat.regenerate') }}</button>
         <button class="act nc-dim danger" :title="t('common.delete')" @click="emit('remove', message)">🗑 {{ t('common.delete') }}</button>
@@ -867,5 +899,36 @@ function prettyArgs(raw?: string): string {
   overflow-x: auto;
   white-space: pre;
   text-align: left;
+}
+
+/* ---- Token 使用情况浮窗（popper teleport 到 body，需非 scoped 样式） ---- */
+.token-pop {
+  max-width: 260px;
+}
+
+.token-pop .tp-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: inherit;
+}
+
+.token-pop .tp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.token-pop .tp-label {
+  color: var(--nc-dim, #94a3b8);
+  white-space: nowrap;
+}
+
+.token-pop .tp-val {
+  font-weight: 600;
+  white-space: nowrap;
 }
 </style>

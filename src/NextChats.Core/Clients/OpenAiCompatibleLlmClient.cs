@@ -452,7 +452,13 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     {
         if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
         {
-            return new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"));
+            // OpenAI 兼容协议：reasoning_token 通常在 usage.completion_tokens_details.reasoning_tokens（DeepSeek R1 / K1 等）
+            var reasoning = 0;
+            if (u.TryGetProperty("completion_tokens_details", out var det) && det.ValueKind == JsonValueKind.Object)
+            {
+                reasoning = GetInt(det, "reasoning_tokens");
+            }
+            return new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"), reasoning);
         }
         // 兜底估算
         var promptChars = request.Messages.Sum(m => (m.Content?.Length ?? 0) + (m.ToolCalls?.Sum(tc => tc.Name.Length + (tc.Arguments?.ToJsonString().Length ?? 0)) ?? 0));

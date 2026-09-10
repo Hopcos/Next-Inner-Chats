@@ -186,6 +186,12 @@ export interface ChatMessageDto {
   model?: string
   promptTokens: number
   completionTokens: number
+  reasoningTokens: number
+  ttftMs: number
+  totalMs: number
+  rounds: number
+  toolCalls: number
+  cost: number
   createdAt: string
 }
 
@@ -270,7 +276,10 @@ export interface AgentEventDto {
   message?: string
   promptTokens?: number
   completionTokens?: number
+  reasoningTokens?: number
   totalTokens?: number
+  rounds?: number
+  toolCalls?: number
   cost?: number
   ttftMs?: number
   totalMs?: number

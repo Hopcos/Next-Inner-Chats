@@ -69,6 +69,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         var ttftMs = -1;
         var swAll = Stopwatch.StartNew();
         var interrupted = false;
+        string? model = null;
 
         for (var round = 1; round <= (request.MaxSteps > 0 ? request.MaxSteps : _policyOptions.Value.MaxReActSteps); round++)
         {
@@ -116,10 +117,12 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
             }
 
             if (outcome.TtftMs > 0 && ttftMs < 0) ttftMs = outcome.TtftMs;
+            if (outcome.Model is not null) model ??= outcome.Model;
             if (outcome.Usage is not null)
             {
                 usage.PromptTokens += outcome.Usage.PromptTokens;
                 usage.CompletionTokens += outcome.Usage.CompletionTokens;
+                usage.ReasoningTokens += outcome.Usage.ReasoningTokens;
                 usage.TotalTokens += outcome.Usage.TotalTokens;
             }
 
@@ -255,7 +258,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
             yield return AgentEvent.Error("INTERRUPTED", Texts.Get("INTERRUPTED", lang), trace);
         }
 
-        yield return AgentEvent.Done(usage, 0m, ttftMs, (int)swAll.ElapsedMilliseconds, trace);
+        yield return AgentEvent.Done(usage, 0m, ttftMs, (int)swAll.ElapsedMilliseconds, trace, model);
     }
 
     /// <summary>思考阶段生产者：LLM 流式事件写入 Channel（内部捕获异常 → 事件化，不中断会话）</summary>

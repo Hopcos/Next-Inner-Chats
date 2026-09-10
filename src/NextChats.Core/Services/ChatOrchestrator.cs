@@ -63,6 +63,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private readonly ISecurityService _security;
     private readonly ISessionCancellationRegistry _cancellations;
     private readonly ICacheService _cache;
+    private readonly IAdminStore _admin;
     private readonly IOptions<SecurityOptions> _securityOptions;
     private readonly IOptions<BuiltinToolOptions> _builtinOptions;
     private readonly ILogger _logger;
@@ -84,6 +85,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         ISecurityService security,
         ISessionCancellationRegistry cancellations,
         ICacheService cache,
+        IAdminStore admin,
         IOptions<SecurityOptions> securityOptions,
         IOptions<BuiltinToolOptions> builtinOptions,
         ILogger<ChatOrchestrator> logger)
@@ -98,6 +100,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         _security = security;
         _cancellations = cancellations;
         _cache = cache;
+        _admin = admin;
         _securityOptions = securityOptions;
         _builtinOptions = builtinOptions;
         _logger = logger;
@@ -408,6 +411,20 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         LlmUsage? totalUsage = null;
         var failureCode = (string?)null;
         var failureMessage = (string?)null;
+        int doneTtftMs = 0, doneTotalMs = 0, doneRounds = 0;
+        decimal doneCost = 0m;
+
+        // 费用：按首选模型配置的输入/输出单价估算（未配置用默认单价；实际 fallback 到其他模型属低频，忽略价差）
+        decimal priceIn = PricePer1KInput, priceOut = PricePer1KOutput;
+        if (request.ModelId.HasValue && request.ModelId.Value != Guid.Empty)
+        {
+            var pricingModel = await _admin.GetModelAsync(request.ModelId.Value, ct);
+            if (pricingModel is not null)
+            {
+                if (pricingModel.PriceInPer1K > 0) priceIn = pricingModel.PriceInPer1K;
+                if (pricingModel.PriceOutPer1K > 0) priceOut = pricingModel.PriceOutPer1K;
+            }
+        }
 
         var request2 = new AgentRunRequest
         {
@@ -431,6 +448,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         {
             await foreach (var ev in _loop.RunAsync(request2, linked.Token))
             {
+                var outEv = ev;
                 switch (ev.Kind)
                 {
                     case "text_delta":
@@ -469,11 +487,39 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         assistantStatus = ev.Code == "INTERRUPTED" ? MessageStatus.Stopped : MessageStatus.Failed;
                         break;
                     case "done":
-                        totalUsage = ev.Usage is null ? null : new LlmUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens);
+                        // 推理 token：优先用模型上报的 reasoning_tokens；网关未上报时按思考链文本长度估算（chars/4，与首轮兜底估算一致）
+                        var reasoningTokens = ev.Usage?.ReasoningTokens ?? 0;
+                        if (reasoningTokens <= 0 && finalReasoning.Length > 0)
+                        {
+                            reasoningTokens = Math.Max(1, finalReasoning.Length / 4);
+                        }
+                        totalUsage = ev.Usage is null ? null : new LlmUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens, reasoningTokens);
                         model ??= ev.Model;
+                        doneTtftMs = ev.TtftMs ?? 0;
+                        doneTotalMs = ev.TotalMs ?? 0;
+                        doneRounds = ev.Usage?.Rounds ?? 0;
+                        doneCost = EstimateCost(totalUsage, priceIn, priceOut);
+                        // 在透传前重写 done：补齐模型名 + 估算推理 token + 按模型单价估算的费用
+                        if (ev.Usage is not null)
+                        {
+                            outEv = AgentEvent.Done(new JsonUsage
+                            {
+                                PromptTokens = ev.Usage.PromptTokens,
+                                CompletionTokens = ev.Usage.CompletionTokens,
+                                ReasoningTokens = reasoningTokens,
+                                TotalTokens = ev.Usage.TotalTokens,
+                                Rounds = ev.Usage.Rounds,
+                                ToolCalls = ev.Usage.ToolCalls,
+                                ToolErrors = ev.Usage.ToolErrors,
+                                Approvals = ev.Usage.Approvals,
+                            }, doneCost, doneTtftMs, doneTotalMs, trace, model);
+                        }
+                        break;
+                    default:
+                        outEv = ev;
                         break;
                 }
-                yield return ev;
+                yield return outEv;
             }
         }
         finally
@@ -495,6 +541,12 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             PromptTokens = totalUsage?.PromptTokens ?? 0,
             CompletionTokens = totalUsage?.CompletionTokens ?? 0,
             TotalTokens = (totalUsage?.PromptTokens ?? 0) + (totalUsage?.CompletionTokens ?? 0),
+            ReasoningTokens = totalUsage?.ReasoningTokens ?? 0,
+            TtftMs = doneTtftMs,
+            TotalMs = doneTotalMs,
+            Rounds = doneRounds,
+            ToolCalls = toolTrace.Count,
+            Cost = doneCost,
             TraceId = trace,
         }, ct);
 
@@ -516,13 +568,13 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             PromptTokens = totalUsage?.PromptTokens ?? 0,
             CompletionTokens = totalUsage?.CompletionTokens ?? 0,
             TotalTokens = totalUsage?.TotalTokens ?? 0,
-            Cost = EstimateCost(totalUsage),
-            TtftMs = 0,
-            TotalMs = 0,
+            Cost = EstimateCost(totalUsage, priceIn, priceOut),
+            TtftMs = doneTtftMs,
+            TotalMs = doneTotalMs,
             ToolCalls = toolTrace.Count,
             ToolErrorCount = toolTrace.Count(t => t.TryGetPropertyValue("errorCode", out var e) && e is not null),
             ApprovalCount = toolTrace.Count(t => t.TryGetPropertyValue("approvalId", out var a) && a is not null),
-            Rounds = 0,
+            Rounds = doneRounds,
         }, ct);
 
         await _chat.StoreIdempotencyAsync(request.UserId,
@@ -887,10 +939,11 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         return null;
     }
 
-    private static decimal EstimateCost(LlmUsage? usage)
+    private static decimal EstimateCost(LlmUsage? usage, decimal? priceIn = null, decimal? priceOut = null)
     {
         if (usage is null) return 0;
-        return usage.PromptTokens * PricePer1KInput / 1000 + usage.CompletionTokens * PricePer1KOutput / 1000;
+        return usage.PromptTokens * (priceIn ?? PricePer1KInput) / 1000
+             + usage.CompletionTokens * (priceOut ?? PricePer1KOutput) / 1000;
     }
 
     private static string? GetSetting(IDictionary<string, string> settings, string key) =>

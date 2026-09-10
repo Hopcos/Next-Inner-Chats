@@ -84,6 +84,13 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "LlmModels", "ThinkingEffort", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "LlmProviders", "ThinkingParam", "TEXT NOT NULL DEFAULT 'None'");
             await AddColumnIfMissingAsync(conn, "McpServers", "Instructions", "TEXT");
+            // ChatMessages 用量明细列（历史对话也可查看 Token 指标；decimal 同 TokenUsageRecords.Cost 存 TEXT）
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "ReasoningTokens", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "TtftMs", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "TotalMs", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "Rounds", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "ToolCalls", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "Cost", "TEXT NOT NULL DEFAULT '0'");
             await AddTableIfMissingAsync(conn, "UserFavorites", """
                 CREATE TABLE "UserFavorites" (
                     "Id" TEXT NOT NULL CONSTRAINT "PK_UserFavorites" PRIMARY KEY,

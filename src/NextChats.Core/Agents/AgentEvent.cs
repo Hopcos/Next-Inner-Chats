@@ -48,7 +48,13 @@ public sealed class AgentEvent
 
     public int? CompletionTokens { get; init; }
 
+    public int? ReasoningTokens { get; init; }
+
     public int? TotalTokens { get; init; }
+
+    public int? Rounds { get; init; }
+
+    public int? ToolCalls { get; init; }
 
     public decimal? Cost { get; init; }
 
@@ -95,11 +101,12 @@ public sealed class AgentEvent
 
     public static AgentEvent Error(string code, string message, string traceId) => new() { Kind = "error", Code = code, Message = message, TraceId = traceId };
 
-    public static AgentEvent Done(JsonUsage usage, decimal cost, int ttftMs, int totalMs, string traceId) => new()
+    public static AgentEvent Done(JsonUsage usage, decimal cost, int ttftMs, int totalMs, string traceId, string? model = null) => new()
     {
         Kind = "done", Usage = usage, Cost = cost, TtftMs = ttftMs, TotalMs = totalMs, TraceId = traceId,
         PromptTokens = usage.PromptTokens, CompletionTokens = usage.CompletionTokens, TotalTokens = usage.TotalTokens,
-        Model = null,
+        ReasoningTokens = usage.ReasoningTokens, Rounds = usage.Rounds, ToolCalls = usage.ToolCalls,
+        Model = model,
     };
 }
 
@@ -109,6 +116,8 @@ public sealed class JsonUsage
     public int PromptTokens { get; set; }
 
     public int CompletionTokens { get; set; }
+
+    public int ReasoningTokens { get; set; }
 
     public int TotalTokens { get; set; }
 

@@ -467,6 +467,24 @@ public class ChatMessage
     /// <summary>汇总（冗余存储，供聚合查询免计算）</summary>
     public int TotalTokens { get; set; }
 
+    /// <summary>推理（思考链）token 数</summary>
+    public int ReasoningTokens { get; set; }
+
+    /// <summary>首字响应耗时（ms）</summary>
+    public int TtftMs { get; set; }
+
+    /// <summary>本次回答总耗时（ms）</summary>
+    public int TotalMs { get; set; }
+
+    /// <summary>ReAct 推理轮数</summary>
+    public int Rounds { get; set; }
+
+    /// <summary>工具调用次数</summary>
+    public int ToolCalls { get; set; }
+
+    /// <summary>估算费用（美元）</summary>
+    public decimal Cost { get; set; }
+
     [MaxLength(64)] public string? TraceId { get; set; }
 
     /// <summary>客户端消息 ID（写操作幂等）</summary>
