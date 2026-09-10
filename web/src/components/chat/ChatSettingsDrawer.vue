@@ -103,6 +103,23 @@ function toolCountLabel(m: { endpoint?: string | null; items: { kind: string }[]
         </el-select>
         <div v-if="selectedProvider && (selectedProvider.models ?? []).length === 0" class="nc-dim empty-note">{{ t('chat.noModel') }}</div>
 
+        <h4 class="sec">{{ t('chat.secDelegation') }}</h4>
+        <div class="deleg-row">
+          <span class="deleg-label">{{ t('chat.delegationToggle') }}</span>
+          <el-switch :model-value="!!chat.delegationEnabled" @change="(v: string | number | boolean) => patch({ delegationEnabled: v === true })" />
+        </div>
+        <p class="nc-dim empty-note">{{ t('chat.delegationHint') }}</p>
+        <el-select
+          :model-value="chat.subAgentModelId ?? ''"
+          :placeholder="t('chat.subAgentFollowMain')"
+          :disabled="!chat.delegationEnabled || !selectedProvider"
+          @change="(v: string) => patch({ subAgentModelId: v === '' ? null : v })"
+        >
+          <el-option :label="t('chat.subAgentFollowMain')" value="" />
+          <el-option v-for="m in selectedProvider?.models ?? []" :key="m.id" :label="modelLabel(m)" :value="m.id" />
+        </el-select>
+        <p class="nc-dim empty-note">{{ t('chat.subAgentModelHint') }}</p>
+
         <h4 class="sec">{{ t('chat.secMcp') }}</h4>
         <el-checkbox-group :model-value="chat.mcpServerIds" class="vert" @change="(v: string[]) => patch({ mcpServerIds: v })">
           <el-checkbox v-for="m in catalog.mcps" :key="m.id" :value="m.id" class="radio-card">
@@ -170,6 +187,19 @@ function toolCountLabel(m: { endpoint?: string | null; items: { kind: string }[]
 .empty-note {
   font-size: 12px;
   padding: 6px 2px;
+}
+
+.deleg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.deleg-label {
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .render-error {

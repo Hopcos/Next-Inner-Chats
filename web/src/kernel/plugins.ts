@@ -64,6 +64,9 @@ export interface UiMessage {
     cost: number
     ttftMs: number
     totalMs: number
+    subAgentCount: number
+    subAgentInputTokens: number
+    subAgentOutputTokens: number
   }
   createdAt: number
   clientMessageId?: string
@@ -141,7 +144,7 @@ export class SettingsService extends Service {
     threeEnabled: boolean
     loaded: boolean
   }>({
-    chat: { providerId: null, modelId: null, promptId: null, mcpServerIds: [], skillIds: [] },
+    chat: { providerId: null, modelId: null, promptId: null, mcpServerIds: [], skillIds: [], delegationEnabled: false, subAgentModelId: null },
     threeEnabled: true,
     loaded: false,
   })
@@ -195,6 +198,8 @@ export class SettingsService extends Service {
         'chat.promptId': this.state.chat.promptId ?? '',
         'chat.mcpServers': JSON.stringify(this.state.chat.mcpServerIds),
         'chat.skills': JSON.stringify(this.state.chat.skillIds),
+        'agent.delegationEnabled': this.state.chat.delegationEnabled ? 'true' : 'false',
+        'chat.subAgentModelId': this.state.chat.subAgentModelId ?? '',
       })
     try {
       await put()
@@ -215,6 +220,8 @@ export class SettingsService extends Service {
       const providerId = remote['chat.providerId'] || null
       const modelId = remote['chat.modelId'] || null
       const promptId = remote['chat.promptId'] || null
+      const delegationEnabled = remote['agent.delegationEnabled'] === 'true'
+      const subAgentModelId = remote['chat.subAgentModelId'] || null
       let mcpServerIds: string[] = []
       let skillIds: string[] = []
       try {
@@ -223,7 +230,7 @@ export class SettingsService extends Service {
       } catch {
         /* 忽略 */
       }
-      this.state.chat = { providerId, modelId, promptId, mcpServerIds, skillIds }
+      this.state.chat = { providerId, modelId, promptId, mcpServerIds, skillIds, delegationEnabled, subAgentModelId }
       this.persistLocal()
       this.state.loaded = true
     } catch {
@@ -549,6 +556,9 @@ export class ChatService extends Service {
         cost: m.cost ?? 0,
         ttftMs: m.ttftMs ?? 0,
         totalMs: m.totalMs ?? 0,
+        subAgentCount: m.subAgentCount ?? 0,
+        subAgentInputTokens: m.subAgentInputTokens ?? 0,
+        subAgentOutputTokens: m.subAgentOutputTokens ?? 0,
       },
       createdAt: new Date(m.createdAt).getTime(),
     }
@@ -811,6 +821,9 @@ export class ChatService extends Service {
             cost: ev.cost ?? 0,
             ttftMs: ev.ttftMs ?? 0,
             totalMs: ev.totalMs ?? 0,
+            subAgentCount: ev.subAgentCount ?? 0,
+            subAgentInputTokens: ev.subAgentInputTokens ?? 0,
+            subAgentOutputTokens: ev.subAgentOutputTokens ?? 0,
           }
         }
         break

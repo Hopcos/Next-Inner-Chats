@@ -91,6 +91,9 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "ChatMessages", "Rounds", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "ToolCalls", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "Cost", "TEXT NOT NULL DEFAULT '0'");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentCount", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentInputTokens", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentOutputTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddTableIfMissingAsync(conn, "UserFavorites", """
                 CREATE TABLE "UserFavorites" (
                     "Id" TEXT NOT NULL CONSTRAINT "PK_UserFavorites" PRIMARY KEY,

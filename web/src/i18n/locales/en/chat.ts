@@ -143,6 +143,13 @@ export default {
     tokenModel: 'Model',
     tokenRounds: 'Rounds',
     tokenTools: 'Tool calls',
+    tokenSubAgents: 'Sub-Agents',
+    tokenSubTokens: 'Sub-agent tokens',
     tokenCost: 'Cost',
+    secDelegation: 'Multi-Agent Delegation',
+    delegationToggle: 'Enable delegation',
+    delegationHint: 'When enabled, independent research tasks can be fanned out to parallel sub-agents (e.g. several JIRA issues, documents, or log analyses). Off by default.',
+    subAgentFollowMain: 'Follow main model',
+    subAgentModelHint: 'Model used by sub-agents; leave unset to follow the main model.',
   },
 }

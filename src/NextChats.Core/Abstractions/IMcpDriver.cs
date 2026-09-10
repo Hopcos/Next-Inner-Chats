@@ -19,7 +19,10 @@ public sealed record McpToolResult(
     string? ErrorCode,       // 友好错误码
     int DurationMs,
     int Attempts,
-    bool Retryable = false); // 是否可重试（连接/超时类瞬时错误 true；业务错误 false）
+    bool Retryable = false,  // 是否可重试（连接/超时类瞬时错误 true；业务错误 false）
+    int SubAgentCount = 0,   // 本次工具调用派生的子 Agent 数量（delegate_task = 1；其余 0）
+    int SubAgentInputTokens = 0,
+    int SubAgentOutputTokens = 0);
 
 /// <summary>MCP 自动带出元数据（description / instructions / tools / prompts / resources）</summary>
 public sealed record McpDiscoverResult(

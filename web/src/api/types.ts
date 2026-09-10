@@ -192,6 +192,9 @@ export interface ChatMessageDto {
   rounds: number
   toolCalls: number
   cost: number
+  subAgentCount: number
+  subAgentInputTokens: number
+  subAgentOutputTokens: number
   createdAt: string
 }
 
@@ -280,6 +283,9 @@ export interface AgentEventDto {
   totalTokens?: number
   rounds?: number
   toolCalls?: number
+  subAgentCount?: number
+  subAgentInputTokens?: number
+  subAgentOutputTokens?: number
   cost?: number
   ttftMs?: number
   totalMs?: number
@@ -292,4 +298,8 @@ export interface ChatSettings {
   promptId?: string | null
   mcpServerIds: string[]
   skillIds: string[]
+  /** 主-从委派开关（delegate_task 仅在开启时可用） */
+  delegationEnabled?: boolean
+  /** Sub-Agent 模型（null = 跟随主模型） */
+  subAgentModelId?: string | null
 }

@@ -485,6 +485,15 @@ public class ChatMessage
     /// <summary>估算费用（美元）</summary>
     public decimal Cost { get; set; }
 
+    /// <summary>子 Agent 数量（delegate_task 派生）</summary>
+    public int SubAgentCount { get; set; }
+
+    /// <summary>子 Agent 输入 token 汇总</summary>
+    public int SubAgentInputTokens { get; set; }
+
+    /// <summary>子 Agent 输出 token 汇总</summary>
+    public int SubAgentOutputTokens { get; set; }
+
     [MaxLength(64)] public string? TraceId { get; set; }
 
     /// <summary>客户端消息 ID（写操作幂等）</summary>

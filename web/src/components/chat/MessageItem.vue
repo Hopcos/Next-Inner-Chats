@@ -63,6 +63,10 @@ const usageStats = computed(() => {
   if (props.message.model) rows.push({ label: t('chat.tokenModel'), value: props.message.model })
   if (u.rounds > 1) rows.push({ label: t('chat.tokenRounds'), value: String(u.rounds) })
   if (u.tools > 0) rows.push({ label: t('chat.tokenTools'), value: String(u.tools) })
+  if (u.subAgentCount > 0) rows.push({ label: t('chat.tokenSubAgents'), value: String(u.subAgentCount) })
+  if (u.subAgentInputTokens > 0 || u.subAgentOutputTokens > 0) {
+    rows.push({ label: t('chat.tokenSubTokens'), value: `↑${u.subAgentInputTokens} ↓${u.subAgentOutputTokens}` })
+  }
   if (u.cost > 0) rows.push({ label: t('chat.tokenCost'), value: '$' + u.cost.toFixed(4) })
   return rows
 })

@@ -95,6 +95,14 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
 
             // ---- 思考：LLM 流式（Channel：生产者流式写入事件，消费者实时转发） ----
             var outcome = new RoundOutcome();
+            if (round == 1 && request.PrecomputedToolCalls is { Count: > 0 } preCalls)
+            {
+                // 启动前拆解（主-从委派 Planner）：首轮直接执行预置的 delegate_task（并行），不等待模型决策
+                outcome.Finish = LlmFinishReason.ToolCalls;
+                outcome.ToolCalls.AddRange(preCalls);
+            }
+            else
+            {
             var channel = Channel.CreateUnbounded<AgentEvent>(new UnboundedChannelOptions
             {
                 SingleReader = true,
@@ -114,6 +122,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
             finally
             {
                 await SafeAwait(producer);
+            }
             }
 
             if (outcome.TtftMs > 0 && ttftMs < 0) ttftMs = outcome.TtftMs;
@@ -140,12 +149,16 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 break; // LLM_ERROR 事件已下发；会话继续可用
             }
 
-            // ---- 观察：处理工具调用 ----
+            // ---- 观察：处理工具调用（决策顺序 / 执行并行 / 结果按序回灌） ----
             if (outcome.Finish == LlmFinishReason.ToolCalls && outcome.ToolCalls.Count > 0)
             {
                 messages.Add(LlmChatMessage.Assistant(outcome.Text, outcome.ToolCalls, outcome.Reasoning));
-                foreach (var call in outcome.ToolCalls)
+
+                // 决策阶段（顺序）：工具解析 + 策略判定 + 审批等待 + ToolStart 事件
+                var execs = new List<(LlmToolCall Call, UnifiedTool Tool, string ArgsJson)>();
+                for (var i = 0; i < outcome.ToolCalls.Count; i++)
                 {
+                    var call = outcome.ToolCalls[i];
                     if (ct.IsCancellationRequested)
                     {
                         interrupted = true;
@@ -166,17 +179,12 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                     }
 
                     var verdict = _policy.Evaluate(tool.ServerName, tool.Name, argsJson);
-                    string toolResult;
-                    var execOk = true; // 拒绝/超时等策略消息视为非执行失败；只有真实工具执行结果才翻转
-                    var swTool = Stopwatch.StartNew();
-
                     if (verdict == PolicyVerdict.Deny)
                     {
                         usage.ToolErrors++;
-                        toolResult = Texts.Get("OP_DENIED", lang);
-                        messages.Add(LlmChatMessage.ToolResult(call.Id, toolResult));
-                        swTool.Stop();
-                        yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, toolResult, "OP_DENIED", (int)swTool.ElapsedMilliseconds, trace);
+                        var deniedMsg = Texts.Get("OP_DENIED", lang);
+                        messages.Add(LlmChatMessage.ToolResult(call.Id, deniedMsg));
+                        yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, deniedMsg, "OP_DENIED", 0, trace);
                         continue;
                     }
 
@@ -201,29 +209,80 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         if (decision is null)
                         {
                             yield return AgentEvent.ApprovalUpdated(approval.Id, "expired", trace);
-                            toolResult = Texts.Get("APPROVAL_TIMEOUT_TOOL", lang);
+                            var timeoutMsg = Texts.Get("APPROVAL_TIMEOUT_TOOL", lang);
+                            messages.Add(LlmChatMessage.ToolResult(call.Id, timeoutMsg));
+                            yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, timeoutMsg, "APPROVAL_TIMEOUT_TOOL", 0, trace);
                         }
                         else if (decision == ApprovalDecision.Rejected)
                         {
                             yield return AgentEvent.ApprovalUpdated(approval.Id, "rejected", trace);
-                            toolResult = Texts.Get("APPROVAL_REJECTED_TOOL", lang);
+                            var rejectedMsg = Texts.Get("APPROVAL_REJECTED_TOOL", lang);
+                            messages.Add(LlmChatMessage.ToolResult(call.Id, rejectedMsg));
+                            yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, rejectedMsg, "APPROVAL_REJECTED_TOOL", 0, trace);
                         }
                         else
                         {
                             yield return AgentEvent.ApprovalUpdated(approval.Id, "approved", trace);
-                            (execOk, toolResult) = await ExecuteToolWithRetryAsync(request, tool, argsJson, trace, lang, ct, usage);
+                            execs.Add((call, tool, argsJson));
                         }
                     }
                     else
                     {
                         yield return AgentEvent.ToolStart(tool.ServerName, tool.Name, argsJson, false, null, trace);
-                        (execOk, toolResult) = await ExecuteToolWithRetryAsync(request, tool, argsJson, trace, lang, ct, usage);
+                        execs.Add((call, tool, argsJson));
+                    }
+                }
+
+                // ---- 执行阶段（并行）：全部真实执行并发完成，结果按 execs 顺序回灌 ----
+                if (execs.Count > 0 && !interrupted)
+                {
+                    var results = new (bool Ok, string Text, bool Errored, int SubCount, int SubIn, int SubOut)[execs.Count];
+                    var sws = new Stopwatch[execs.Count];
+                    for (var e = 0; e < execs.Count; e++) sws[e] = Stopwatch.StartNew();
+
+                    await Task.WhenAll(execs.Select(async (item, idx) =>
+                    {
+                        try
+                        {
+                            results[idx] = await ExecuteToolWithRetryAsync(request, item.Tool, item.ArgsJson, trace, lang, ct);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "工具执行异常 trace={Trace} tool={Server}.{Tool}", trace, item.Tool.ServerName, item.Tool.Name);
+                            results[idx] = (false, Texts.Get("TOOL_EXECUTE_ERROR", lang), true, 0, 0, 0);
+                        }
+                        finally
+                        {
+                            sws[idx].Stop();
+                        }
+                    }).ToList());
+
+                    var errored = results.Count(r => r.Errored);
+                    if (errored > 0) usage.ToolErrors += errored;
+
+                    // 子 Agent 用量汇总（delegate_task 派生）
+                    foreach (var r in results)
+                    {
+                        if (r.SubCount > 0)
+                        {
+                            usage.SubAgentCount += r.SubCount;
+                            usage.SubAgentInputTokens += r.SubIn;
+                            usage.SubAgentOutputTokens += r.SubOut;
+                        }
                     }
 
-                    swTool.Stop();
-                    messages.Add(LlmChatMessage.ToolResult(call.Id, toolResult));
-                    yield return AgentEvent.ToolResult(tool.ServerName, tool.Name,
-                        execOk, Truncate(toolResult, 800), null, (int)swTool.ElapsedMilliseconds, trace);
+                    for (var e = 0; e < execs.Count; e++)
+                    {
+                        var (call, tool, _) = execs[e];
+                        var (ok, text, _, _, _, _) = results[e];
+                        messages.Add(LlmChatMessage.ToolResult(call.Id, text));
+                        yield return AgentEvent.ToolResult(tool.ServerName, tool.Name,
+                            ok, Truncate(text, 800), null, (int)sws[e].ElapsedMilliseconds, trace);
+                    }
                 }
 
                 if (interrupted) break;
@@ -445,8 +504,10 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
     /// <summary>工具执行失败前缀（固定符号，非本地化文案；外部工具结果不以该前缀标记失败）</summary>
     private const string ErrorMarker = "❌";
 
-    /// <summary>执行工具：错误进循环 + 重试策略（退避），最终失败以 tool result 回灌给模型</summary>
-    private async Task<(bool Success, string Text)> ExecuteToolWithRetryAsync(AgentRunRequest request, UnifiedTool tool, string argsJson, string trace, string lang, CancellationToken ct, JsonUsage usage)
+    /// <summary>执行工具：错误进循环 + 重试策略（退避），最终失败以 tool result 回灌给模型。
+    /// 返回 (成功, 结果文本, 是否最终失败, 子Agent数, 子Agent输入tokens, 子Agent输出tokens)——失败计数由调用方统一统计（并发执行时避免共享计数竞态）</summary>
+    private async Task<(bool Success, string Text, bool Errored, int SubCount, int SubIn, int SubOut)> ExecuteToolWithRetryAsync(
+        AgentRunRequest request, UnifiedTool tool, string argsJson, string trace, string lang, CancellationToken ct)
     {
         var maxAttempts = 1 + Math.Max(0, _policyOptions.Value.MaxToolRetries);
         string lastError = Texts.Get("TOOL_EXECUTE_FAILED", lang);
@@ -457,16 +518,14 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 var result = await request.ToolExecutor(tool, argsJson, trace, ct);
                 if (result.Success)
                 {
-                    return (true, result.ResultText);
+                    return (true, result.ResultText, false, result.SubAgentCount, result.SubAgentInputTokens, result.SubAgentOutputTokens);
                 }
                 lastError = result.ErrorMessage ?? lastError;
                 // 瞬时错误（连接/超时）才重试；业务错误（MCP_TOOL_ERROR 等）直接回灌
                 if (!result.Retryable || attempt >= maxAttempts)
                 {
-                    usage.ToolErrors++;
-                    return (false, $"{ErrorMarker} {result.ErrorCode ?? "TOOL_ERROR"}: {lastError}");
+                    return (false, $"{ErrorMarker} {result.ErrorCode ?? "TOOL_ERROR"}: {lastError}", true, 0, 0, 0);
                 }
-                usage.ToolErrors++;
                 await Task.Delay(_policyOptions.Value.ToolRetryDelayMs * attempt, ct);
             }
             catch (OperationCanceledException)
@@ -481,8 +540,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 await Task.Delay(_policyOptions.Value.ToolRetryDelayMs * attempt, ct);
             }
         }
-        usage.ToolErrors++;
-        return (false, $"{ErrorMarker} {lastError}");
+        return (false, $"{ErrorMarker} {lastError}", true, 0, 0, 0);
     }
 
     private static JsonObject? ToSchema(string? schemaJson)

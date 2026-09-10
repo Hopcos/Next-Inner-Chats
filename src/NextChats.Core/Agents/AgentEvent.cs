@@ -56,6 +56,12 @@ public sealed class AgentEvent
 
     public int? ToolCalls { get; init; }
 
+    public int? SubAgentCount { get; init; }
+
+    public int? SubAgentInputTokens { get; init; }
+
+    public int? SubAgentOutputTokens { get; init; }
+
     public decimal? Cost { get; init; }
 
     public int? TtftMs { get; init; }
@@ -106,6 +112,7 @@ public sealed class AgentEvent
         Kind = "done", Usage = usage, Cost = cost, TtftMs = ttftMs, TotalMs = totalMs, TraceId = traceId,
         PromptTokens = usage.PromptTokens, CompletionTokens = usage.CompletionTokens, TotalTokens = usage.TotalTokens,
         ReasoningTokens = usage.ReasoningTokens, Rounds = usage.Rounds, ToolCalls = usage.ToolCalls,
+        SubAgentCount = usage.SubAgentCount, SubAgentInputTokens = usage.SubAgentInputTokens, SubAgentOutputTokens = usage.SubAgentOutputTokens,
         Model = model,
     };
 }
@@ -120,6 +127,15 @@ public sealed class JsonUsage
     public int ReasoningTokens { get; set; }
 
     public int TotalTokens { get; set; }
+
+    /// <summary>子 Agent 数量（delegate_task 派生）</summary>
+    public int SubAgentCount { get; set; }
+
+    /// <summary>子 Agent 输入 token 汇总</summary>
+    public int SubAgentInputTokens { get; set; }
+
+    /// <summary>子 Agent 输出 token 汇总</summary>
+    public int SubAgentOutputTokens { get; set; }
 
     public int Rounds { get; set; }
 

@@ -143,6 +143,13 @@ export default {
     tokenModel: '模型',
     tokenRounds: '推理轮数',
     tokenTools: '工具调用',
+    tokenSubAgents: 'Sub-Agents',
+    tokenSubTokens: 'Sub-Agent 消耗',
     tokenCost: '费用',
+    secDelegation: '主-从委派（多 Agent）',
+    delegationToggle: '启用主-从委派',
+    delegationHint: '开启后，回答可将独立调查任务并行分发给 Sub-Agent 加速（如多个 JIRA 单/文档/日志分析）。默认关闭。',
+    subAgentFollowMain: '跟随主模型',
+    subAgentModelHint: 'Sub-Agent 使用的模型；不选择则跟随主模型。',
   },
 }

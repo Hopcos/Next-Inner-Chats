@@ -54,4 +54,10 @@ public sealed record AgentRunRequest
 
     /// <summary>界面语言（zh 前缀 = 中文，其他 = 英文；影响工具回灌 / 事件文案 / Mock 输出的本地化）</summary>
     public string? Lang { get; init; }
+
+    /// <summary>
+    /// 启动前预置工具调用（主-从委派 Planner 的拆解产物，仅允许 delegate_task）。
+    /// 首轮直接进入决策/执行阶段而不等待模型决策；其余轮次照常由模型决定。
+    /// </summary>
+    public IReadOnlyList<NextChats.Core.Clients.LlmToolCall>? PrecomputedToolCalls { get; init; }
 }

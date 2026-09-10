@@ -52,6 +52,17 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private const string McpPromptToolName = "mcp_prompt";
     private const string McpResourcesToolName = "mcp_resources";
     private const string McpReadResourceToolName = "mcp_read_resource";
+    private const string DelegateTaskToolName = "delegate_task";
+
+    private const string SettingDelegationEnabled = "agent.delegationEnabled";
+    private const string SettingSubAgentModel = "chat.subAgentModelId";
+
+    /// <summary>主-从委派子任务 schema：task 为自包含任务描述（子代理无本会话历史）；tools 为可选工具白名单（省略 = 全部工具）</summary>
+    private const string DelegateTaskSchemaJson =
+        """{"type":"object","properties":{"task":{"type":"string","description":"Self-contained goal for the sub-agent, including all context it needs (it has no access to this conversation's history)."},"tools":{"type":"array","items":{"type":"string"},"description":"Optional allowlist of tool names this sub-agent may use (e.g. [\"jira_search\",\"jira_get_issue\"]); omit to allow all parent tools."}},"required":["task"]}""";
+
+    /// <summary>全局子 Agent 并发上限（同时最多 3 个并行子任务，其余排队）</summary>
+    private static readonly System.Threading.SemaphoreSlim SubAgentGate = new(3);
 
     private readonly IConfigStore _config;
     private readonly IChatStore _chat;
@@ -66,6 +77,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private readonly IAdminStore _admin;
     private readonly IOptions<SecurityOptions> _securityOptions;
     private readonly IOptions<BuiltinToolOptions> _builtinOptions;
+    private readonly ILlmRouter _router;
     private readonly ILogger _logger;
 
     /// <summary>http_fetch 专用 HttpClient（禁用自动重定向 —— 手动跟随并逐跳校验白名单，防 SSRF）</summary>
@@ -88,6 +100,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         IAdminStore admin,
         IOptions<SecurityOptions> securityOptions,
         IOptions<BuiltinToolOptions> builtinOptions,
+        ILlmRouter router,
         ILogger<ChatOrchestrator> logger)
     {
         _config = config;
@@ -103,6 +116,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         _admin = admin;
         _securityOptions = securityOptions;
         _builtinOptions = builtinOptions;
+        _router = router;
         _logger = logger;
     }
 
@@ -206,6 +220,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var preferredModelId = request.ModelId ?? ParseGuid(GetSetting(settings, SettingModel));
         var requestedMcp = request.McpServerIds ?? ParseGuids(GetSetting(settings, SettingMcpServers));
         var requestedSkills = request.SkillIds ?? ParseGuids(GetSetting(settings, SettingSkills));
+        // 主-从委派开关（用户设置；默认关闭）与 Sub-Agent 模型选择（默认跟随主模型）
+        var delegationEnabled = string.Equals(GetSetting(settings, SettingDelegationEnabled), "true", StringComparison.OrdinalIgnoreCase);
+        var subAgentModelId = ParseGuid(GetSetting(settings, SettingSubAgentModel));
 
         // ---------- LLM 模型角色绑定：服务端强制校验（未授权模型直接拒绝，管理员豁免；未绑定角色=全量可见） ----------
         var isAdmin = await _config.IsAdminAsync(request.UserId, ct);
@@ -266,6 +283,19 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             "Read an MCP resource by URI and return its text content (size-limited). " +
             "Use a URI obtained from mcp_resources. Binary/image resources return a placeholder.",
             McpReadResourceSchemaJson, IsSkill: false));
+
+        // ---------- 内置工具：delegate_task（主-从委派：并行 Sub-Agent；由用户设置开关控制，默认关闭） ----------
+        if (delegationEnabled)
+        {
+            unifiedTools.Add(new UnifiedTool(
+                BuiltinToolServer, DelegateTaskToolName,
+                "Delegate a self-contained research/retrieval task to a parallel sub-agent. " +
+                "Use it to fan out independent investigations — e.g. analyse multiple JIRA issues, several documents, or " +
+                "multiple evidence sources for one incident — which run concurrently instead of one-by-one. " +
+                "The sub-agent shares your tools (except delegate_task itself), gets a fresh independent context and a small " +
+                "step budget, so the task text must be fully self-contained. It returns a concise conclusion with its usage summary.",
+                DelegateTaskSchemaJson, IsSkill: false));
+        }
 
         // ---------- MCP 视觉：多张逐个识别为文本（工具参数名 image_source = 标准 base64） ----------
         var visionLines = new List<string>();
@@ -412,6 +442,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var failureCode = (string?)null;
         var failureMessage = (string?)null;
         int doneTtftMs = 0, doneTotalMs = 0, doneRounds = 0;
+        int doneSubCount = 0, doneSubIn = 0, doneSubOut = 0;
         decimal doneCost = 0m;
 
         // 费用：按首选模型配置的输入/输出单价估算（未配置用默认单价；实际 fallback 到其他模型属低频，忽略价差）
@@ -426,7 +457,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             }
         }
 
-        var request2 = new AgentRunRequest
+        AgentRunRequest request2 = null!;
+        request2 = new AgentRunRequest
         {
             TraceId = trace,
             UserId = request.UserId,
@@ -441,8 +473,36 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             // 思考模式：前端全局开关（默认启用）+ 强度（默认 high）；映射在客户端统一执行
             ThinkingEnabled = request.ThinkingEnabled ?? true,
             ThinkingEffort = ParseEffort(request.ThinkingEffort) ?? NextChats.Core.Domain.LlmThinkingEffort.High,
-            ToolExecutor = (tool, args, t, tct) => ExecuteToolAsync(tool, args, t, tct, servers, skillByName, lang),
+            ToolExecutor = (tool, args, t, tct) => ExecuteToolAsync(tool, args, t, tct, request2, servers, skillByName, lang, subAgentModelId),
         };
+
+        // ---------- 主-从委派启动前拆解（Planner）：可拆时首轮自动并行 delegate_task，不依赖模型自觉 ----------
+        LlmUsage? plannerUsage = null;
+        if (delegationEnabled)
+        {
+            try
+            {
+                var planned = await PlanSubTasksAsync(request2, userInput, unifiedTools, lang, ct);
+                if (planned is not null)
+                {
+                    request2 = request2 with { PrecomputedToolCalls = planned.Calls };
+                    plannerUsage = planned.Usage;
+                    _logger.LogInformation("[Orchestrator] planner decomposed {Count} sub-tasks, tools={Tools} trace={Trace}",
+                        planned.Calls.Count,
+                        string.Join(" | ", planned.Calls.Select(c => c.Arguments?.ToJsonString() ?? "")),
+                        trace);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Planner 失败不阻断主流程：退回模型自主决策
+                _logger.LogWarning(ex, "[Orchestrator] planner failed trace={Trace}", trace);
+            }
+        }
 
         try
         {
@@ -493,12 +553,19 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         {
                             reasoningTokens = Math.Max(1, finalReasoning.Length / 4);
                         }
-                        totalUsage = ev.Usage is null ? null : new LlmUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens, reasoningTokens);
+                        totalUsage = ev.Usage is null ? null : new LlmUsage(
+                            ev.Usage.PromptTokens + (plannerUsage?.PromptTokens ?? 0),
+                            ev.Usage.CompletionTokens + (plannerUsage?.CompletionTokens ?? 0),
+                            reasoningTokens + (plannerUsage?.ReasoningTokens ?? 0));
                         model ??= ev.Model;
                         doneTtftMs = ev.TtftMs ?? 0;
                         doneTotalMs = ev.TotalMs ?? 0;
                         doneRounds = ev.Usage?.Rounds ?? 0;
-                        doneCost = EstimateCost(totalUsage, priceIn, priceOut);
+                        doneSubCount = ev.Usage?.SubAgentCount ?? 0;
+                        doneSubIn = ev.Usage?.SubAgentInputTokens ?? 0;
+                        doneSubOut = ev.Usage?.SubAgentOutputTokens ?? 0;
+                        doneCost = EstimateCost(totalUsage, priceIn, priceOut)
+                            + ((decimal)doneSubIn * priceIn + (decimal)doneSubOut * priceOut) / 1000m; // 子 Agent 消耗计入费用
                         // 在透传前重写 done：补齐模型名 + 估算推理 token + 按模型单价估算的费用
                         if (ev.Usage is not null)
                         {
@@ -512,6 +579,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 ToolCalls = ev.Usage.ToolCalls,
                                 ToolErrors = ev.Usage.ToolErrors,
                                 Approvals = ev.Usage.Approvals,
+                                SubAgentCount = ev.Usage.SubAgentCount,
+                                SubAgentInputTokens = ev.Usage.SubAgentInputTokens,
+                                SubAgentOutputTokens = ev.Usage.SubAgentOutputTokens,
                             }, doneCost, doneTtftMs, doneTotalMs, trace, model);
                         }
                         break;
@@ -547,6 +617,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             Rounds = doneRounds,
             ToolCalls = toolTrace.Count,
             Cost = doneCost,
+            SubAgentCount = doneSubCount,
+            SubAgentInputTokens = doneSubIn,
+            SubAgentOutputTokens = doneSubOut,
             TraceId = trace,
         }, ct);
 
@@ -568,7 +641,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             PromptTokens = totalUsage?.PromptTokens ?? 0,
             CompletionTokens = totalUsage?.CompletionTokens ?? 0,
             TotalTokens = totalUsage?.TotalTokens ?? 0,
-            Cost = EstimateCost(totalUsage, priceIn, priceOut),
+            Cost = EstimateCost(totalUsage, priceIn, priceOut)
+                + ((decimal)doneSubIn * priceIn + (decimal)doneSubOut * priceOut) / 1000m,
             TtftMs = doneTtftMs,
             TotalMs = doneTotalMs,
             ToolCalls = toolTrace.Count,
@@ -591,7 +665,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
     /// <summary>统一工具执行器：Skill 元工具 → SkillExecutionEngine；MCP 工具 → IMcpDriver；内置工具 → 本地执行器</summary>
     private async Task<McpToolResult> ExecuteToolAsync(UnifiedTool tool, string? args, string traceId, CancellationToken ct,
-        IReadOnlyList<McpServer> servers, Dictionary<string, Skill> skillByName, string lang)
+        AgentRunRequest request, IReadOnlyList<McpServer> servers, Dictionary<string, Skill> skillByName, string lang, Guid? subAgentModelId)
     {
         if (tool.IsSkill)
         {
@@ -612,6 +686,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 McpPromptToolName => await ExecuteMcpPromptAsync(args, servers, traceId, lang, ct),
                 McpResourcesToolName => await ExecuteMcpResourcesAsync(args, servers, traceId, lang, ct),
                 McpReadResourceToolName => await ExecuteMcpReadResourceAsync(args, servers, traceId, lang, ct),
+                DelegateTaskToolName => await ExecuteDelegateTaskAsync(args, request, subAgentModelId, traceId, lang, ct),
                 _ => new McpToolResult(false, "", Texts.Get("TOOL_NOT_FOUND", lang, tool.Name), "TOOL_NOT_FOUND", 0, 1),
             };
         }
@@ -622,6 +697,209 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             return new McpToolResult(false, "", Texts.Get("MCP_SERVER_NOT_FOUND", lang), "SERVER_NOT_FOUND", 0, 1);
         }
         return await _mcp.CallToolAsync(server, tool.Name, args, traceId, lang, ct);
+    }
+
+    // ================= 主-从委派（delegate_task → 并行 Sub-Agent） =================
+
+    private sealed record PlanResult(List<LlmToolCall> Calls, LlmUsage Usage);
+
+    /// <summary>
+    /// 启动前智能拆解：用轻量 LLM 判定用户请求是否可拆分为 2–3 个相互独立的子任务；
+    /// 可拆则把子任务预置为 delegate_task 调用（首轮并行执行）；否则返回 null 走模型自主决策。
+    /// </summary>
+    private async Task<PlanResult?> PlanSubTasksAsync(AgentRunRequest parent, string userInput, IReadOnlyList<UnifiedTool> tools, string lang, CancellationToken ct)
+    {
+        var client = await _router.SelectClientAsync(parent.PreferredProviderId, parent.PreferredModelId, lang, ct, parent.AllowedModelIds?.ToArray());
+        // 工具目录：name — 简介（截断防 prompt 膨胀）；planner 据此给每个子任务选定白名单工具
+        var toolCatalog = string.Join("\n", tools.Take(40)
+            .Select(t => $"- {t.Name} — {truncate(t.Description.Replace('\n', ' '), 100)}"));
+        var prompt =
+            "You are a task-decomposition planner for a coordinator agent. " +
+            "Decide whether the user's request contains 2 or 3 mutually independent investigation sub-tasks that can be executed in parallel " +
+            "(e.g. analysing several separate JIRA issues, reading multiple documents, or querying different data sources for one incident). " +
+            "Only decompose when the sub-tasks are truly independent and each has a concrete, self-contained, answerable goal; otherwise do not decompose. " +
+            "For every sub-task you MUST also pick the 1-5 tools from the catalog below that it needs; pick ONLY names present in the catalog, omit tools the sub-task does not need. " +
+            "Example (tool names are placeholders; use real catalog names): for \"get the core flow of Draw AND check Prod Draw data for the last day\" decompose as " +
+            "{\"task\": \"Find and summarize the core flow of Draw in code/Jira\", \"tools\": [\"real_tool_a\"]}, " +
+            "{\"task\": \"Query last-day Prod logs for Draw and summarize\", \"tools\": [\"real_tool_b\"]}. " +
+            "STRONG GUIDANCE: a request that investigates/retrieves/analyses TWO OR MORE distinct subjects, files, issues, or data sources " +
+            "MUST be decomposed into parallel sub-tasks, even simple ones. Only single-subject requests should set \"decompose\": false. " +
+            $"Tool catalog:\n{toolCatalog}\n\n" +
+            "Reply ONLY with JSON, no prose, no markdown:\n" +
+            "{\"decompose\": false}\n" +
+            "or\n" +
+            "{\"decompose\": true, \"tasks\": [{\"task\": \"...\", \"tools\": [\"tool_name_1\", \"tool_name_2\"]}, {\"task\": \"...\", \"tools\": [\"tool_name_3\"]}]}\n" +
+            "Rules: 2-3 tasks maximum; every task text must be fully self-contained (each sub-task has no access to your decision or the original request); " +
+            "if a sub-task needs no tool, set \"tools\": []; no filler tasks.";
+
+        var result = await client.CompleteAsync(new LlmRequest
+        {
+            Messages =
+            [
+                LlmChatMessage.System(prompt),
+                LlmChatMessage.User(truncate(userInput, 3000)),
+            ],
+            Stream = false,
+            EnableReasoning = false,
+            ThinkingEnabled = false,
+            MaxTokens = 600,
+        }, ct);
+
+        var content = result.Message.Content;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        using var doc = System.Text.Json.JsonDocument.Parse(content);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("decompose", out var dec) && dec.ValueKind == System.Text.Json.JsonValueKind.True && root.TryGetProperty("tasks", out var tasksEl))
+        {
+            var knownNames = new HashSet<string>(tools.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
+            var planned = new List<(string Task, List<string> Tools)>();
+            foreach (var item in tasksEl.EnumerateArray())
+            {
+                var task = item.TryGetProperty("task", out var tv) ? tv.GetString() : null;
+                if (string.IsNullOrWhiteSpace(task)) continue;
+                task = task.Trim();
+                if (task.Length > 1200) task = task[..1200];
+
+                // 工具白名单：只保留目录里真实存在的名字（防幻觉/注入不存在的工具）
+                var allow = new List<string>();
+                if (item.TryGetProperty("tools", out var toolsEl) && toolsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var n in toolsEl.EnumerateArray())
+                    {
+                        var name = n.GetString();
+                        if (!string.IsNullOrWhiteSpace(name) && knownNames.Contains(name) && allow.Count < 6)
+                            allow.Add(name);
+                    }
+                }
+                planned.Add((task, allow));
+                if (planned.Count >= 3) break;
+            }
+
+            if (planned.Count is >= 2 and <= 3)
+            {
+                var calls = planned
+                    .Select((p, i) => new LlmToolCall($"call_sub_{i}", DelegateTaskToolName,
+                        JsonNode.Parse(JsonSerializer.Serialize(new { task = p.Task, tools = p.Tools })) as JsonObject))
+                    .ToList();
+                return new PlanResult(calls, result.Usage);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 把子任务交给一个独立的 AgentLoopEngine.RunAsync 实例（独立上下文/轮次预算/工具链，仅去掉 delegate_task 防递归），
+    /// 事件不外发到 SSE，只收集正文结论 + 用量摘要，以结构化文本回灌主 Agent。
+    /// </summary>
+    private async Task<McpToolResult> ExecuteDelegateTaskAsync(string? args, AgentRunRequest parentRequest, Guid? subAgentModelId, string traceId, string lang, CancellationToken ct)
+    {
+        var task = ExtractString(args ?? "{}", "task") ?? (string.IsNullOrWhiteSpace(args) ? null : args!.Trim());
+        if (string.IsNullOrWhiteSpace(task))
+        {
+            return new McpToolResult(false, "", Texts.Get("SUB_AGENT_NEED_TASK", lang), "SUB_AGENT_NEED_TASK", 0, 1);
+        }
+
+        // 可选工具白名单（tools 数组）：子代理每轮只携带这些工具的定义，省掉无关工具 schema 的重复开销
+        var allowedTools = ParseToolAllowlist(args);
+
+        if (!await SubAgentGate.WaitAsync(TimeSpan.FromSeconds(60), ct))
+        {
+            return new McpToolResult(false, "", Texts.Get("SUB_AGENT_BUSY", lang), "SUB_AGENT_BUSY", 0, 1);
+        }
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var subTrace = $"trc_{Guid.NewGuid():N}"[..24];
+
+            // 子代理工具集：父工具扣除 delegate_task（防递归），再按白名单裁剪
+            // 未提供白名单 = 全部；显式空数组 = 无工具（纯 LLM 任务，省掉工具定义开销）；白名单全部无效 = 保守回退全部
+            var parentTools = parentRequest.Tools?.Where(t => t.Name != DelegateTaskToolName).ToList() ?? [];
+            var subTools = allowedTools is null ? parentTools
+                : parentTools.Where(t => allowedTools.Contains(t.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (allowedTools is { Count: > 0 } && subTools.Count == 0)
+            {
+                subTools = parentTools; // 白名单里没有真实工具时保守回退，避免子代理失去能力
+            }
+
+            var subRequest = new AgentRunRequest
+            {
+                TraceId = subTrace,
+                UserId = parentRequest.UserId,
+                SessionId = parentRequest.SessionId,
+                InitialMessages =
+                [
+                    LlmChatMessage.System(
+                        "You are a sub-agent working for a main coordinator agent. " +
+                        "Complete the assigned task using the available tools, then reply with ONLY a concise, factual conclusion " +
+                        "(no preamble, no planning outline, no markdown headers). Make reasonable assumptions instead of asking questions. " +
+                        "If the task cannot be fully completed, state what was found and what is missing."),
+                    LlmChatMessage.User(task),
+                ],
+                Tools = subTools,
+                PreferredProviderId = parentRequest.PreferredProviderId,
+                PreferredModelId = subAgentModelId ?? parentRequest.PreferredModelId, // 默认跟随主 Agent 模型
+                AllowedModelIds = subAgentModelId is null ? parentRequest.AllowedModelIds : null,
+                ContextWindow = parentRequest.ContextWindow,
+                Lang = lang,
+                ThinkingEnabled = parentRequest.ThinkingEnabled,
+                ThinkingEffort = parentRequest.ThinkingEffort,
+                MaxSteps = 4, // 子任务小轮次预算，防止跑飞
+                ToolExecutor = parentRequest.ToolExecutor,
+            };
+
+            var text = new System.Text.StringBuilder();
+            var reasoning = new System.Text.StringBuilder();
+            var toolCount = 0;
+            var rounds = 0;
+            var inTokens = 0;
+            var outTokens = 0;
+            var reTokens = 0;
+            try
+            {
+                await foreach (var ev in _loop.RunAsync(subRequest, ct))
+                {
+                    switch (ev.Kind)
+                    {
+                        case "text_delta": text.Append(ev.Text); break;
+                        case "thinking_delta": reasoning.Append(ev.Text); break;
+                        case "tool_start": toolCount++; break;
+                        case "round_start": rounds++; break;
+                        case "done":
+                            inTokens = ev.PromptTokens ?? 0;
+                            outTokens = ev.CompletionTokens ?? 0;
+                            reTokens = ev.ReasoningTokens ?? 0;
+                            break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // 主循环中断 → 子任务随之取消
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Sub-agent failed trace={Trace} subTrace={SubTrace}", traceId, subTrace);
+                return new McpToolResult(false, "", Texts.Get("SUB_AGENT_ERROR", lang), "SUB_AGENT_ERROR", 0, 1);
+            }
+            sw.Stop();
+
+            var conclusion = text.Length > 0 ? text.ToString()
+                : reasoning.Length > 0 ? "(子代理仅产出思考，无正文结论)"
+                : "(子代理未产出结论)";
+            var summary =
+                $"[Sub-Agent result] tools={toolCount}, rounds={rounds}, {sw.ElapsedMilliseconds}ms, " +
+                $"in={inTokens}/out={outTokens}/reasoning={reTokens}\n{truncate(conclusion, 4000)}";
+            return new McpToolResult(true, summary, null, null, (int)sw.ElapsedMilliseconds, 1,
+                SubAgentCount: 1, SubAgentInputTokens: inTokens, SubAgentOutputTokens: outTokens);
+        }
+        finally
+        {
+            SubAgentGate.Release();
+        }
     }
 
     // ================= 内置 MCP Prompt / Resource 工具 =================
@@ -921,6 +1199,33 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     }
 
     private static string IdempotencyKey(Guid userId, string clientMessageId) => $"{userId}:{clientMessageId}";
+
+    /// <summary>解析 delegate_task 可选工具白名单。返回 null = 未提供（不限工具）；空列表 = 明确"无工具"；非空 = 白名单</summary>
+    private static List<string>? ParseToolAllowlist(string? args)
+    {
+        if (string.IsNullOrWhiteSpace(args)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(args);
+            if (!doc.RootElement.TryGetProperty("tools", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+            var names = new List<string>();
+            foreach (var n in arr.EnumerateArray())
+            {
+                if (n.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(n.GetString()))
+                {
+                    names.Add(n.GetString()!);
+                }
+            }
+            return names.Distinct(StringComparer.Ordinal).ToList(); // 空数组 → 空列表（明确无工具）
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static string? ExtractString(string json, string prop)
     {
