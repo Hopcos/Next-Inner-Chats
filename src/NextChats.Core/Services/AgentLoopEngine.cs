@@ -232,6 +232,11 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
             {
                 yield return AgentEvent.ThinkingEnd(null, trace);
             }
+            // 输出被 token 上限截断：明确提示，不静默当作“正常完成”（否则用户会看到“没推理完”却已结束）
+            if (outcome.Finish == LlmFinishReason.Length)
+            {
+                yield return AgentEvent.ContextEvent("truncated", Texts.Get("LLM_LENGTH_TRUNCATED", lang), trace);
+            }
             break;
         }
 
@@ -294,10 +299,27 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 ThinkingEffort = request.ThinkingEffort,
             };
 
-            await foreach (var chunk in client.StreamAsync(llmRequest, ct))
+            // 首块等待提示：上游排队/慢时给出可见反馈（避免用户误以为“没在推理/需要切换窗口才继续”）
+            var waitingLock = new object();
+            var waitingSent = false;
+            using var waitTimer = new System.Threading.Timer(_ =>
             {
-                switch (chunk)
+                lock (waitingLock)
                 {
+                    if (waitingSent) return;
+                    waitingSent = true;
+                }
+                writer.TryWrite(AgentEvent.ContextEvent("waiting", Texts.Get("LLM_WAITING", lang), trace));
+            }, null, TimeSpan.FromSeconds(8), System.Threading.Timeout.InfiniteTimeSpan);
+
+            try
+            {
+                await foreach (var chunk in client.StreamAsync(llmRequest, ct))
+                {
+                    // 首个 chunk（任何类型）到达 → 上游已响应，停止等待提示
+                    waitTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                    switch (chunk)
+                    {
                     case LlmChunk.TextDelta td:
                         if (outcome.TtftMs < 0) outcome.TtftMs = (int)sw.ElapsedMilliseconds;
                         outcome.Text += td.Text;
@@ -326,6 +348,11 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         if (string.IsNullOrEmpty(outcome.Reasoning)) outcome.Reasoning = done.Reasoning ?? "";
                         break;
                 }
+            }
+        }
+            finally
+            {
+                waitTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
             }
         }
         catch (OperationCanceledException)

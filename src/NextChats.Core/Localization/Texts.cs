@@ -103,6 +103,8 @@ public static class Texts
         ["TOOL_EXECUTE_FAILED"] = ("Tool execution failed", "工具执行失败"),
         ["TOOL_EXECUTE_ERROR"] = ("Tool execution failed. Retry or use another approach.", "工具执行异常，请重试或换一种方式。"),
         ["CONTEXT_COMPRESSED"] = ("Context was near the limit ({0} → {1} messages) and was auto-compressed", "上下文接近上限（{0} → {1} 条），已自动压缩历史"),
+        ["LLM_LENGTH_TRUNCATED"] = ("The model reached its output token limit and the reply was cut off. It may be incomplete — ask the model to continue, or regenerate.", "模型输出达到长度上限被截断，回复可能不完整。可让模型继续回答，或重新生成。"),
+        ["LLM_WAITING"] = ("Waiting for the model to respond (upstream queued or slow)…", "正在等待模型响应（上游排队或较慢）……"),
 
         // ---------- 上下文管理 ----------
         ["CONTEXT_SUMMARY_MARKER"] = ("[Conversation summary] (compressed by the system, kept as background)", "【历史对话摘要】（由系统压缩，仅作背景保留）"),
