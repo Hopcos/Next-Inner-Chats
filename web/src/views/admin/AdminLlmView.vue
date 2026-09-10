@@ -221,8 +221,8 @@ onMounted(load)
                 </template>
               </el-table-column>
               <el-table-column prop="contextWindow" :label="t('admin.llm.colContext')" width="110" />
-              <el-table-column prop="priceInPer1K" :label="t('admin.llm.priceIn')" width="90" />
-              <el-table-column prop="priceOutPer1K" :label="t('admin.llm.priceOut')" width="90" />
+              <el-table-column prop="priceInPer1K" :label="t('admin.llm.priceIn')" width="130" />
+              <el-table-column prop="priceOutPer1K" :label="t('admin.llm.priceOut')" width="130" />
               <el-table-column prop="priority" :label="t('admin.llm.colPriority')" width="70" />
               <el-table-column :label="t('common.enabled')" width="80">
                 <template #default="{ row: m }">
@@ -309,8 +309,8 @@ onMounted(load)
         <el-form-item :label="t('common.name')" required><el-input v-model="modelForm.name" /></el-form-item>
         <el-form-item :label="t('admin.llm.isVision')"><el-switch v-model="modelForm.isVision" /></el-form-item>
         <el-form-item :label="t('admin.llm.contextWindow')"><el-input-number v-model="modelForm.contextWindow" :min="1024" :step="1024" /></el-form-item>
-        <el-form-item :label="t('admin.llm.priceIn')"><el-input-number v-model="modelForm.priceInPer1K" :min="0" :precision="4" :step="0.001" /></el-form-item>
-        <el-form-item :label="t('admin.llm.priceOut')"><el-input-number v-model="modelForm.priceOutPer1K" :min="0" :precision="4" /></el-form-item>
+        <el-form-item :label="t('admin.llm.priceIn')"><el-input-number v-model="modelForm.priceInPer1K" :min="0" :precision="6" :step="0.000001" /></el-form-item>
+        <el-form-item :label="t('admin.llm.priceOut')"><el-input-number v-model="modelForm.priceOutPer1K" :min="0" :precision="6" :step="0.000001" /></el-form-item>
         <el-form-item :label="t('admin.llm.colPriority')"><el-input-number v-model="modelForm.priority" :min="1" :max="1000" /></el-form-item>
         <el-form-item :label="t('common.enabled')"><el-switch v-model="modelForm.enabled" /></el-form-item>
       </el-form>

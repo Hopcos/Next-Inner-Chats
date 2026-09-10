@@ -34,6 +34,17 @@ function isActive(path: string) {
   // 精确匹配：仅当前路由恰好是该菜单项时才高亮（/admin 会重定向到 /admin/llm，因此无需前缀匹配）
   return route.path === path
 }
+
+/** 返回：从工具箱进入时回到工具箱，否则回聊天首页（返回后清除来源标记） */
+function goBack() {
+  const from = localStorage.getItem('nextchats.admin.from')
+  localStorage.removeItem('nextchats.admin.from')
+  if (from === 'tools') {
+    router.push('/tools')
+  } else {
+    router.push('/')
+  }
+}
 </script>
 
 <template>
@@ -59,7 +70,7 @@ function isActive(path: string) {
         </div>
       </nav>
       <div class="back">
-        <el-button size="small" text @click="router.push('/')">
+        <el-button size="small" text @click="goBack">
           <span v-if="!collapsed">{{ $t('admin.menu.back') }}</span><span v-else>🏠</span>
         </el-button>
       </div>

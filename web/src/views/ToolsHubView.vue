@@ -26,6 +26,18 @@ const router = useRouter()
 const loading = ref(true)
 const tools = ref<UserToolDto[]>([])
 
+const user = computed(() => kernel.auth.state.user)
+
+function logout() {
+  void kernel.auth.logout()
+}
+
+/** 进入后台管理：记录来源，后台的"返回"据此回到工具箱页面 */
+function goAdmin() {
+  localStorage.setItem('nextchats.admin.from', 'tools')
+  router.push('/admin')
+}
+
 /** 只渲染本端已注册（可打开）的工具，未识别 key 静默过滤 */
 const visibleTools = computed(() => tools.value.filter((x) => !!getToolDefinition(x.key)))
 
@@ -71,7 +83,16 @@ onMounted(async () => {
         </div>
       </div>
       <div class="hub-user">
-        <el-avatar :size="28" class="hub-avatar">{{ (kernel.auth.state.user?.displayName ?? kernel.auth.state.user?.username ?? '?').slice(0, 1) }}</el-avatar>
+        <el-dropdown trigger="click">
+          <el-avatar :size="28" class="hub-avatar">{{ (user?.displayName ?? user?.username ?? '?').slice(0, 1) }}</el-avatar>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="router.push('/settings')">{{ t('chat.personalCatalog') }}</el-dropdown-item>
+              <el-dropdown-item v-if="user?.isAdmin" @click="goAdmin">{{ t('common.admin') }}</el-dropdown-item>
+              <el-dropdown-item divided @click="logout">{{ t('common.logout') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </header>
 
@@ -175,9 +196,15 @@ onMounted(async () => {
 }
 
 .hub-avatar {
+  cursor: pointer;
   background: var(--nc-primary);
   color: #04121f;
   font-weight: 700;
+  transition: box-shadow 0.15s;
+}
+
+.hub-avatar:hover {
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--nc-primary) 35%, transparent);
 }
 
 .hub-body {
