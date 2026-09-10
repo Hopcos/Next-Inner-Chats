@@ -67,6 +67,9 @@ const usageStats = computed(() => {
   if (u.subAgentInputTokens > 0 || u.subAgentOutputTokens > 0) {
     rows.push({ label: t('chat.tokenSubTokens'), value: `↑${u.subAgentInputTokens} ↓${u.subAgentOutputTokens}` })
   }
+  if (u.plannerInputTokens > 0 || u.plannerOutputTokens > 0) {
+    rows.push({ label: t('chat.tokenPlanner'), value: `↑${u.plannerInputTokens} ↓${u.plannerOutputTokens}` })
+  }
   if (u.cost > 0) rows.push({ label: t('chat.tokenCost'), value: '$' + u.cost.toFixed(4) })
   return rows
 })

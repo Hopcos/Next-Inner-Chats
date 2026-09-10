@@ -62,6 +62,10 @@ public sealed class AgentEvent
 
     public int? SubAgentOutputTokens { get; init; }
 
+    public int? PlannerInputTokens { get; init; }
+
+    public int? PlannerOutputTokens { get; init; }
+
     public decimal? Cost { get; init; }
 
     public int? TtftMs { get; init; }
@@ -113,6 +117,7 @@ public sealed class AgentEvent
         PromptTokens = usage.PromptTokens, CompletionTokens = usage.CompletionTokens, TotalTokens = usage.TotalTokens,
         ReasoningTokens = usage.ReasoningTokens, Rounds = usage.Rounds, ToolCalls = usage.ToolCalls,
         SubAgentCount = usage.SubAgentCount, SubAgentInputTokens = usage.SubAgentInputTokens, SubAgentOutputTokens = usage.SubAgentOutputTokens,
+        PlannerInputTokens = usage.PlannerInputTokens, PlannerOutputTokens = usage.PlannerOutputTokens,
         Model = model,
     };
 }
@@ -136,6 +141,12 @@ public sealed class JsonUsage
 
     /// <summary>子 Agent 输出 token 汇总</summary>
     public int SubAgentOutputTokens { get; set; }
+
+    /// <summary>Task 拆解（Planner）输入 token</summary>
+    public int PlannerInputTokens { get; set; }
+
+    /// <summary>Task 拆解（Planner）输出 token</summary>
+    public int PlannerOutputTokens { get; set; }
 
     public int Rounds { get; set; }
 

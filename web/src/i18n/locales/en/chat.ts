@@ -145,6 +145,7 @@ export default {
     tokenTools: 'Tool calls',
     tokenSubAgents: 'Sub-Agents',
     tokenSubTokens: 'Sub-agent tokens',
+    tokenPlanner: 'Task planning',
     tokenCost: 'Cost',
     secDelegation: 'Multi-Agent Delegation',
     delegationToggle: 'Enable delegation',

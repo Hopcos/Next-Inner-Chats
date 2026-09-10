@@ -443,6 +443,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var failureMessage = (string?)null;
         int doneTtftMs = 0, doneTotalMs = 0, doneRounds = 0;
         int doneSubCount = 0, doneSubIn = 0, doneSubOut = 0;
+        int donePlannerIn = 0, donePlannerOut = 0;
         decimal doneCost = 0m;
 
         // 费用：按首选模型配置的输入/输出单价估算（未配置用默认单价；实际 fallback 到其他模型属低频，忽略价差）
@@ -485,12 +486,21 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 var planned = await PlanSubTasksAsync(request2, userInput, unifiedTools, lang, ct);
                 if (planned is not null)
                 {
-                    request2 = request2 with { PrecomputedToolCalls = planned.Calls };
+                    // Planner 的 LLM 消耗无论拆与否都计入面板
                     plannerUsage = planned.Usage;
-                    _logger.LogInformation("[Orchestrator] planner decomposed {Count} sub-tasks, tools={Tools} trace={Trace}",
-                        planned.Calls.Count,
-                        string.Join(" | ", planned.Calls.Select(c => c.Arguments?.ToJsonString() ?? "")),
-                        trace);
+                    if (planned.Calls is { Count: > 0 })
+                    {
+                        request2 = request2 with { PrecomputedToolCalls = planned.Calls };
+                        _logger.LogInformation("[Orchestrator] planner decomposed {Count} sub-tasks, tools={Tools} trace={Trace}",
+                            planned.Calls.Count,
+                            string.Join(" | ", planned.Calls.Select(c => c.Arguments?.ToJsonString() ?? "")),
+                            trace);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("[Orchestrator] planner decided no decomposition, usage={In}/{Out} trace={Trace}",
+                            planned.Usage?.PromptTokens ?? 0, planned.Usage?.CompletionTokens ?? 0, trace);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -553,10 +563,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         {
                             reasoningTokens = Math.Max(1, finalReasoning.Length / 4);
                         }
-                        totalUsage = ev.Usage is null ? null : new LlmUsage(
-                            ev.Usage.PromptTokens + (plannerUsage?.PromptTokens ?? 0),
-                            ev.Usage.CompletionTokens + (plannerUsage?.CompletionTokens ?? 0),
-                            reasoningTokens + (plannerUsage?.ReasoningTokens ?? 0));
+                        totalUsage = ev.Usage is null ? null : new LlmUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens, reasoningTokens);
                         model ??= ev.Model;
                         doneTtftMs = ev.TtftMs ?? 0;
                         doneTotalMs = ev.TotalMs ?? 0;
@@ -564,8 +571,11 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         doneSubCount = ev.Usage?.SubAgentCount ?? 0;
                         doneSubIn = ev.Usage?.SubAgentInputTokens ?? 0;
                         doneSubOut = ev.Usage?.SubAgentOutputTokens ?? 0;
+                        donePlannerIn = plannerUsage?.PromptTokens ?? 0;
+                        donePlannerOut = plannerUsage?.CompletionTokens ?? 0;
                         doneCost = EstimateCost(totalUsage, priceIn, priceOut)
-                            + ((decimal)doneSubIn * priceIn + (decimal)doneSubOut * priceOut) / 1000m; // 子 Agent 消耗计入费用
+                            + ((decimal)doneSubIn * priceIn + (decimal)doneSubOut * priceOut) / 1000m
+                            + ((decimal)donePlannerIn * priceIn + (decimal)donePlannerOut * priceOut) / 1000m; // 子 Agent + Task 拆解消耗均计入费用
                         // 在透传前重写 done：补齐模型名 + 估算推理 token + 按模型单价估算的费用
                         if (ev.Usage is not null)
                         {
@@ -582,6 +592,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 SubAgentCount = ev.Usage.SubAgentCount,
                                 SubAgentInputTokens = ev.Usage.SubAgentInputTokens,
                                 SubAgentOutputTokens = ev.Usage.SubAgentOutputTokens,
+                                PlannerInputTokens = donePlannerIn,
+                                PlannerOutputTokens = donePlannerOut,
                             }, doneCost, doneTtftMs, doneTotalMs, trace, model);
                         }
                         break;
@@ -620,6 +632,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             SubAgentCount = doneSubCount,
             SubAgentInputTokens = doneSubIn,
             SubAgentOutputTokens = doneSubOut,
+            PlannerInputTokens = donePlannerIn,
+            PlannerOutputTokens = donePlannerOut,
             TraceId = trace,
         }, ct);
 
@@ -701,13 +715,18 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
     // ================= 主-从委派（delegate_task → 并行 Sub-Agent） =================
 
-    private sealed record PlanResult(List<LlmToolCall> Calls, LlmUsage Usage);
+    /// <summary>
+    /// Planner 结果：Calls 非空 = 决定拆解（首轮预置并行 delegate_task）；Calls 为空 = 决定不拆（回退模型自主）。
+    /// Usage 只要 Planner 的 LLM 调用成功即返回（无论拆或不拆，消耗都要计入 Token 面板）。
+    /// </summary>
+    private sealed record PlanOutcome(IReadOnlyList<LlmToolCall>? Calls, LlmUsage? Usage);
 
     /// <summary>
     /// 启动前智能拆解：用轻量 LLM 判定用户请求是否可拆分为 2–3 个相互独立的子任务；
-    /// 可拆则把子任务预置为 delegate_task 调用（首轮并行执行）；否则返回 null 走模型自主决策。
+    /// 可拆则把子任务预置为 delegate_task 调用（首轮并行执行），否则 Calls 为空走模型自主决策。
+    /// 只要 LLM 调用成功（无论拆与否），就返回其 Usage 以便计入 Token 面板；仅在调用本身失败时返回 null。
     /// </summary>
-    private async Task<PlanResult?> PlanSubTasksAsync(AgentRunRequest parent, string userInput, IReadOnlyList<UnifiedTool> tools, string lang, CancellationToken ct)
+    private async Task<PlanOutcome?> PlanSubTasksAsync(AgentRunRequest parent, string userInput, IReadOnlyList<UnifiedTool> tools, string lang, CancellationToken ct)
     {
         var client = await _router.SelectClientAsync(parent.PreferredProviderId, parent.PreferredModelId, lang, ct, parent.AllowedModelIds?.ToArray());
         // 工具目录：name — 简介（截断防 prompt 膨胀）；planner 据此给每个子任务选定白名单工具
@@ -748,47 +767,54 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var content = result.Message.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
-            return null;
+            return new PlanOutcome(null, result.Usage);
         }
 
-        using var doc = System.Text.Json.JsonDocument.Parse(content);
-        var root = doc.RootElement;
-        if (root.TryGetProperty("decompose", out var dec) && dec.ValueKind == System.Text.Json.JsonValueKind.True && root.TryGetProperty("tasks", out var tasksEl))
+        IReadOnlyList<LlmToolCall>? calls = null;
+        try
         {
-            var knownNames = new HashSet<string>(tools.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
-            var planned = new List<(string Task, List<string> Tools)>();
-            foreach (var item in tasksEl.EnumerateArray())
+            using var doc = System.Text.Json.JsonDocument.Parse(content);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("decompose", out var dec) && dec.ValueKind == System.Text.Json.JsonValueKind.True && root.TryGetProperty("tasks", out var tasksEl))
             {
-                var task = item.TryGetProperty("task", out var tv) ? tv.GetString() : null;
-                if (string.IsNullOrWhiteSpace(task)) continue;
-                task = task.Trim();
-                if (task.Length > 1200) task = task[..1200];
-
-                // 工具白名单：只保留目录里真实存在的名字（防幻觉/注入不存在的工具）
-                var allow = new List<string>();
-                if (item.TryGetProperty("tools", out var toolsEl) && toolsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                var knownNames = new HashSet<string>(tools.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
+                var planned = new List<(string Task, List<string> Tools)>();
+                foreach (var item in tasksEl.EnumerateArray())
                 {
-                    foreach (var n in toolsEl.EnumerateArray())
-                    {
-                        var name = n.GetString();
-                        if (!string.IsNullOrWhiteSpace(name) && knownNames.Contains(name) && allow.Count < 6)
-                            allow.Add(name);
-                    }
-                }
-                planned.Add((task, allow));
-                if (planned.Count >= 3) break;
-            }
+                    var task = item.TryGetProperty("task", out var tv) ? tv.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(task)) continue;
+                    task = task.Trim();
+                    if (task.Length > 1200) task = task[..1200];
 
-            if (planned.Count is >= 2 and <= 3)
-            {
-                var calls = planned
-                    .Select((p, i) => new LlmToolCall($"call_sub_{i}", DelegateTaskToolName,
-                        JsonNode.Parse(JsonSerializer.Serialize(new { task = p.Task, tools = p.Tools })) as JsonObject))
-                    .ToList();
-                return new PlanResult(calls, result.Usage);
+                    // 工具白名单：只保留目录里真实存在的名字（防幻觉/注入不存在的工具）
+                    var allow = new List<string>();
+                    if (item.TryGetProperty("tools", out var toolsEl) && toolsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var n in toolsEl.EnumerateArray())
+                        {
+                            var name = n.GetString();
+                            if (!string.IsNullOrWhiteSpace(name) && knownNames.Contains(name) && allow.Count < 6)
+                                allow.Add(name);
+                        }
+                    }
+                    planned.Add((task, allow));
+                    if (planned.Count >= 3) break;
+                }
+
+                if (planned.Count is >= 2 and <= 3)
+                {
+                    calls = planned
+                        .Select((p, i) => new LlmToolCall($"call_sub_{i}", DelegateTaskToolName,
+                            JsonNode.Parse(JsonSerializer.Serialize(new { task = p.Task, tools = p.Tools })) as JsonObject))
+                        .ToList();
+                }
             }
         }
-        return null;
+        catch (System.Text.Json.JsonException)
+        {
+            // 输出非法 JSON：按"不拆"处理，但 LLM 消耗照记
+        }
+        return new PlanOutcome(calls, result.Usage);
     }
 
     /// <summary>

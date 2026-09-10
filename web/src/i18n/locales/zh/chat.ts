@@ -145,6 +145,7 @@ export default {
     tokenTools: '工具调用',
     tokenSubAgents: 'Sub-Agents',
     tokenSubTokens: 'Sub-Agent 消耗',
+    tokenPlanner: 'Agent委派消耗',
     tokenCost: '费用',
     secDelegation: '主-从委派（多 Agent）',
     delegationToggle: '启用主-从委派',

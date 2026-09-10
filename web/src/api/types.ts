@@ -195,6 +195,8 @@ export interface ChatMessageDto {
   subAgentCount: number
   subAgentInputTokens: number
   subAgentOutputTokens: number
+  plannerInputTokens: number
+  plannerOutputTokens: number
   createdAt: string
 }
 
@@ -286,6 +288,8 @@ export interface AgentEventDto {
   subAgentCount?: number
   subAgentInputTokens?: number
   subAgentOutputTokens?: number
+  plannerInputTokens?: number
+  plannerOutputTokens?: number
   cost?: number
   ttftMs?: number
   totalMs?: number

@@ -67,6 +67,8 @@ export interface UiMessage {
     subAgentCount: number
     subAgentInputTokens: number
     subAgentOutputTokens: number
+    plannerInputTokens: number
+    plannerOutputTokens: number
   }
   createdAt: number
   clientMessageId?: string
@@ -559,6 +561,8 @@ export class ChatService extends Service {
         subAgentCount: m.subAgentCount ?? 0,
         subAgentInputTokens: m.subAgentInputTokens ?? 0,
         subAgentOutputTokens: m.subAgentOutputTokens ?? 0,
+        plannerInputTokens: m.plannerInputTokens ?? 0,
+        plannerOutputTokens: m.plannerOutputTokens ?? 0,
       },
       createdAt: new Date(m.createdAt).getTime(),
     }
@@ -824,6 +828,8 @@ export class ChatService extends Service {
             subAgentCount: ev.subAgentCount ?? 0,
             subAgentInputTokens: ev.subAgentInputTokens ?? 0,
             subAgentOutputTokens: ev.subAgentOutputTokens ?? 0,
+            plannerInputTokens: ev.plannerInputTokens ?? 0,
+            plannerOutputTokens: ev.plannerOutputTokens ?? 0,
           }
         }
         break

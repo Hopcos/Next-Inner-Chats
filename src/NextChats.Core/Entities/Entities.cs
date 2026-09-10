@@ -494,6 +494,12 @@ public class ChatMessage
     /// <summary>子 Agent 输出 token 汇总</summary>
     public int SubAgentOutputTokens { get; set; }
 
+    /// <summary>Task 拆解（Planner）输入 token</summary>
+    public int PlannerInputTokens { get; set; }
+
+    /// <summary>Task 拆解（Planner）输出 token</summary>
+    public int PlannerOutputTokens { get; set; }
+
     [MaxLength(64)] public string? TraceId { get; set; }
 
     /// <summary>客户端消息 ID（写操作幂等）</summary>
