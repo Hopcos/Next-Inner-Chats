@@ -113,6 +113,7 @@ public static class Texts
         ["CONTEXT_SUMMARY_MARKER"] = ("[Conversation summary] (compressed by the system, kept as background)", "【历史对话摘要】（由系统压缩，仅作背景保留）"),
         ["CONTEXT_COMPRESS_PROMPT"] = ("You are a conversation compressor. Compress the conversation below into a concise summary keeping key facts, user intent, and executed tool results, at most 200 words. Output only the summary.", "你是一个对话压缩器。请用简洁的中文把下面的历史对话压缩成保留关键事实、用户意图、已执行工具结果的摘要，不超过 600 字。只输出摘要。"),
         ["TRUNCATED_SUFFIX"] = ("(truncated)", "（已截断）"),
+        ["TOOL_TRIM"] = ("Tool set trimmed for efficiency ({0} → {1} active)", "已按需裁剪工具集以省 Token（{0} → {1} 个活跃工具）"),
 
         // ---------- 默认系统提示 / 模板变量 ----------
         ["DEFAULT_SYSTEM"] = ("You are a helpful AI assistant. Use the context and available tools to answer the user's questions as best you can.", "你是一个乐于助人的 AI 助手。请基于上下文与可用的工具，尽你所能回答用户的问题。"),

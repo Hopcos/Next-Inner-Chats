@@ -25,6 +25,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
     private readonly IApprovalCoordinator _approvals;
     private readonly IContextManager _context;
     private readonly IOptions<PolicyOptions> _policyOptions;
+    private readonly IOptions<ToolTrimOptions> _trimOptions;
     private readonly ILogger _logger;
 
     private sealed class RoundOutcome
@@ -47,6 +48,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         IApprovalCoordinator approvals,
         IContextManager context,
         IOptions<PolicyOptions> policyOptions,
+        IOptions<ToolTrimOptions> trimOptions,
         ILogger<AgentLoopEngine> logger)
     {
         _router = router;
@@ -54,6 +56,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         _approvals = approvals;
         _context = context;
         _policyOptions = policyOptions;
+        _trimOptions = trimOptions;
         _logger = logger;
     }
 
@@ -70,6 +73,14 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         var swAll = Stopwatch.StartNew();
         var interrupted = false;
         string? model = null;
+
+        // ---- 已用工具集按需裁剪状态（每轮只发送"实际用到的工具"定义，砍掉重复 schema 计费） ----
+        var trim = _trimOptions.Value;
+        var allToolDefs = toolDefs ?? [];
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // 历史实际调用过的工具（累积，永不移除）
+        var activeNames = new HashSet<string>(allToolDefs.Select(t => t.Name), StringComparer.OrdinalIgnoreCase); // 本轮发送给 LLM 的工具集
+        var trimmed = false;   // 已触发裁剪
+        var stableRounds = 0;  // 连续"调用 ⊆ 历史 seen"的轮数
 
         for (var round = 1; round <= (request.MaxSteps > 0 ? request.MaxSteps : _policyOptions.Value.MaxReActSteps); round++)
         {
@@ -103,26 +114,51 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
             }
             else
             {
-            var channel = Channel.CreateUnbounded<AgentEvent>(new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                SingleWriter = true,
-            });
-            var producer = Task.Run(async () => await ProduceThinkAsync(request, messages, toolDefs, trace, lang, outcome, channel.Writer, ct), ct);
-
-            try
-            {
-                // 读取不携带 ct：取消时由生产者写入 INTERRUPTED 事件并完成通道，
-                // 保证中断也有事件可收、消息可持久化为 Stopped。
-                await foreach (var ev in channel.Reader.ReadAllAsync(CancellationToken.None))
+                // 已用工具集裁剪：触发后每轮只发送 activeNames 内的工具定义；
+                // 若模型调用了未声明工具（防御个别不严格约束的工具调用端点），补入并重决策一次。
+                var refills = 0;
+                while (true)
                 {
-                    yield return ev;
+                    var sendToolDefs = trim.Enabled && trimmed && activeNames.Count > 0
+                        ? allToolDefs.Where(t => activeNames.Contains(t.Name)).ToList()
+                        : allToolDefs;
+
+                    var channel = Channel.CreateUnbounded<AgentEvent>(new UnboundedChannelOptions
+                    {
+                        SingleReader = true,
+                        SingleWriter = true,
+                    });
+                    var producer = Task.Run(async () => await ProduceThinkAsync(request, messages, sendToolDefs, trace, lang, outcome, channel.Writer, ct), ct);
+
+                    try
+                    {
+                        // 读取不携带 ct：取消时由生产者写入 INTERRUPTED 事件并完成通道，
+                        // 保证中断也有事件可收、消息可持久化为 Stopped。
+                        await foreach (var ev in channel.Reader.ReadAllAsync(CancellationToken.None))
+                        {
+                            yield return ev;
+                        }
+                    }
+                    finally
+                    {
+                        await SafeAwait(producer);
+                    }
+
+                    if (trim.Enabled && trimmed && outcome.Finish == LlmFinishReason.ToolCalls && outcome.ToolCalls.Count > 0)
+                    {
+                        var missing = outcome.ToolCalls.Select(c => c.Name).FirstOrDefault(n => !activeNames.Contains(n));
+                        if (missing is not null && refills < trim.RefillLimitPerRound)
+                        {
+                            _logger.LogInformation("[AgentLoop] tool refill trace={Trace} tool={Tool} active={Active}",
+                                trace, missing, activeNames.Count);
+                            activeNames.Add(missing);
+                            refills++;
+                            outcome = new RoundOutcome(); // 清空旧决策，重跑一次
+                            continue;
+                        }
+                    }
+                    break;
                 }
-            }
-            finally
-            {
-                await SafeAwait(producer);
-            }
             }
 
             if (outcome.TtftMs > 0 && ttftMs < 0) ttftMs = outcome.TtftMs;
@@ -282,6 +318,31 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         messages.Add(LlmChatMessage.ToolResult(call.Id, text));
                         yield return AgentEvent.ToolResult(tool.ServerName, tool.Name,
                             ok, Truncate(text, 800), null, (int)sws[e].ElapsedMilliseconds, trace);
+                    }
+                }
+
+                // ---- 已用工具集裁剪判定：本轮执行完成后更新 seen 集合，条件满足则下一轮起收窄发送集 ----
+                if (trim.Enabled && !trimmed && activeNames.Count > trim.MinTools)
+                {
+                    var used = execs.Select(x => x.Tool.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                    if (used.Length > 0)
+                    {
+                        // 稳定判定：本轮调用的工具全部是"本轮之前已见过"的 → 稳定轮 +1，否则重置
+                        if (used.All(u => seenNames.Contains(u))) stableRounds++;
+                        else stableRounds = 0;
+                        foreach (var u in used) seenNames.Add(u);
+
+                        // 稳定 2 轮 或 已到第 AfterRounds 轮 → 收窄到 seen 集合（下一轮生效）
+                        if (stableRounds >= trim.StableRounds || round >= trim.AfterRounds)
+                        {
+                            trimmed = true;
+                            var before = activeNames.Count;
+                            activeNames = new HashSet<string>(seenNames, StringComparer.OrdinalIgnoreCase);
+                            _logger.LogInformation("[AgentLoop] tool trim trace={Trace} round={Round} active {Before}->{After} seen={Seen}",
+                                trace, round, before, activeNames.Count, seenNames.Count);
+                            yield return AgentEvent.ContextEvent("tool_trim",
+                                Texts.Get("TOOL_TRIM", lang, before, activeNames.Count), trace);
+                        }
                     }
                 }
 

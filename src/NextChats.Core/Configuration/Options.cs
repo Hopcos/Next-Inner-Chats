@@ -50,6 +50,25 @@ public sealed class ContextOptions
     public int TruncateChunkMessages { get; set; } = 4;
 }
 
+/// <summary>已用工具集按需裁剪：每轮只向 LLM 发送"实际用到的工具"的定义，避免多轮重复计费大体积工具 schema</summary>
+public sealed class ToolTrimOptions
+{
+    /// <summary>总开关</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>稳定判定：连续 N 轮调用集合未超出"历史 seen 集合"时才允许裁剪（默认 2 轮）</summary>
+    public int StableRounds { get; set; } = 2;
+
+    /// <summary>预算判定：第 N 轮起无论如何开始收窄到 seen 集合（默认第 3 轮）</summary>
+    public int AfterRounds { get; set; } = 3;
+
+    /// <summary>工具总数大于该值才裁剪；子代理白名单很小（≤3）则跳过</summary>
+    public int MinTools { get; set; } = 4;
+
+    /// <summary>每轮补发上限：检测到模型调用"未声明工具"时补入该工具并重决策的次数（防御未严格约束的工具调用）</summary>
+    public int RefillLimitPerRound { get; set; } = 1;
+}
+
 /// <summary>内置工具（http_fetch 等）配置 —— HTTP 抓取默认仅放行白名单域名，防 SSRF</summary>
 public sealed class BuiltinToolOptions
 {
