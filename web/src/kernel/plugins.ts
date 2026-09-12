@@ -526,12 +526,35 @@ export class ChatService extends Service {
     }
   }
 
+  /** 后端持久化的 toolTrace 结构 → 前端 ToolCard（字段名/类型不同，历史消息据此恢复折叠卡片） */
+  private normalizeToolTrace(raw: unknown, idx: number): ToolCard {
+    const r = (raw ?? {}) as Record<string, unknown>
+    const args = r['args']
+    let argumentsJson: string | undefined
+    if (typeof args === 'string') argumentsJson = args
+    else if (args != null) {
+      try { argumentsJson = JSON.stringify(args) } catch { /* 忽略 */ }
+    }
+    return {
+      key: `${String(r['server'] ?? '')}.${String(r['tool'] ?? 'tool')}.${idx}`,
+      serverName: r['server'] as string | undefined,
+      toolName: (r['tool'] as string) ?? 'tool',
+      argumentsJson,
+      approvalId: r['approvalId'] as string | undefined,
+      approvalStatus: r['approvalStatus'] as ToolCard['approvalStatus'] | undefined,
+      status: r['success'] === false ? 'error' : r['success'] === true ? 'ok' : 'running',
+      resultPreview: r['preview'] as string | undefined,
+      errorCode: r['errorCode'] as string | undefined,
+      durationMs: typeof r['durationMs'] === 'number' ? (r['durationMs'] as number) : undefined,
+    }
+  }
+
   private fromDto(m: ChatMessageDto): UiMessage {
     let tools: ToolCard[] = []
     try {
       if (m.role === 'Assistant' && m.toolCallsJson) {
         const parsed = JSON.parse(m.toolCallsJson)
-        if (Array.isArray(parsed)) tools = parsed as ToolCard[]
+        if (Array.isArray(parsed)) tools = parsed.map((raw, i) => this.normalizeToolTrace(raw, i))
       }
     } catch {
       /* 忽略 */
