@@ -534,6 +534,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                             ["server"] = ev.ServerName,
                             ["tool"] = ev.ToolName,
                             ["args"] = ev.ArgumentsJson is null ? null : JsonNode.Parse(ev.ArgumentsJson),
+                            ["callId"] = ev.ToolCallId,
                             ["approvalId"] = ev.ApprovalId?.ToString(),
                             ["approvalStatus"] = ev.ApprovalStatus,
                         });
@@ -541,7 +542,10 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                     case "tool_result":
                     case "tool_error":
                     {
-                        var last = toolTrace.LastOrDefault(t => t["tool"]?.GetValue<string>() == ev.ToolName);
+                        // 优先按 callId 精确配对（支持同名工具并行）；旧数据无 callId 时回退 toolName
+                        var last = ev.ToolCallId is null
+                            ? toolTrace.LastOrDefault(t => t["tool"]?.GetValue<string>() == ev.ToolName)
+                            : toolTrace.LastOrDefault(t => t["callId"]?.GetValue<int>() == ev.ToolCallId);
                         if (last is not null)
                         {
                             last["success"] = ev.Success;

@@ -270,6 +270,7 @@ export interface AgentEventDto {
   argumentsJson?: string
   resultPreview?: string
   success?: boolean
+  toolCallId?: number
   durationMs?: number
   attempt?: number
   errorCode?: string

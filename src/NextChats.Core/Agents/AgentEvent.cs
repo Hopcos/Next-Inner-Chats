@@ -26,6 +26,8 @@ public sealed class AgentEvent
 
     public bool? Success { get; init; }
 
+    public int? ToolCallId { get; init; }
+
     public int? DurationMs { get; init; }
 
     public int? Attempt { get; init; }
@@ -82,16 +84,17 @@ public sealed class AgentEvent
 
     public static AgentEvent ThinkingEnd(string? reason, string traceId) => new() { Kind = "thinking_end", Reason = reason, TraceId = traceId };
 
-    public static AgentEvent ToolStart(string server, string tool, string? args, bool requiresApproval, Guid? approvalId, string traceId) => new()
+    public static AgentEvent ToolStart(string server, string tool, string? args, bool requiresApproval, Guid? approvalId, string traceId, int? toolCallId = null) => new()
     {
         Kind = "tool_start", ServerName = server, ToolName = tool, ArgumentsJson = args, TraceId = traceId,
-        ApprovalStatus = requiresApproval ? "pending" : null, ApprovalId = approvalId,
+        ApprovalStatus = requiresApproval ? "pending" : null, ApprovalId = approvalId, ToolCallId = toolCallId,
     };
 
-    public static AgentEvent ToolResult(string server, string tool, bool success, string? preview, string? errorCode, int durationMs, string traceId) => new()
+    public static AgentEvent ToolResult(string server, string tool, bool success, string? preview, string? errorCode, int durationMs, string traceId, int? toolCallId = null) => new()
     {
         Kind = success ? "tool_result" : "tool_error", ServerName = server, ToolName = tool,
         Success = success, ResultPreview = preview, ErrorCode = errorCode, DurationMs = durationMs, TraceId = traceId,
+        ToolCallId = toolCallId,
     };
 
     public static AgentEvent ApprovalUpdated(Guid approvalId, string status, string traceId) => new()

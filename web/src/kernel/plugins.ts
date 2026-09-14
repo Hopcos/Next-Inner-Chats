@@ -39,6 +39,8 @@ export interface ToolCard {
   resultPreview?: string
   errorCode?: string
   durationMs?: number
+  /** 工具调用唯一 id（服务端下发，start/result 精确配对，支持同名工具并行） */
+  callId?: number
 }
 
 export interface UiMessage {
@@ -780,6 +782,7 @@ export class ChatService extends Service {
           approvalId: ev.approvalId,
           approvalStatus: ev.approvalId ? 'pending' : undefined,
           status: 'running',
+          callId: ev.toolCallId,
         }
         pending.tools.push(card)
         if (ev.approvalId) {
@@ -803,7 +806,9 @@ export class ChatService extends Service {
       }
       case 'tool_result':
       case 'tool_error': {
-        const card = pending.tools.find((t) => t.serverName === ev.serverName && t.toolName === ev.toolName)
+        // 优先按 callId 精确配对（同名工具并行）；无 callId（旧数据）回退 serverName+toolName
+        const card = pending.tools.find((t) => t.callId != null && t.callId === ev.toolCallId)
+          ?? pending.tools.find((t) => t.serverName === ev.serverName && t.toolName === ev.toolName)
         const target = card ?? pending.tools[pending.tools.length - 1]
         if (target) {
           target.status = ev.success ? 'ok' : 'error'

@@ -191,7 +191,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 messages.Add(LlmChatMessage.Assistant(outcome.Text, outcome.ToolCalls, outcome.Reasoning));
 
                 // 决策阶段（顺序）：工具解析 + 策略判定 + 审批等待 + ToolStart 事件
-                var execs = new List<(LlmToolCall Call, UnifiedTool Tool, string ArgsJson)>();
+                var execs = new List<(LlmToolCall Call, UnifiedTool Tool, string ArgsJson, int CallId)>();
                 for (var i = 0; i < outcome.ToolCalls.Count; i++)
                 {
                     var call = outcome.ToolCalls[i];
@@ -204,13 +204,14 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                     usage.ToolCalls++;
                     var tool = request.Tools?.FirstOrDefault(t => t.Name == call.Name);
                     var argsJson = call.Arguments?.ToJsonString() ?? "{}";
+                    var callId = i; // 每次工具调用唯一 id（本决策轮内）：start/result 精确配对，支持同名工具并行
 
                     if (tool is null)
                     {
                         usage.ToolErrors++;
                         var unknownMsg = Texts.Get("TOOL_NOT_FOUND", lang, call.Name);
                         messages.Add(LlmChatMessage.ToolResult(call.Id, unknownMsg));
-                        yield return AgentEvent.ToolResult("unknown", call.Name, false, null, "TOOL_NOT_FOUND", 0, trace);
+                        yield return AgentEvent.ToolResult("unknown", call.Name, false, null, "TOOL_NOT_FOUND", 0, trace, callId);
                         continue;
                     }
 
@@ -220,7 +221,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         usage.ToolErrors++;
                         var deniedMsg = Texts.Get("OP_DENIED", lang);
                         messages.Add(LlmChatMessage.ToolResult(call.Id, deniedMsg));
-                        yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, deniedMsg, "OP_DENIED", 0, trace);
+                        yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, deniedMsg, "OP_DENIED", 0, trace, callId);
                         continue;
                     }
 
@@ -230,7 +231,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         var approval = await _approvals.CreateAsync(request.UserId, request.SessionId, trace,
                             tool.ServerName, tool.Name, call.Arguments,
                             TimeSpan.FromSeconds(_policyOptions.Value.ApprovalTimeoutSeconds), ct);
-                        yield return AgentEvent.ToolStart(tool.ServerName, tool.Name, argsJson, true, approval.Id, trace);
+                        yield return AgentEvent.ToolStart(tool.ServerName, tool.Name, argsJson, true, approval.Id, trace, callId);
                         yield return AgentEvent.ApprovalUpdated(approval.Id, "pending", trace);
 
                         var decision = await _approvals.WaitForDecisionAsync(approval.Id,
@@ -247,25 +248,25 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                             yield return AgentEvent.ApprovalUpdated(approval.Id, "expired", trace);
                             var timeoutMsg = Texts.Get("APPROVAL_TIMEOUT_TOOL", lang);
                             messages.Add(LlmChatMessage.ToolResult(call.Id, timeoutMsg));
-                            yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, timeoutMsg, "APPROVAL_TIMEOUT_TOOL", 0, trace);
+                            yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, timeoutMsg, "APPROVAL_TIMEOUT_TOOL", 0, trace, callId);
                         }
                         else if (decision == ApprovalDecision.Rejected)
                         {
                             yield return AgentEvent.ApprovalUpdated(approval.Id, "rejected", trace);
                             var rejectedMsg = Texts.Get("APPROVAL_REJECTED_TOOL", lang);
                             messages.Add(LlmChatMessage.ToolResult(call.Id, rejectedMsg));
-                            yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, rejectedMsg, "APPROVAL_REJECTED_TOOL", 0, trace);
+                            yield return AgentEvent.ToolResult(tool.ServerName, tool.Name, false, rejectedMsg, "APPROVAL_REJECTED_TOOL", 0, trace, callId);
                         }
                         else
                         {
                             yield return AgentEvent.ApprovalUpdated(approval.Id, "approved", trace);
-                            execs.Add((call, tool, argsJson));
+                            execs.Add((call, tool, argsJson, callId));
                         }
                     }
                     else
                     {
-                        yield return AgentEvent.ToolStart(tool.ServerName, tool.Name, argsJson, false, null, trace);
-                        execs.Add((call, tool, argsJson));
+                        yield return AgentEvent.ToolStart(tool.ServerName, tool.Name, argsJson, false, null, trace, callId);
+                        execs.Add((call, tool, argsJson, callId));
                     }
                 }
 
@@ -313,11 +314,11 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
 
                     for (var e = 0; e < execs.Count; e++)
                     {
-                        var (call, tool, _) = execs[e];
+                        var (call, tool, _, callId) = execs[e];
                         var (ok, text, _, _, _, _) = results[e];
                         messages.Add(LlmChatMessage.ToolResult(call.Id, text));
                         yield return AgentEvent.ToolResult(tool.ServerName, tool.Name,
-                            ok, Truncate(text, 800), null, (int)sws[e].ElapsedMilliseconds, trace);
+                            ok, Truncate(text, 800), null, (int)sws[e].ElapsedMilliseconds, trace, callId);
                     }
                 }
 
