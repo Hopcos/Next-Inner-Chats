@@ -816,9 +816,11 @@ export class ChatService extends Service {
       }
       case 'tool_result':
       case 'tool_error': {
-        // 优先按 callId 精确配对（同名工具并行）；无 callId（旧数据）回退 serverName+toolName
-        const card = pending.tools.find((t) => t.callId != null && t.callId === ev.toolCallId)
-          ?? pending.tools.find((t) => t.serverName === ev.serverName && t.toolName === ev.toolName)
+        // 精确配对：仅匹配"尚未完成"的卡。callId 每轮从 0 重新编号（事件不带轮次），
+        // 若不忽略已完成卡，多轮任务的 tool_result 会错误配对到上一轮同 callId 的卡，
+        // 导致本轮新卡永远停留在 running（刷新/切回后从历史重建才恢复正常）。
+        const card = pending.tools.find((t) => t.status === 'running' && t.callId != null && t.callId === ev.toolCallId)
+          ?? pending.tools.find((t) => t.status === 'running' && t.serverName === ev.serverName && t.toolName === ev.toolName)
         const target = card ?? pending.tools[pending.tools.length - 1]
         if (target) {
           target.status = ev.success ? 'ok' : 'error'
