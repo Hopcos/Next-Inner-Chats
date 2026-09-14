@@ -62,7 +62,6 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
       </div>
       <div class="list nc-scroll">
         <template v-if="pinnedSessions.length > 0">
-          <div class="group-label">{{ t('chat.pinnedSection') }}</div>
           <div
             v-for="s in pinnedSessions"
             :key="s.id"
@@ -217,14 +216,6 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
 .item:hover .item-menu,
 .item.active .item-menu {
   opacity: 1;
-}
-
-.group-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--nc-text-dim);
-  padding: 10px 12px 4px;
-  letter-spacing: 0.5px;
 }
 
 .pin-badge {

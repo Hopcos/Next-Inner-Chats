@@ -12,7 +12,6 @@ export default {
     deleteSessionTitle: '删除会话',
     deleteSessionConfirm: '删除会话「{title}」？消息将一并删除。',
     sessionOps: '会话操作',
-    pinnedSection: '置顶',
     pin: '置顶',
     unpin: '取消置顶',
     rename: '重命名',

@@ -12,7 +12,6 @@ export default {
     deleteSessionTitle: 'Delete Session',
     deleteSessionConfirm: 'Delete session "{title}"? Its messages will also be deleted.',
     sessionOps: 'Session actions',
-    pinnedSection: 'Pinned',
     pin: 'Pin to top',
     unpin: 'Unpin',
     rename: 'Rename',
