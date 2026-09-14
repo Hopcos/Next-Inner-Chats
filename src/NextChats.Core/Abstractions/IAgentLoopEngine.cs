@@ -39,6 +39,12 @@ public sealed record AgentRunRequest
     /// <summary>LLM 模型白名单（用户角色绑定；null/空 = 不限制）。未授权模型被路由层排除，管理员传 null</summary>
     public IReadOnlyList<Guid>? AllowedModelIds { get; init; }
 
+    /// <summary>
+    /// LLM 容错性（高可用）：当前模型在本轮决策中连续失败（同模型重试耗尽且无任何产出）时，
+    /// 自动切换到下一个可用模型重试（最多 <see cref="LlmRouter.MaxFailovers"/> 次）。默认开启。
+    /// </summary>
+    public bool LlmFailoverEnabled { get; init; } = true;
+
     public string? ModelOverride { get; init; }
 
     /// <summary>ReAct 轮次上限；0 = 使用配置 Policy:MaxReActSteps（默认 20）</summary>

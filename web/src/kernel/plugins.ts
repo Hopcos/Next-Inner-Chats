@@ -148,7 +148,7 @@ export class SettingsService extends Service {
     threeEnabled: boolean
     loaded: boolean
   }>({
-    chat: { providerId: null, modelId: null, promptId: null, mcpServerIds: [], skillIds: [], delegationEnabled: false, subAgentModelId: null },
+    chat: { providerId: null, modelId: null, promptId: null, mcpServerIds: [], skillIds: [], delegationEnabled: false, subAgentModelId: null, llmFailoverEnabled: true },
     threeEnabled: true,
     loaded: false,
   })
@@ -204,6 +204,7 @@ export class SettingsService extends Service {
         'chat.skills': JSON.stringify(this.state.chat.skillIds),
         'agent.delegationEnabled': this.state.chat.delegationEnabled ? 'true' : 'false',
         'chat.subAgentModelId': this.state.chat.subAgentModelId ?? '',
+        'agent.llmFailoverEnabled': this.state.chat.llmFailoverEnabled === false ? 'false' : 'true',
       })
     try {
       await put()
@@ -226,6 +227,8 @@ export class SettingsService extends Service {
       const promptId = remote['chat.promptId'] || null
       const delegationEnabled = remote['agent.delegationEnabled'] === 'true'
       const subAgentModelId = remote['chat.subAgentModelId'] || null
+      // LLM 容错性默认开启：仅服务端显式保存 "false" 时关闭
+      const llmFailoverEnabled = remote['agent.llmFailoverEnabled'] !== 'false'
       let mcpServerIds: string[] = []
       let skillIds: string[] = []
       try {
@@ -234,7 +237,7 @@ export class SettingsService extends Service {
       } catch {
         /* 忽略 */
       }
-      this.state.chat = { providerId, modelId, promptId, mcpServerIds, skillIds, delegationEnabled, subAgentModelId }
+      this.state.chat = { providerId, modelId, promptId, mcpServerIds, skillIds, delegationEnabled, subAgentModelId, llmFailoverEnabled }
       this.persistLocal()
       this.state.loaded = true
     } catch {

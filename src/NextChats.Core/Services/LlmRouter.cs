@@ -111,18 +111,69 @@ public sealed class LlmRouter : ILlmRouter
         return CreateClient(provider, SelectModel(provider, modelId));
     }
 
+    /// <summary>LLM 容错切换：排除连续失败的模型后选下一个可用模型（同供应商优先，其次其它健康供应商），无候选返回 null。</summary>
+    public async Task<ILlmClient?> SelectFailoverClientAsync(Guid? preferredId, Guid? preferredModelId, string[] excludeModelNames, Guid[]? allowedModelIds, string? lang, CancellationToken ct)
+    {
+        var excludes = excludeModelNames.Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (excludes.Count == 0)
+        {
+            return null; // 没有可排除的失败模型，本次不做容错切换
+        }
+
+        // 1) 首选供应商内：排除后挑优先级最高的启用模型（含白名单约束）
+        if (preferredId.HasValue && preferredId.Value != Guid.Empty)
+        {
+            var preferred = await _store.GetProviderAsync(preferredId.Value, ct);
+            if (preferred is { Enabled: true, IsHealthy: true })
+            {
+                var candidate = SelectModelExcluding(preferred, preferredModelId, allowedModelIds, excludes);
+                if (candidate is not null)
+                {
+                    return CreateClient(preferred, candidate, lang);
+                }
+            }
+        }
+
+        // 2) 其它健康供应商：按优先级逐个尝试其排除后的首选模型
+        var providers = (await _store.GetActiveProvidersAsync(ct))
+            .Where(p => p.Enabled && p.IsHealthy && (!preferredId.HasValue || p.Id != preferredId.Value))
+            .OrderBy(p => p.Priority)
+            .ToList();
+        foreach (var provider in providers)
+        {
+            var candidate = SelectModelExcluding(provider, null, allowedModelIds, excludes);
+            if (candidate is not null)
+            {
+                return CreateClient(provider, candidate, lang);
+            }
+        }
+        return null;
+    }
+
     /// <summary>供应商内选择模型：首选模型 → 启用模型按优先级（小优先）→ 无可用模型抛异常；
     /// allowedModelIds 非空时为角色绑定白名单（未授权模型不可选，首选不在白名单内则回落白名单内优先级最高的启用模型）</summary>
     private static LlmModel SelectModel(LlmProvider provider, Guid? preferredModelId, Guid[]? allowedModelIds = null)
+    {
+        return SelectModelExcluding(provider, preferredModelId, allowedModelIds, null)
+            ?? throw new LlmUnavailableException($"provider '{provider.Name}' has no enabled model for current role");
+    }
+
+    /// <summary>SelectModel 的容错变体：额外排除 excludeNames（已失败模型）后选下一个；无候选返回 null（不抛）</summary>
+    private static LlmModel? SelectModelExcluding(LlmProvider provider, Guid? preferredModelId, Guid[]? allowedModelIds, HashSet<string>? excludeNames)
     {
         var pool = provider.Models.Where(m => m.Enabled).OrderBy(m => m.Priority).ToList();
         if (allowedModelIds is { Length: > 0 })
         {
             pool = pool.Where(m => allowedModelIds.Contains(m.Id)).ToList();
         }
+        if (excludeNames is { Count: > 0 })
+        {
+            pool = pool.Where(m => !excludeNames.Contains(m.Name.Trim())).ToList();
+        }
         if (pool.Count == 0)
         {
-            throw new LlmUnavailableException($"provider '{provider.Name}' has no enabled model for current role");
+            return null;
         }
         if (preferredModelId.HasValue)
         {

@@ -397,24 +397,14 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         CancellationToken ct)
     {
         var reasoningStarted = false;
+        // ---------- LLM 容错（高可用）：当前模型"连续失败"（同模型重试耗尽 + 无任何产出）→ 自动切换下一个可用模型重试 ----------
+        var failoverExcluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        LlmHttpException? failoverLastError = null;
+        var failoverLastModel = "";
+        const int MaxFailovers = 2; // 最多切换 2 次（共尝试 3 个不同模型）
         try
         {
-            ILlmClient client;
-            try
-            {
-                client = await _router.SelectClientAsync(request.PreferredProviderId, request.PreferredModelId, lang, ct, request.AllowedModelIds?.ToArray());
-                await NotifySelectionFallbackAsync(request, client, lang, trace, writer, ct);
-            }
-            catch (LlmUnavailableException ex)
-            {
-                outcome.LlmUnavailable = true;
-                _logger.LogError("LLM 不可用 trace={Trace}: {Msg}", trace, ex.Message);
-                await writer.WriteAsync(AgentEvent.Error("LLM_UNAVAILABLE", Texts.Get("LLM_UNAVAILABLE", lang), trace), ct);
-                return;
-            }
-
-            outcome.Model = client.Model;
-            var sw = Stopwatch.StartNew();
+            // 决策请求体与客户端无关，提到容错循环外
             var llmRequest = new LlmRequest
             {
                 Messages = messages,
@@ -426,57 +416,108 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 ThinkingEffort = request.ThinkingEffort,
             };
 
-            // 首块等待提示：上游排队/慢时给出可见反馈（避免用户误以为“没在推理/需要切换窗口才继续”）。
-            // 周期重发（每 8s）并带已等待秒数 → 等待中看到持续进展，而不是一条静止提示让人以为“卡住”。
-            var waitingStarted = System.Diagnostics.Stopwatch.GetTimestamp();
-            using var waitTimer = new System.Threading.Timer(_ =>
+            ILlmClient client = null!;
+            var attempt = 0;
+            while (true)
             {
-                var secs = (int)System.Diagnostics.Stopwatch.GetElapsedTime(waitingStarted).TotalSeconds;
-                writer.TryWrite(AgentEvent.ContextEvent("waiting",
-                    Texts.Get("LLM_WAITING", lang, secs), trace));
-            }, null, TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(8));
-
-            try
-            {
-                await foreach (var chunk in client.StreamAsync(llmRequest, ct))
+                var produced = false;
+                var sw = Stopwatch.StartNew();
+                try
                 {
-                    // 首个 chunk（任何类型）到达 → 上游已响应，停止等待提示
-                    waitTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
-                    switch (chunk)
+                    if (attempt == 0)
                     {
-                    case LlmChunk.TextDelta td:
-                        if (outcome.TtftMs < 0) outcome.TtftMs = (int)sw.ElapsedMilliseconds;
-                        outcome.Text += td.Text;
-                        await writer.WriteAsync(new AgentEvent { Kind = "text_delta", Text = td.Text, TraceId = trace }, ct);
-                        break;
-
-                    case LlmChunk.ReasoningDelta rd:
-                        if (outcome.TtftMs < 0) outcome.TtftMs = (int)sw.ElapsedMilliseconds;
-                        if (!reasoningStarted)
+                        client = await _router.SelectClientAsync(request.PreferredProviderId, request.PreferredModelId, lang, ct, request.AllowedModelIds?.ToArray());
+                        await NotifySelectionFallbackAsync(request, client, lang, trace, writer, ct);
+                    }
+                    else
+                    {
+                        var next = await _router.SelectFailoverClientAsync(
+                            request.PreferredProviderId, request.PreferredModelId,
+                            failoverExcluded.ToArray(), request.AllowedModelIds?.ToArray(), lang, ct);
+                        if (next is null)
                         {
-                            reasoningStarted = true;
-                            await writer.WriteAsync(AgentEvent.ThinkingStart(trace), ct);
+                            // 已无其它可用模型：保留原始失败原因（LLM_ERROR 而非误报"服务不可用"）
+                            if (failoverLastError is not null) throw failoverLastError;
+                            throw new LlmUnavailableException(Texts.Get("LLM_UNAVAILABLE", lang));
                         }
-                        outcome.Reasoning += rd.Text;
-                        await writer.WriteAsync(AgentEvent.ThinkingDelta(rd.Text, trace), ct);
-                        break;
+                        _logger.LogWarning("LLM 容错切换模型 {From} → {To} trace={Trace}", failoverLastModel, next.Model, trace);
+                        await writer.WriteAsync(AgentEvent.ContextEvent("failover",
+                            Texts.Get("LLM_FAILOVER", lang, failoverLastModel, next.Model), trace), ct);
+                        client = next;
+                    }
 
-                    case LlmChunk.ToolUse tu:
-                        outcome.ToolCalls.Add(tu.Call);
-                        break;
+                    outcome.Model = client.Model;
 
-                    case LlmChunk.Done done:
-                        outcome.Usage = done.Usage;
-                        outcome.Finish = done.FinishReason;
-                        if (string.IsNullOrEmpty(outcome.Text)) outcome.Text = done.Content ?? "";
-                        if (string.IsNullOrEmpty(outcome.Reasoning)) outcome.Reasoning = done.Reasoning ?? "";
-                        break;
+                    // 首块等待提示：周期重发（每 8s）带已等待秒数 → 排队/慢时可见持续进展，不误以为“卡住”
+                    var waitingStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                    using var waitTimer = new System.Threading.Timer(_ =>
+                    {
+                        var secs = (int)System.Diagnostics.Stopwatch.GetElapsedTime(waitingStarted).TotalSeconds;
+                        writer.TryWrite(AgentEvent.ContextEvent("waiting",
+                            Texts.Get("LLM_WAITING", lang, secs), trace));
+                    }, null, TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(8));
+
+                    try
+                    {
+                        await foreach (var chunk in client.StreamAsync(llmRequest, ct))
+                        {
+                            // 首个 chunk（任何类型）到达 → 上游已响应，停止等待提示
+                            waitTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                            produced = true;
+                            switch (chunk)
+                            {
+                            case LlmChunk.TextDelta td:
+                                if (outcome.TtftMs < 0) outcome.TtftMs = (int)sw.ElapsedMilliseconds;
+                                outcome.Text += td.Text;
+                                await writer.WriteAsync(new AgentEvent { Kind = "text_delta", Text = td.Text, TraceId = trace }, ct);
+                                break;
+
+                            case LlmChunk.ReasoningDelta rd:
+                                if (outcome.TtftMs < 0) outcome.TtftMs = (int)sw.ElapsedMilliseconds;
+                                if (!reasoningStarted)
+                                {
+                                    reasoningStarted = true;
+                                    await writer.WriteAsync(AgentEvent.ThinkingStart(trace), ct);
+                                }
+                                outcome.Reasoning += rd.Text;
+                                await writer.WriteAsync(AgentEvent.ThinkingDelta(rd.Text, trace), ct);
+                                break;
+
+                            case LlmChunk.ToolUse tu:
+                                outcome.ToolCalls.Add(tu.Call);
+                                break;
+
+                            case LlmChunk.Done done:
+                                outcome.Usage = done.Usage;
+                                outcome.Finish = done.FinishReason;
+                                if (string.IsNullOrEmpty(outcome.Text)) outcome.Text = done.Content ?? "";
+                                if (string.IsNullOrEmpty(outcome.Reasoning)) outcome.Reasoning = done.Reasoning ?? "";
+                                break;
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        waitTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                    }
+                    break; // 决策成功，退出容错循环
                 }
-            }
-        }
-            finally
-            {
-                waitTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                catch (LlmHttpException ex) when (request.LlmFailoverEnabled && attempt < MaxFailovers && !produced && !ct.IsCancellationRequested)
+                {
+                    failoverExcluded.Add(client.Model.Trim());
+                    failoverLastError = ex;
+                    failoverLastModel = client.Model;
+                    attempt++;
+                    _logger.LogWarning("LLM 容错：模型 {Model} 连续失败 HTTP {Code}，切换下一可用模型 trace={Trace}",
+                        client.Model, ex.StatusCode, trace);
+                }
+                catch (LlmUnavailableException ex)
+                {
+                    outcome.LlmUnavailable = true;
+                    _logger.LogError("LLM 不可用 trace={Trace}: {Msg}", trace, ex.Message);
+                    await writer.WriteAsync(AgentEvent.Error("LLM_UNAVAILABLE", Texts.Get("LLM_UNAVAILABLE", lang), trace), ct);
+                    return;
+                }
             }
         }
         catch (OperationCanceledException)

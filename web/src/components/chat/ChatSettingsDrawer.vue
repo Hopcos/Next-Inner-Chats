@@ -103,6 +103,17 @@ function toolCountLabel(m: { endpoint?: string | null; items: { kind: string }[]
         </el-select>
         <div v-if="selectedProvider && (selectedProvider.models ?? []).length === 0" class="nc-dim empty-note">{{ t('chat.noModel') }}</div>
 
+        <h4 class="sec">{{ t('chat.secHa') }}</h4>
+        <el-checkbox
+          :model-value="chat.llmFailoverEnabled !== false"
+          class="radio-card"
+          data-testid="llm-failover"
+          @change="(v: string | number | boolean) => patch({ llmFailoverEnabled: v === true })"
+        >
+          <div class="radio-title">{{ t('chat.llmFailoverToggle') }}</div>
+          <div class="radio-desc nc-dim">{{ t('chat.llmFailoverHint') }}</div>
+        </el-checkbox>
+
         <h4 class="sec">{{ t('chat.secDelegation') }}</h4>
         <div class="deleg-row">
           <span class="deleg-label">{{ t('chat.delegationToggle') }}</span>

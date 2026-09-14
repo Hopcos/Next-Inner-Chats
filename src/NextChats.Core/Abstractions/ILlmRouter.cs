@@ -16,6 +16,12 @@ public interface ILlmRouter
     /// allowedModelIds 非空时为模型白名单（角色绑定），首选/默认模型均只从白名单内选择</summary>
     Task<ILlmClient> SelectClientAsync(Guid? preferredId = null, Guid? preferredModelId = null, string? lang = null, CancellationToken ct = default, Guid[]? allowedModelIds = null);
 
+    /// <summary>
+    /// LLM 容错：排除 <paramref name="excludeModelNames"/>（已连续失败的模型名）后，选择下一个可用模型——
+    /// 优先同供应商内其它启用模型（按优先级），没有则尝试其它健康供应商的模型；全部无可用返回 null。
+    /// </summary>
+    Task<ILlmClient?> SelectFailoverClientAsync(Guid? preferredId, Guid? preferredModelId, string[] excludeModelNames, Guid[]? allowedModelIds, string? lang, CancellationToken ct);
+
     /// <summary>获取指定 Provider 的客户端（不路由）；modelId 为空时用供应商内优先级最高的启用模型</summary>
     Task<ILlmClient> GetClientAsync(Guid providerId, Guid? modelId = null, CancellationToken ct = default);
 

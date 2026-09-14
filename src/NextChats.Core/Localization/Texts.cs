@@ -46,6 +46,7 @@ public static class Texts
         ["LLM_UNAVAILABLE"] = ("No LLM provider is available. Please check provider configuration.", "暂无可用 LLM 供应商，请联系管理员配置并启用"),
         ["LLM_FALLBACK"] = ("Requested provider is unavailable (disabled / unhealthy / call failed). Falling back to {0} / {1}.", "所选供应商不可用（禁用 / 不健康 / 调用失败），已自动切换到 {0} / {1}。"),
         ["LLM_MODEL_FALLBACK"] = ("Requested model is unavailable, using {0} / {1} instead.", "所选模型不可用，已改用 {0} / {1}。"),
+        ["LLM_FAILOVER"] = ("LLM failover: model {0} kept failing, automatically switched to {1} and retrying.", "LLM 容错：模型 {0} 连续出错，已自动切换到 {1} 重试。"),
         ["MCP_DISABLED"] = ("Please enable the MCP server first", "请先启用该 MCP 服务器"),
         ["INVALID_ENCODING"] = ("Name/arguments contain invalid encoding characters (garbled text). Please submit UTF-8.", "名称/参数包含无效编码字符（乱码），请使用 UTF-8 提交"),
         ["MCP_CONNECT_FAILED"] = ("Cannot reach the MCP server. Check Endpoint / Headers / network (details hidden).", "无法连接 MCP 服务，请检查 Endpoint / Header / 网络（错误已隐藏细节）"),

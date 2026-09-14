@@ -307,4 +307,6 @@ export interface ChatSettings {
   delegationEnabled?: boolean
   /** Sub-Agent 模型（null = 跟随主模型） */
   subAgentModelId?: string | null
+  /** LLM 容错性（高可用）：当前模型连续出错时自动切换到下一个可用模型；默认开启 */
+  llmFailoverEnabled?: boolean
 }
