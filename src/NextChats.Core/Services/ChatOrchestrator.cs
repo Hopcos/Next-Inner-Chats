@@ -575,7 +575,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         {
                             reasoningTokens = Math.Max(1, finalReasoning.Length / 4);
                         }
-                        totalUsage = ev.Usage is null ? null : new LlmUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens, reasoningTokens);
+                        totalUsage = ev.Usage is null ? null : new LlmUsage(ev.Usage.PromptTokens, ev.Usage.CompletionTokens, reasoningTokens, ev.Usage.CacheTokens);
                         model ??= ev.Model;
                         doneTtftMs = ev.TtftMs ?? 0;
                         doneTotalMs = ev.TotalMs ?? 0;
@@ -596,6 +596,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 PromptTokens = ev.Usage.PromptTokens,
                                 CompletionTokens = ev.Usage.CompletionTokens,
                                 ReasoningTokens = reasoningTokens,
+                                CacheTokens = ev.Usage.CacheTokens,
                                 TotalTokens = ev.Usage.TotalTokens,
                                 Rounds = ev.Usage.Rounds,
                                 ToolCalls = ev.Usage.ToolCalls,
@@ -636,6 +637,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             CompletionTokens = totalUsage?.CompletionTokens ?? 0,
             TotalTokens = (totalUsage?.PromptTokens ?? 0) + (totalUsage?.CompletionTokens ?? 0),
             ReasoningTokens = totalUsage?.ReasoningTokens ?? 0,
+            CacheTokens = totalUsage?.CacheTokens ?? 0,
             TtftMs = doneTtftMs,
             TotalMs = doneTotalMs,
             Rounds = doneRounds,
@@ -667,6 +669,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             PromptTokens = totalUsage?.PromptTokens ?? 0,
             CompletionTokens = totalUsage?.CompletionTokens ?? 0,
             TotalTokens = totalUsage?.TotalTokens ?? 0,
+            CacheTokens = totalUsage?.CacheTokens ?? 0,
             Cost = EstimateCost(totalUsage, priceIn, priceOut)
                 + ((decimal)doneSubIn * priceIn + (decimal)doneSubOut * priceOut) / 1000m,
             TtftMs = doneTtftMs,

@@ -60,6 +60,7 @@ export interface UiMessage {
     promptTokens: number
     completionTokens: number
     reasoningTokens: number
+    cacheTokens: number
     totalTokens: number
     rounds: number
     tools: number
@@ -598,6 +599,7 @@ export class ChatService extends Service {
         promptTokens: m.promptTokens ?? 0,
         completionTokens: m.completionTokens ?? 0,
         reasoningTokens: m.reasoningTokens ?? 0,
+        cacheTokens: m.cacheTokens ?? 0,
         totalTokens: (m.promptTokens ?? 0) + (m.completionTokens ?? 0),
         rounds: m.rounds ?? 0,
         tools: m.toolCalls ?? 0,
@@ -874,6 +876,7 @@ export class ChatService extends Service {
             promptTokens: ev.promptTokens ?? 0,
             completionTokens: ev.completionTokens ?? 0,
             reasoningTokens: ev.reasoningTokens ?? 0,
+            cacheTokens: ev.cacheTokens ?? 0,
             totalTokens: ev.totalTokens ?? 0,
             rounds: ev.rounds ?? 0,
             tools: ev.toolCalls ?? 0,

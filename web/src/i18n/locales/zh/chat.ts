@@ -147,6 +147,7 @@ export default {
     tokenTitle: 'Token 使用情况',
     tokenInput: '输入 Tokens',
     tokenOutput: '输出 Tokens',
+    tokenCacheHit: '缓存命中 Tokens',
     tokenReasoning: '推理 Tokens',
     tokenGenerated: '生成 Tokens',
     tokenSpeed: '响应速度',

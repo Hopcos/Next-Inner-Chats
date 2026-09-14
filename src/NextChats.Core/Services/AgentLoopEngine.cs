@@ -172,6 +172,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 usage.PromptTokens += outcome.Usage.PromptTokens;
                 usage.CompletionTokens += outcome.Usage.CompletionTokens;
                 usage.ReasoningTokens += outcome.Usage.ReasoningTokens;
+                usage.CacheTokens += outcome.Usage.CacheTokens;
                 usage.TotalTokens += outcome.Usage.TotalTokens;
             }
 

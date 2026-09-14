@@ -227,7 +227,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
             if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
             {
-                usage = new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"));
+                usage = new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"), 0, GetCacheTokens(u));
             }
 
             if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
@@ -487,7 +487,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 reasoning = GetInt(det, "reasoning_tokens");
             }
-            return new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"), reasoning);
+            return new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"), reasoning, GetCacheTokens(u));
         }
         // 兜底估算
         var promptChars = request.Messages.Sum(m => (m.Content?.Length ?? 0) + (m.ToolCalls?.Sum(tc => tc.Name.Length + (tc.Arguments?.ToJsonString().Length ?? 0)) ?? 0));
@@ -502,6 +502,20 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     private static int GetInt(JsonElement o, string name) =>
         o.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt32() : 0;
+
+    /// <summary>解析“提示词命中缓存”的 token 数（多协议候选字段，取第一个非 0 值）：
+    /// OpenAI/Azure：usage.prompt_tokens_details.cached_tokens；DeepSeek：usage.prompt_cache_hit_tokens；Anthropic 风格：usage.cache_read_input_tokens</summary>
+    private static int GetCacheTokens(JsonElement u)
+    {
+        if (u.TryGetProperty("prompt_tokens_details", out var det) && det.ValueKind == JsonValueKind.Object)
+        {
+            var cached = GetInt(det, "cached_tokens");
+            if (cached > 0) return cached;
+        }
+        var hit = GetInt(u, "prompt_cache_hit_tokens");
+        if (hit > 0) return hit;
+        return GetInt(u, "cache_read_input_tokens");
+    }
 
     private static string MaskBody(string body)
     {

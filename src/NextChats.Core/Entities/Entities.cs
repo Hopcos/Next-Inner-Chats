@@ -470,6 +470,9 @@ public class ChatMessage
 
     public int CompletionTokens { get; set; }
 
+    /// <summary>提示词命中缓存（prompt cache hit）的 token 数</summary>
+    public int CacheTokens { get; set; }
+
     /// <summary>汇总（冗余存储，供聚合查询免计算）</summary>
     public int TotalTokens { get; set; }
 
@@ -631,6 +634,9 @@ public class TokenUsageRecord
     public int PromptTokens { get; set; }
 
     public int CompletionTokens { get; set; }
+
+    /// <summary>提示词命中缓存（prompt cache hit）的 token 数</summary>
+    public int CacheTokens { get; set; }
 
     public int TotalTokens { get; set; }
 

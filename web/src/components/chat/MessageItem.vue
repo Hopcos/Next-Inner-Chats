@@ -55,6 +55,7 @@ const usageStats = computed(() => {
     { label: t('chat.tokenInput'), value: String(u.promptTokens) },
     { label: t('chat.tokenOutput'), value: String(u.completionTokens) },
   ]
+  if (u.cacheTokens > 0) rows.push({ label: t('chat.tokenCacheHit'), value: String(u.cacheTokens) })
   if (reasoning != null) rows.push({ label: t('chat.tokenReasoning'), value: String(reasoning) })
   rows.push({ label: t('chat.tokenGenerated'), value: String(generated) })
   if (speed != null) rows.push({ label: t('chat.tokenSpeed'), value: `${speed} tok/s` })

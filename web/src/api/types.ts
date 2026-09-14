@@ -190,6 +190,7 @@ export interface ChatMessageDto {
   promptTokens: number
   completionTokens: number
   reasoningTokens: number
+  cacheTokens: number
   ttftMs: number
   totalMs: number
   rounds: number
@@ -286,6 +287,7 @@ export interface AgentEventDto {
   promptTokens?: number
   completionTokens?: number
   reasoningTokens?: number
+  cacheTokens?: number
   totalTokens?: number
   rounds?: number
   toolCalls?: number

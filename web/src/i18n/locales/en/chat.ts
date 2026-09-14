@@ -147,6 +147,7 @@ export default {
     tokenTitle: 'Token usage',
     tokenInput: 'Input Tokens',
     tokenOutput: 'Output Tokens',
+    tokenCacheHit: 'Cached Tokens',
     tokenReasoning: 'Reasoning Tokens',
     tokenGenerated: 'Generated Tokens',
     tokenSpeed: 'Speed',

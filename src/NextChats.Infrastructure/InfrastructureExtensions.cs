@@ -94,6 +94,9 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "ChatMessages", "Rounds", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "ToolCalls", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "Cost", "TEXT NOT NULL DEFAULT '0'");
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "CacheTokens", "INTEGER NOT NULL DEFAULT 0");
+            // TokenUsageRecords 用量流水也记录缓存命中（老库补列；全新库由 EnsureCreated 直接建列）
+            await AddColumnIfMissingAsync(conn, "TokenUsageRecords", "CacheTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentCount", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentInputTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentOutputTokens", "INTEGER NOT NULL DEFAULT 0");

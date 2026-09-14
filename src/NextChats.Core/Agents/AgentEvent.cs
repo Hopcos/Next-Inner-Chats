@@ -52,6 +52,8 @@ public sealed class AgentEvent
 
     public int? ReasoningTokens { get; init; }
 
+    public int? CacheTokens { get; init; }
+
     public int? TotalTokens { get; init; }
 
     public int? Rounds { get; init; }
@@ -118,7 +120,7 @@ public sealed class AgentEvent
     {
         Kind = "done", Usage = usage, Cost = cost, TtftMs = ttftMs, TotalMs = totalMs, TraceId = traceId,
         PromptTokens = usage.PromptTokens, CompletionTokens = usage.CompletionTokens, TotalTokens = usage.TotalTokens,
-        ReasoningTokens = usage.ReasoningTokens, Rounds = usage.Rounds, ToolCalls = usage.ToolCalls,
+        ReasoningTokens = usage.ReasoningTokens, CacheTokens = usage.CacheTokens, Rounds = usage.Rounds, ToolCalls = usage.ToolCalls,
         SubAgentCount = usage.SubAgentCount, SubAgentInputTokens = usage.SubAgentInputTokens, SubAgentOutputTokens = usage.SubAgentOutputTokens,
         PlannerInputTokens = usage.PlannerInputTokens, PlannerOutputTokens = usage.PlannerOutputTokens,
         Model = model,
@@ -133,6 +135,9 @@ public sealed class JsonUsage
     public int CompletionTokens { get; set; }
 
     public int ReasoningTokens { get; set; }
+
+    /// <summary>提示词命中缓存（prompt cache hit）的 token 数</summary>
+    public int CacheTokens { get; set; }
 
     public int TotalTokens { get; set; }
 
