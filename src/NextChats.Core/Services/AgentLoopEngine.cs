@@ -82,7 +82,9 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         var trimmed = false;   // 已触发裁剪
         var stableRounds = 0;  // 连续"调用 ⊆ 历史 seen"的轮数
 
-        for (var round = 1; round <= (request.MaxSteps > 0 ? request.MaxSteps : _policyOptions.Value.MaxReActSteps); round++)
+        var maxRounds = request.MaxSteps > 0 ? request.MaxSteps : _policyOptions.Value.MaxReActSteps;
+        var round = 1;
+        for (; round <= maxRounds; round++)
         {
             usage.Rounds = round;
             yield return AgentEvent.RoundStart(round, trace);
@@ -366,10 +368,11 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
 
         swAll.Stop();
 
-        // ---- 轮次触顶兜底：最后仍在调用工具（无正文答案）→ 明确提示，而不是“静默断开” ----
-        if (!interrupted && messages.Count > 0 && messages[^1].Role == "tool")
+        // ---- 轮次触顶兜底：仅当真正跑满 maxRounds 轮工具（round 因触顶退出）才提示。
+        // 正常"工具轮 + 正文轮"完成时 messages[^1] 也是 tool（正文轮 break 不写入 messages），
+        // 仅凭最后一条是 tool 会把正常完成误报为"已达最大轮次"。 ----
+        if (!interrupted && round > maxRounds && messages.Count > 0 && messages[^1].Role == "tool")
         {
-            var maxRounds = request.MaxSteps > 0 ? request.MaxSteps : _policyOptions.Value.MaxReActSteps;
             yield return AgentEvent.ContextEvent("max_steps",
                 Texts.Get("AGENT_MAX_STEPS", lang, maxRounds), trace);
         }

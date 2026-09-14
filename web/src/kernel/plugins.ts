@@ -742,6 +742,10 @@ export class ChatService extends Service {
       this.markStreaming(sid, false)
       this.controllers.delete(sid)
       this.state.activeMessageId = null
+      // 流已结束（成功/中断/失败）：解除打字机态。若本会话完成时不在当前窗口，
+      // messages 会保留这条 live 消息（loadHistory 有 historyLoaded 守卫、切回不重载），
+      // 不解除 live 会导致每次切回该会话时 MessageItem 重新挂载、从 0 逐字重放整条回答。
+      pending.live = false
       // 流结束后，从服务端拉一次最新消息，保证持久化内容一致
       const sessionService2 = this.ctx.get('session') as SessionService
       if (sessionService2.state.currentId === sid) {
