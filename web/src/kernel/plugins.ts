@@ -148,7 +148,7 @@ export class SettingsService extends Service {
     threeEnabled: boolean
     loaded: boolean
   }>({
-    chat: { providerId: null, modelId: null, promptId: null, mcpServerIds: [], skillIds: [], delegationEnabled: false, subAgentModelId: null, llmFailoverEnabled: true },
+    chat: { providerId: null, modelId: null, promptId: null, mcpServerIds: [], skillIds: [], delegationEnabled: false, subAgentModelId: null, llmFailoverEnabled: true, toolTrimEnabled: false },
     threeEnabled: true,
     loaded: false,
   })
@@ -205,6 +205,7 @@ export class SettingsService extends Service {
         'agent.delegationEnabled': this.state.chat.delegationEnabled ? 'true' : 'false',
         'chat.subAgentModelId': this.state.chat.subAgentModelId ?? '',
         'agent.llmFailoverEnabled': this.state.chat.llmFailoverEnabled === false ? 'false' : 'true',
+        'agent.toolTrimEnabled': this.state.chat.toolTrimEnabled ? 'true' : 'false',
       })
     try {
       await put()
@@ -229,6 +230,8 @@ export class SettingsService extends Service {
       const subAgentModelId = remote['chat.subAgentModelId'] || null
       // LLM 容错性默认开启：仅服务端显式保存 "false" 时关闭
       const llmFailoverEnabled = remote['agent.llmFailoverEnabled'] !== 'false'
+      // 工具集按需裁剪默认关闭：仅服务端显式保存 "true" 时开启
+      const toolTrimEnabled = remote['agent.toolTrimEnabled'] === 'true'
       let mcpServerIds: string[] = []
       let skillIds: string[] = []
       try {
@@ -237,7 +240,7 @@ export class SettingsService extends Service {
       } catch {
         /* 忽略 */
       }
-      this.state.chat = { providerId, modelId, promptId, mcpServerIds, skillIds, delegationEnabled, subAgentModelId, llmFailoverEnabled }
+      this.state.chat = { providerId, modelId, promptId, mcpServerIds, skillIds, delegationEnabled, subAgentModelId, llmFailoverEnabled, toolTrimEnabled }
       this.persistLocal()
       this.state.loaded = true
     } catch {

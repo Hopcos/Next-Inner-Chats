@@ -57,6 +57,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private const string SettingDelegationEnabled = "agent.delegationEnabled";
     private const string SettingSubAgentModel = "chat.subAgentModelId";
     private const string SettingLlmFailover = "agent.llmFailoverEnabled";
+    private const string SettingToolTrim = "agent.toolTrimEnabled";
 
     /// <summary>主-从委派子任务 schema：task 为自包含任务描述（子代理无本会话历史）；tools 为可选工具白名单（省略 = 全部工具）</summary>
     private const string DelegateTaskSchemaJson =
@@ -226,6 +227,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var subAgentModelId = ParseGuid(GetSetting(settings, SettingSubAgentModel));
         // LLM 容错性（高可用）：默认开启；仅当用户显式保存 "false" 时关闭
         var llmFailoverEnabled = !string.Equals(GetSetting(settings, SettingLlmFailover), "false", StringComparison.OrdinalIgnoreCase);
+        // 工具集按需裁剪（用户级开关）：默认关闭，仅当用户显式保存 "true" 时开启
+        var toolTrimEnabled = string.Equals(GetSetting(settings, SettingToolTrim), "true", StringComparison.OrdinalIgnoreCase);
 
         // ---------- LLM 模型角色绑定：服务端强制校验（未授权模型直接拒绝，管理员豁免；未绑定角色=全量可见） ----------
         var isAdmin = await _config.IsAdminAsync(request.UserId, ct);
@@ -473,6 +476,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             PreferredModelId = request.ModelId,
             AllowedModelIds = isAdmin ? null : roleModelIds,
             LlmFailoverEnabled = llmFailoverEnabled,
+            ToolTrimEnabled = toolTrimEnabled,
             ContextWindow = await GetContextWindowAsync(preferredProviderId, request.ModelId, ct),
             Lang = lang,
             // 思考模式：前端全局开关（默认启用）+ 强度（默认 high）；映射在客户端统一执行
@@ -878,6 +882,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 PreferredModelId = subAgentModelId ?? parentRequest.PreferredModelId, // 默认跟随主 Agent 模型
                 AllowedModelIds = subAgentModelId is null ? parentRequest.AllowedModelIds : null,
                 LlmFailoverEnabled = parentRequest.LlmFailoverEnabled,
+                ToolTrimEnabled = parentRequest.ToolTrimEnabled,
                 ContextWindow = parentRequest.ContextWindow,
                 Lang = lang,
                 ThinkingEnabled = parentRequest.ThinkingEnabled,

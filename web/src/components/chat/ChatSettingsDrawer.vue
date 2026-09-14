@@ -114,6 +114,17 @@ function toolCountLabel(m: { endpoint?: string | null; items: { kind: string }[]
           <div class="radio-desc nc-dim">{{ t('chat.llmFailoverHint') }}</div>
         </el-checkbox>
 
+        <h4 class="sec">{{ t('chat.secTools') }}</h4>
+        <el-checkbox
+          :model-value="chat.toolTrimEnabled === true"
+          class="radio-card"
+          data-testid="tool-trim"
+          @change="(v: string | number | boolean) => patch({ toolTrimEnabled: v === true })"
+        >
+          <div class="radio-title">{{ t('chat.toolTrimToggle') }}</div>
+          <div class="radio-desc nc-dim">{{ t('chat.toolTrimHint') }}</div>
+        </el-checkbox>
+
         <h4 class="sec">{{ t('chat.secDelegation') }}</h4>
         <div class="deleg-row">
           <span class="deleg-label">{{ t('chat.delegationToggle') }}</span>

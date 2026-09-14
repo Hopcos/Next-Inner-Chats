@@ -309,4 +309,6 @@ export interface ChatSettings {
   subAgentModelId?: string | null
   /** LLM 容错性（高可用）：当前模型连续出错时自动切换到下一个可用模型；默认开启 */
   llmFailoverEnabled?: boolean
+  /** 工具集按需裁剪：开启后每轮只发送已用工具定义以节省 Token；默认关闭 */
+  toolTrimEnabled?: boolean
 }

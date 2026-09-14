@@ -76,6 +76,8 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
 
         // ---- 已用工具集按需裁剪状态（每轮只发送"实际用到的工具"定义，砍掉重复 schema 计费） ----
         var trim = _trimOptions.Value;
+        // 生效条件 = 用户级开关（默认关，聊天设置控制）∧ 全局总开关（ToolTrim:Enabled）
+        var trimEnabled = request.ToolTrimEnabled && trim.Enabled;
         var allToolDefs = toolDefs ?? [];
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // 历史实际调用过的工具（累积，永不移除）
         var activeNames = new HashSet<string>(allToolDefs.Select(t => t.Name), StringComparer.OrdinalIgnoreCase); // 本轮发送给 LLM 的工具集
@@ -121,7 +123,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 var refills = 0;
                 while (true)
                 {
-                    var sendToolDefs = trim.Enabled && trimmed && activeNames.Count > 0
+                    var sendToolDefs = trimEnabled && trimmed && activeNames.Count > 0
                         ? allToolDefs.Where(t => activeNames.Contains(t.Name)).ToList()
                         : allToolDefs;
 
@@ -146,7 +148,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         await SafeAwait(producer);
                     }
 
-                    if (trim.Enabled && trimmed && outcome.Finish == LlmFinishReason.ToolCalls && outcome.ToolCalls.Count > 0)
+                    if (trimEnabled && trimmed && outcome.Finish == LlmFinishReason.ToolCalls && outcome.ToolCalls.Count > 0)
                     {
                         var missing = outcome.ToolCalls.Select(c => c.Name).FirstOrDefault(n => !activeNames.Contains(n));
                         if (missing is not null && refills < trim.RefillLimitPerRound)
@@ -325,7 +327,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 }
 
                 // ---- 已用工具集裁剪判定：本轮执行完成后更新 seen 集合，条件满足则下一轮起收窄发送集 ----
-                if (trim.Enabled && !trimmed && activeNames.Count > trim.MinTools)
+                if (trimEnabled && !trimmed && activeNames.Count > trim.MinTools)
                 {
                     var used = execs.Select(x => x.Tool.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                     if (used.Length > 0)

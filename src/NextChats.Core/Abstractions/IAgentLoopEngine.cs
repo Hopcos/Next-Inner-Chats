@@ -45,6 +45,12 @@ public sealed record AgentRunRequest
     /// </summary>
     public bool LlmFailoverEnabled { get; init; } = true;
 
+    /// <summary>
+    /// 工具集按需裁剪（用户级开关）：开启后每轮只向 LLM 发送"实际用到的工具"定义以节省 Token。
+    /// 默认关闭；最终生效还需全局配置 <c>ToolTrim:Enabled</c> 为 true（管理员总开关）。
+    /// </summary>
+    public bool ToolTrimEnabled { get; init; } = false;
+
     public string? ModelOverride { get; init; }
 
     /// <summary>ReAct 轮次上限；0 = 使用配置 Policy:MaxReActSteps（默认 20）</summary>
