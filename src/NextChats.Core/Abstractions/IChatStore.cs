@@ -18,6 +18,9 @@ public interface IChatStore
     /// <summary>重命名会话（仅本人）</summary>
     Task<bool> RenameSessionAsync(Guid userId, Guid sessionId, string title, CancellationToken ct = default);
 
+    /// <summary>置顶/取消置顶会话（仅本人；置顶成功返回 true）</summary>
+    Task<bool> SetSessionPinnedAsync(Guid userId, Guid sessionId, bool pinned, CancellationToken ct = default);
+
     Task DeleteSessionAsync(Guid userId, Guid sessionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(Guid userId, Guid sessionId, CancellationToken ct = default);

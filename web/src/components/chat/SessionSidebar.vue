@@ -8,6 +8,9 @@ const { t } = useI18n()
 // 必须用 computed：loadAll/remove 会“替换” sessions 数组引用，
 // 直接解构常量会持有旧数组 → 刷新后侧栏永远为空（重挂载才恢复）
 const sessions = computed(() => kernel.session.state.sessions)
+// 置顶区：置顶会话（后端/本地排序已置顶优先）；其余为普通区
+const pinnedSessions = computed(() => sessions.value.filter((s) => s.isPinned))
+const normalSessions = computed(() => sessions.value.filter((s) => !s.isPinned))
 
 function select(id: string) {
   if (id === kernel.session.state.currentId) return
@@ -15,8 +18,7 @@ function select(id: string) {
   void kernel.chat.loadHistory(id)
 }
 
-async function remove(id: string, title: string, event: MouseEvent) {
-  event.stopPropagation()
+async function remove(id: string, title: string) {
   try {
     await ElMessageBox.confirm(t('chat.deleteSessionConfirm', { title }), t('chat.deleteSessionTitle'), {
       type: 'warning',
@@ -26,6 +28,28 @@ async function remove(id: string, title: string, event: MouseEvent) {
     return
   }
   await kernel.session.remove(id)
+}
+
+async function rename(id: string, title: string) {
+  let next = title
+  try {
+    const res = await ElMessageBox.prompt(t('chat.renameSessionPrompt'), t('chat.rename'), {
+      inputValue: title,
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
+      inputValidator: (v: string) => (v && v.trim().length > 0) || t('chat.renameSessionEmpty'),
+    })
+    next = (res.value ?? '').trim()
+  } catch {
+    return
+  }
+  if (next && next !== title) await kernel.session.rename(id, next)
+}
+
+async function onMenuCommand(command: string, s: { id: string; title: string; isPinned?: boolean }) {
+  if (command === 'rename') await rename(s.id, s.title)
+  else if (command === 'pin') await kernel.session.pin(s.id, !s.isPinned)
+  else if (command === 'delete') await remove(s.id, s.title)
 }
 </script>
 
@@ -37,26 +61,49 @@ async function remove(id: string, title: string, event: MouseEvent) {
         <el-button class="collapse-top" size="small" text :title="t('chat.collapseSidebar')" @click="kernel.session.toggleSidebar()">⮜</el-button>
       </div>
       <div class="list nc-scroll">
-        <div
-          v-for="s in sessions"
-          :key="s.id"
-          class="item"
-          :class="{ active: s.id === kernel.session.state.currentId }"
-          @click="select(s.id)"
-          @contextmenu.prevent="remove(s.id, s.title, $event)"
-        >
+        <template v-if="pinnedSessions.length > 0">
+          <div class="group-label">{{ t('chat.pinnedSection') }}</div>
+          <div
+            v-for="s in pinnedSessions"
+            :key="s.id"
+            class="item"
+            :class="{ active: s.id === kernel.session.state.currentId }"
+            @click="select(s.id)"
+          >
+            <div class="item-main">
+              <div class="item-title"><span class="pin-badge">📌</span>{{ s.title || t('chat.untitled') }}</div>
+              <div class="item-meta nc-dim">{{ new Date(s.updatedAt).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</div>
+            </div>
+            <el-dropdown trigger="click" @command="(cmd: string) => onMenuCommand(cmd, s)" @click.stop>
+              <el-button class="item-menu" size="small" text :aria-label="t('chat.sessionOps')">⋮</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="rename">{{ t('chat.rename') }}</el-dropdown-item>
+                  <el-dropdown-item command="pin">{{ t('chat.unpin') }}</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </template>
+
+        <div v-for="s in normalSessions" :key="s.id" class="item" :class="{ active: s.id === kernel.session.state.currentId }" @click="select(s.id)">
           <div class="item-main">
             <div class="item-title">{{ s.title || t('chat.untitled') }}</div>
             <div class="item-meta nc-dim">{{ new Date(s.updatedAt).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</div>
           </div>
-          <el-button
-            class="item-del"
-            size="small"
-            text
-            :aria-label="t('common.delete')"
-            @click="remove(s.id, s.title, $event)"
-          >✕</el-button>
+          <el-dropdown trigger="click" @command="(cmd: string) => onMenuCommand(cmd, s)" @click.stop>
+            <el-button class="item-menu" size="small" text :aria-label="t('chat.sessionOps')">⋮</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="rename">{{ t('chat.rename') }}</el-dropdown-item>
+                <el-dropdown-item command="pin">{{ t('chat.pin') }}</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
+
         <div v-if="sessions.length === 0" class="empty nc-dim">
           {{ t('chat.emptySessions') }}
           <div class="empty-retry">
@@ -156,19 +203,33 @@ async function remove(id: string, title: string, event: MouseEvent) {
   min-width: 0;
 }
 
-.item-del {
+.item-menu {
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;
-  color: var(--nc-danger, #f56c6c);
-  padding: 4px;
-  font-size: 13px;
+  color: var(--nc-text-dim);
+  padding: 4px 6px;
+  font-size: 15px;
   line-height: 1;
+  letter-spacing: 1px;
 }
 
-.item:hover .item-del,
-.item.active .item-del {
+.item:hover .item-menu,
+.item.active .item-menu {
   opacity: 1;
+}
+
+.group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nc-text-dim);
+  padding: 10px 12px 4px;
+  letter-spacing: 0.5px;
+}
+
+.pin-badge {
+  margin-right: 4px;
+  font-size: 11px;
 }
 
 .item:hover {

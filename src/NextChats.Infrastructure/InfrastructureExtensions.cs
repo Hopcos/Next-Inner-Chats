@@ -84,6 +84,9 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "LlmModels", "ThinkingEffort", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "LlmProviders", "ThinkingParam", "TEXT NOT NULL DEFAULT 'None'");
             await AddColumnIfMissingAsync(conn, "McpServers", "Instructions", "TEXT");
+            // ChatSessions 置顶（聊天气泡内会话置顶区域）
+            await AddColumnIfMissingAsync(conn, "ChatSessions", "IsPinned", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatSessions", "PinnedAt", "TEXT");
             // ChatMessages 用量明细列（历史对话也可查看 Token 指标；decimal 同 TokenUsageRecords.Cost 存 TEXT）
             await AddColumnIfMissingAsync(conn, "ChatMessages", "ReasoningTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "TtftMs", "INTEGER NOT NULL DEFAULT 0");

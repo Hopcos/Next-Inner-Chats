@@ -431,6 +431,12 @@ public class ChatSession
 
     public DateTimeOffset? LastMessageAt { get; set; }
 
+    /// <summary>是否置顶（置顶会话排在列表顶部置顶区；默认 false）</summary>
+    public bool IsPinned { get; set; }
+
+    /// <summary>置顶时间（置顶区内按此倒序排列）</summary>
+    public DateTimeOffset? PinnedAt { get; set; }
+
     public AppUser? User { get; set; }
 
     public List<ChatMessage> Messages { get; set; } = [];

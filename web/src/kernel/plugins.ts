@@ -451,6 +451,21 @@ export class SessionService extends Service {
     if (found) found.title = title
   }
 
+  /** 置顶/取消置顶会话（后端负责排序，置顶后刷新列表：置顶区置顶优先） */
+  async pin(id: string, pinned: boolean) {
+    await http.put(`/api/chat/sessions/${id}/pin`, { pinned })
+    const found = this.state.sessions.find((s) => s.id === id)
+    if (found) {
+      found.isPinned = pinned
+      found.pinnedAt = pinned ? new Date().toISOString() : null
+      this.state.sessions = [...this.state.sessions].sort((a, b) => {
+        if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1
+        if (a.isPinned) return new Date(b.pinnedAt ?? b.updatedAt).getTime() - new Date(a.pinnedAt ?? a.updatedAt).getTime()
+        return new Date(b.lastMessageAt ?? b.updatedAt).getTime() - new Date(a.lastMessageAt ?? a.updatedAt).getTime()
+      })
+    }
+  }
+
   async remove(id: string) {
     await http.delete(`/api/chat/sessions/${id}`)
     this.state.sessions = this.state.sessions.filter((s) => s.id !== id)

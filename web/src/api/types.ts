@@ -173,6 +173,9 @@ export interface ChatSessionDto {
   createdAt: string
   updatedAt: string
   lastMessageAt?: string
+  /** 置顶（会话排到侧栏顶部的置顶区域） */
+  isPinned?: boolean
+  pinnedAt?: string | null
 }
 
 export interface ChatMessageDto {

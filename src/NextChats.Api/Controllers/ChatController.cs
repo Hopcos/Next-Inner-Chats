@@ -110,6 +110,19 @@ public sealed class ChatController(
 
     public sealed record RenameSessionRequest(string? Title);
 
+    /// <summary>置顶 / 取消置顶会话（置顶后会话出现在侧栏顶部的置顶区域）</summary>
+    [HttpPut("sessions/{sessionId:guid}/pin")]
+    public async Task<IActionResult> PinSession(Guid sessionId, [FromBody] PinSessionRequest req)
+    {
+        var ok = await chat.SetSessionPinnedAsync(UserId, sessionId, req.Pinned, HttpContext.RequestAborted);
+        if (!ok) return NotFound(Err("SESSION_NOT_FOUND"));
+        await audit.RecordAsync(AuditCategory.Chat, req.Pinned ? "SESSION.PIN" : "SESSION.UNPIN",
+            $"trc_{Guid.NewGuid():N}"[..24], UserId, sessionId.ToString());
+        return NoContent();
+    }
+
+    public sealed record PinSessionRequest(bool Pinned);
+
     [HttpDelete("sessions/{sessionId:guid}")]
     public async Task<IActionResult> DeleteSession(Guid sessionId)
     {
