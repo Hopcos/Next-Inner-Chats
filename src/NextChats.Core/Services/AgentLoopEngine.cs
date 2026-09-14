@@ -426,18 +426,15 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                 ThinkingEffort = request.ThinkingEffort,
             };
 
-            // 首块等待提示：上游排队/慢时给出可见反馈（避免用户误以为“没在推理/需要切换窗口才继续”）
-            var waitingLock = new object();
-            var waitingSent = false;
+            // 首块等待提示：上游排队/慢时给出可见反馈（避免用户误以为“没在推理/需要切换窗口才继续”）。
+            // 周期重发（每 8s）并带已等待秒数 → 等待中看到持续进展，而不是一条静止提示让人以为“卡住”。
+            var waitingStarted = System.Diagnostics.Stopwatch.GetTimestamp();
             using var waitTimer = new System.Threading.Timer(_ =>
             {
-                lock (waitingLock)
-                {
-                    if (waitingSent) return;
-                    waitingSent = true;
-                }
-                writer.TryWrite(AgentEvent.ContextEvent("waiting", Texts.Get("LLM_WAITING", lang), trace));
-            }, null, TimeSpan.FromSeconds(8), System.Threading.Timeout.InfiniteTimeSpan);
+                var secs = (int)System.Diagnostics.Stopwatch.GetElapsedTime(waitingStarted).TotalSeconds;
+                writer.TryWrite(AgentEvent.ContextEvent("waiting",
+                    Texts.Get("LLM_WAITING", lang, secs), trace));
+            }, null, TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(8));
 
             try
             {

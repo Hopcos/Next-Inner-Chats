@@ -21,6 +21,7 @@ public sealed class LlmRouter : ILlmRouter
     private readonly IHttpClientProvider _http;
     private readonly ILogger _logger;
     private readonly IOptions<SecurityOptions> _security;
+    private readonly IOptions<LlmConcurrencyOptions> _concurrency;
     private readonly ISecurityService _securityService;
     private readonly object _lock = new();
     private readonly Dictionary<Guid, int> _roundRobin = [];
@@ -31,6 +32,7 @@ public sealed class LlmRouter : ILlmRouter
         IHttpClientProvider http,
         IOptions<SecurityOptions> security,
         ISecurityService securityService,
+        IOptions<LlmConcurrencyOptions> concurrency,
         ILogger<LlmRouter> logger)
     {
         _store = store;
@@ -38,6 +40,7 @@ public sealed class LlmRouter : ILlmRouter
         _http = http;
         _security = security;
         _securityService = securityService;
+        _concurrency = concurrency;
         _logger = logger;
     }
 
@@ -134,7 +137,7 @@ public sealed class LlmRouter : ILlmRouter
         var logger = _logger;
         return provider.Kind switch
         {
-            LlmProviderKind.OpenAiCompatible => new OpenAiCompatibleLlmClient(provider, model.Name, _http.Create("llm"), _securityService, logger),
+            LlmProviderKind.OpenAiCompatible => new OpenAiCompatibleLlmClient(provider, model.Name, _http.Create("llm"), _securityService, logger, _concurrency.Value.MaxConcurrentStreams),
             LlmProviderKind.Mock => new MockLlmClient(provider, model.Name, logger, lang),
             _ => throw new NotSupportedException($"Unsupported LLM provider kind: {provider.Kind}"),
         };

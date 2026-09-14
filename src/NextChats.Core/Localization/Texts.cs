@@ -104,7 +104,7 @@ public static class Texts
         ["TOOL_EXECUTE_ERROR"] = ("Tool execution failed. Retry or use another approach.", "工具执行异常，请重试或换一种方式。"),
         ["CONTEXT_COMPRESSED"] = ("Context was near the limit ({0} → {1} messages) and was auto-compressed", "上下文接近上限（{0} → {1} 条），已自动压缩历史"),
         ["LLM_LENGTH_TRUNCATED"] = ("The model reached its output token limit and the reply was cut off. It may be incomplete — ask the model to continue, or regenerate.", "模型输出达到长度上限被截断，回复可能不完整。可让模型继续回答，或重新生成。"),
-        ["LLM_WAITING"] = ("Waiting for the model to respond (upstream queued or slow)…", "正在等待模型响应（上游排队或较慢）……"),
+        ["LLM_WAITING"] = ("Waiting for the model to respond (upstream queued or slow)… waited {0}s", "正在等待模型响应（上游排队或较慢）…… 已等待 {0}s"),
         ["SUB_AGENT_NEED_TASK"] = ("delegate_task requires a non-empty \"task\".", "delegate_task 需要非空的 task 任务描述。"),
         ["SUB_AGENT_BUSY"] = ("Too many sub-agents are running concurrently; try again shortly.", "并行子 Agent 已达上限，请稍后重试。"),
         ["SUB_AGENT_ERROR"] = ("The sub-agent failed unexpectedly.", "子 Agent 执行异常。"),

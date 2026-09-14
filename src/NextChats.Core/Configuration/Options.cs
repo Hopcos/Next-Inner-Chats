@@ -69,6 +69,15 @@ public sealed class ToolTrimOptions
     public int RefillLimitPerRound { get; set; } = 1;
 }
 
+/// <summary>LLM 流式并发限制：多会话/多子代理同时推理时，限制打到上游（网关）的并发流数量，
+/// 避免并发洪峰压垮上游导致 HTTP 500（表现为"等待模型响应"后失败，而模型实际可用）</summary>
+public sealed class LlmConcurrencyOptions
+{
+    /// <summary>同一供应商允许的最大并发流式 LLM 请求数（超出的请求排队等待，等待期间前端持续显示等待提示）。
+    /// 0 = 不限制。</summary>
+    public int MaxConcurrentStreams { get; set; } = 3;
+}
+
 /// <summary>内置工具（http_fetch 等）配置 —— HTTP 抓取默认仅放行白名单域名，防 SSRF</summary>
 public sealed class BuiltinToolOptions
 {

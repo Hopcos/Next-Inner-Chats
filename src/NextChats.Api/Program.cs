@@ -45,6 +45,7 @@ builder.Services.Configure<SecurityOptions>(o =>
 builder.Services.AddOptions<NextChats.Core.Configuration.PolicyOptions>().Bind(builder.Configuration.GetSection("Policy"));
 builder.Services.AddOptions<NextChats.Core.Configuration.ContextOptions>().Bind(builder.Configuration.GetSection("Context"));
 builder.Services.AddOptions<NextChats.Core.Configuration.ToolTrimOptions>().Bind(builder.Configuration.GetSection("ToolTrim"));
+builder.Services.AddOptions<NextChats.Core.Configuration.LlmConcurrencyOptions>().Bind(builder.Configuration.GetSection("LlmConcurrency"));
 builder.Services.AddOptions<NextChats.Core.Configuration.BuiltinToolOptions>().Bind(builder.Configuration.GetSection("BuiltinTool"));
 
 builder.Services.AddNextChatsInfrastructure(builder.Configuration);

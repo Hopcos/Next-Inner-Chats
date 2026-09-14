@@ -24,14 +24,20 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     private readonly HttpClient _http;
     private readonly ISecurityService _security;
     private readonly ILogger _logger;
+    private readonly int _maxConcurrentStreams;
 
-    public OpenAiCompatibleLlmClient(LlmProvider provider, string model, HttpClient http, ISecurityService security, ILogger logger)
+    /// <summary>供应商级流式并发门闩（跨实例共享）：多会话/子代理同时推理时限制打到上游的并发流，
+    /// 避免并发洪峰把网关压出 HTTP 500（表现为"等待模型响应"后失败）。键 = 供应商 Id。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim> StreamGates = new();
+
+    public OpenAiCompatibleLlmClient(LlmProvider provider, string model, HttpClient http, ISecurityService security, ILogger logger, int maxConcurrentStreams = 0)
     {
         _provider = provider;
         _model = model;
         _http = http;
         _security = security;
         _logger = logger;
+        _maxConcurrentStreams = Math.Max(0, maxConcurrentStreams);
     }
 
     public string ProviderName => _provider.Name;
@@ -117,6 +123,22 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     public async IAsyncEnumerable<LlmChunk> StreamAsync(LlmRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
+        // ---- 供应商级并发门闩：饱和时排队（等待期间前端持续显示"等待模型响应"），防止并发压垮上游 ----
+        SemaphoreSlim? gate = null;
+        if (_maxConcurrentStreams > 0)
+        {
+            gate = StreamGates.GetOrAdd(_provider.Id, _ => new SemaphoreSlim(_maxConcurrentStreams, _maxConcurrentStreams));
+            var gateWaitStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            var queueMs = (int)System.Diagnostics.Stopwatch.GetElapsedTime(gateWaitStarted).TotalMilliseconds;
+            if (queueMs > 1000)
+            {
+                _logger.LogInformation("LLM 流式排队 {QueueMs}ms provider={Provider} model={Model} 并发={Concurrent}",
+                    queueMs, _provider.Name, _model, _maxConcurrentStreams);
+            }
+        }
+        try
+        {
         // 首 token 等待上限 = 供应商 TimeoutSeconds（默认 120s）；首个内容块到达后计时作废。
         // 不设“总时长”限制：长思考 + 长流式输出可能持续数分钟，中途掐断会导致推理中断。
         using var firstTokenCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -147,12 +169,14 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     var errBody = await resp.Content.ReadAsStringAsync(ct);
                     var code = (int)resp.StatusCode;
                     var msg = $"HTTP {code}: {MaskBody(errBody)}";
-                    // 上游瞬时故障（5xx / 408 / 429）自动重试：总尝试 4 次（初试 + 3 次重试），指数退避 500/1000/2000ms。
-                    // 仅“首块未产出”前重试（进入 ReadChunksAsync 后不再重试）；网关 500（upstream error）多为瞬时，重试可自愈。
+                    // 上游瞬时故障（5xx / 408 / 429）自动重试：总尝试 6 次（初试 + 5 次重试），指数退避 1/2/4/8/16s（约 31s 窗口）。
+                    // 仅“首块未产出”前重试（进入 ReadChunksAsync 后不再重试）。
+                    // 网关 500/429 多为瞬时（上游排队/过载，通常几秒内自愈），长退避让流“扛过”故障自动恢复，
+                    // 而不是等待提示后直接失败——用户“重新问就好了”的场景即源于此。
                     var retryable = code == 408 || code == 429 || code >= 500;
-                    if (attempts < 4 && retryable && !ct.IsCancellationRequested)
+                    if (attempts < 6 && retryable && !ct.IsCancellationRequested)
                     {
-                        var delayMs = 500 * (1 << (attempts - 1));
+                        var delayMs = 1000 * (1 << (attempts - 1));
                         _logger.LogWarning("LLM 上游瞬时故障 HTTP {Code}（{Provider}/{Model}），第 {Attempt} 次重试（{Delay}ms）：{Body}",
                             code, _provider.Name, _model, attempts, delayMs, MaskBody(errBody));
                         await Task.Delay(delayMs, ct);
@@ -163,6 +187,11 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 await foreach (var chunk in ReadChunksAsync(resp, request, ct)) yield return chunk;
             }
             yield break;
+        }
+        }
+        finally
+        {
+            gate?.Release();
         }
     }
 
