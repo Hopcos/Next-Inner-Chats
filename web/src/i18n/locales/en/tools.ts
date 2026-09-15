@@ -54,6 +54,8 @@ export default {
       outPlaceholder: 'Formatted JSON appears here…',
       lines: 'lines',
       copyOut: 'Copy result',
+      expandAll: 'Expand all',
+      collapseAll: 'Collapse all',
     },
     compare: {
       name: 'Text Compare',

@@ -54,6 +54,8 @@ export default {
       outPlaceholder: '格式化结果将出现在这里…',
       lines: '行',
       copyOut: '复制结果',
+      expandAll: '全部展开',
+      collapseAll: '全部折叠',
     },
     compare: {
       name: '文本对比',
