@@ -62,7 +62,7 @@ public sealed class AdminAuditController(IAdminStore store) : AdminControllerBas
 
 /// <summary>管理端：可观测性与成本（Token / TTFT / 成本 / 工具时延 / 审批数）</summary>
 [Route("api/admin/metrics")]
-public sealed class AdminMetricsController(IChatStore chat) : AdminControllerBase
+public sealed class AdminMetricsController(IChatStore chat, IAdminStore admin) : AdminControllerBase
 {
     [HttpGet("usage")]
     public async Task<IActionResult> Usage([FromQuery] Guid? userId, [FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 500)
@@ -93,5 +93,41 @@ public sealed class AdminMetricsController(IChatStore chat) : AdminControllerBas
             .ToList();
 
         return Ok(new { totals, byDay, records });
+    }
+
+    /// <summary>各用户用量统计：用户名 / 请求数 / Tokens / 成本 / 最后请求时间 / 最后登录时间</summary>
+    [HttpGet("usage/users")]
+    public async Task<IActionResult> UsageUsers([FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 500)
+    {
+        var fromTime = from > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(from) : DateTimeOffset.UtcNow.AddDays(-7);
+        var toTime = to > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(to) : DateTimeOffset.UtcNow.AddDays(1);
+        var records = await chat.QueryUsageAsync(null, fromTime, toTime, Math.Min(take, 2000), HttpContext.RequestAborted);
+        var users = await admin.ListUsersAsync(HttpContext.RequestAborted);
+        var userMap = users.ToDictionary(u => u.Id);
+
+        var rows = records
+            .Where(r => r.UserId.HasValue)
+            .GroupBy(r => r.UserId!.Value)
+            .Select(g =>
+            {
+                userMap.TryGetValue(g.Key, out var u);
+                var name = u is null
+                    ? $"@{g.Key.ToString("N")[..8]}"
+                    : string.IsNullOrWhiteSpace(u.DisplayName) ? u.Username : u.DisplayName;
+                return new
+                {
+                    userId = g.Key,
+                    userName = name,
+                    requests = g.Count(),
+                    tokens = g.Sum(r => (long)r.TotalTokens),
+                    cost = g.Sum(r => r.Cost),
+                    lastRequestAt = g.Max(r => r.CreatedAt),
+                    lastLoginAt = u?.LastLoginAt,
+                };
+            })
+            .OrderByDescending(x => x.cost)
+            .ToList();
+
+        return Ok(rows);
     }
 }

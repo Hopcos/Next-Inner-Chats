@@ -311,6 +311,10 @@ export default {
       day: 'Date',
       tokens: 'Tokens',
       loadFailed: 'Load failed',
+      userUsage: 'User Usage',
+      userName: 'User',
+      lastRequest: 'Last Request',
+      lastLogin: 'Last Login',
     },
   },
 }

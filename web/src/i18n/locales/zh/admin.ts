@@ -311,6 +311,10 @@ export default {
       day: '日期',
       tokens: 'Tokens',
       loadFailed: '加载失败',
+      userUsage: '用户使用情况',
+      userName: '用户名',
+      lastRequest: '最后请求时间',
+      lastLogin: '最后登录时间',
     },
   },
 }
