@@ -129,6 +129,8 @@ export default {
     autoNote: '💾 Settings are remembered (localStorage + server sync) and restored next time.',
     welcomeSlogan: 'MCP: everything is a tool · Cordis-driven plugins · collapsible thinking · dangerous actions need approval',
     welcomeHint: 'Pick Prompt / MCP / SKILL in the "Chat Settings" on the right — your choices are remembered.',
+    loadingOlder: 'Loading earlier messages…',
+    scrollUpForOlder: '↑ Scroll up to load earlier messages',
     approvalTitle: '⚠️ Dangerous action needs approval',
     approvalBody: 'The model requests tool {tool}. The policy engine classified it as a dangerous action. Confirm to proceed.',
     approvalExpireNote: 'Approvals auto-expire after a timeout; rejection is fed back to the model so it can adjust its plan.',

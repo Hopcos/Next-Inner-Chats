@@ -485,8 +485,11 @@ export class SessionService extends Service {
 // ---------------------------------------------------------------- 聊天（SSE 流式 + 可折叠思考 + 中断）
 
 export class ChatService extends Service {
+  /** 每个历史窗口的消息条数（尾部优先加载；向上滚动再补） */
+  static readonly HISTORY_WINDOW = 60
+
   state = reactive({
-    /** sessionId → 消息列表（含进行中的流式消息） */
+    /** sessionId → 消息列表（含进行中的流式消息；已加载窗口，可继续向上补） */
     messages: {} as Record<string, UiMessage[]>,
     /** 是否为派生值：streamingSids 非空即 true（保持字段名兼容旧消费方） */
     streaming: false,
@@ -502,10 +505,15 @@ export class ChatService extends Service {
     } | null,
     /** 当前正在渲染的 assistant 消息（供流式刷新） */
     activeMessageId: null as string | null,
+    /** 会话话题索引（user 提问）：话题导航条全量渲染用，按出现顺序 */
+    topics: {} as Record<string, { id: string; title: string }[]>,
+    /** sessionId → 是否存在更早的未加载消息（向上翻页可用） */
+    moreBefore: {} as Record<string, boolean>,
   })
 
   private controllers = new Map<string, AbortController>()
   private historyLoaded = new Set<string>()
+  private olderLoading = new Set<string>()
 
   /** 记录/解除某会话的流式状态：streaming 与事件按集合派生，多会话并发互不覆盖 */
   private markStreaming(sid: string, on: boolean) {
@@ -542,12 +550,59 @@ export class ChatService extends Service {
   async loadHistory(sessionId: string) {
     if (this.historyLoaded.has(sessionId)) return
     try {
-      const list = await http.get<ChatMessageDto[]>(`/api/chat/sessions/${sessionId}/messages`)
-      this.state.messages[sessionId] = list.map((m) => this.fromDto(m)).filter((m) => m.role !== 'system' || m.content?.length) ?? []
+      const [page, topics] = await Promise.all([
+        http.get<{ items: ChatMessageDto[]; more: boolean }>(`/api/chat/sessions/${sessionId}/messages?limit=${ChatService.HISTORY_WINDOW}`),
+        http.get<{ id: string; title: string }[]>(`/api/chat/sessions/${sessionId}/topics`).catch(() => null),
+      ])
+      const list = (page.items ?? []).map((m) => this.fromDto(m)).filter((m) => m.role !== 'system' || m.content?.length) ?? []
+      this.state.messages[sessionId] = list
+      this.state.moreBefore[sessionId] = page.more === true
+      if (topics) this.state.topics[sessionId] = topics
       this.historyLoaded.add(sessionId)
     } catch {
       /* 历史加载失败不阻塞 */
     }
+  }
+
+  /**
+   * 向上翻页：加载当前已加载窗口之前的一个窗口（前插）。
+   * 返回是否加载了更多且仍有更早数据（false 表示已到最早或加载中/失败）。
+   */
+  async loadOlder(sessionId: string): Promise<boolean> {
+    const list = this.state.messages[sessionId] ?? []
+    const first = list[0]
+    if (!this.state.moreBefore[sessionId] || !first || this.olderLoading.has(sessionId)) return false
+    this.olderLoading.add(sessionId)
+    try {
+      const page = await http.get<{ items: ChatMessageDto[]; more: boolean }>(
+        `/api/chat/sessions/${sessionId}/messages?limit=${ChatService.HISTORY_WINDOW}&beforeId=${encodeURIComponent(first.id)}`,
+      )
+      const added = (page.items ?? []).map((m) => this.fromDto(m)).filter((m) => m.role !== 'system' || m.content?.length)
+      const seen = new Set(list.map((m) => m.id))
+      const fresh = added.filter((m) => !seen.has(m.id))
+      if (fresh.length > 0) this.state.messages[sessionId] = [...fresh, ...list]
+      this.state.moreBefore[sessionId] = page.more === true
+      return fresh.length > 0 && page.more === true
+    } catch {
+      return false
+    } finally {
+      this.olderLoading.delete(sessionId)
+    }
+  }
+
+  /** 连续加载更早窗口，直到目标话题（user 提问）消息已加载（供话题导航条跳转未加载话题） */
+  async ensureLoadedUntil(sessionId: string, topicId: string): Promise<boolean> {
+    for (;;) {
+      const list = this.state.messages[sessionId] ?? []
+      if (list.some((m) => m.id === topicId)) return true
+      const more = await this.loadOlder(sessionId)
+      if (!more) return (this.state.messages[sessionId] ?? []).some((m) => m.id === topicId)
+    }
+  }
+
+  /** 是否有正在进行的向上翻页请求 */
+  isOlderLoading(sessionId: string): boolean {
+    return this.olderLoading.has(sessionId)
   }
 
   /** 后端持久化的 toolTrace 结构 → 前端 ToolCard（字段名/类型不同，历史消息据此恢复折叠卡片） */
@@ -618,6 +673,8 @@ export class ChatService extends Service {
 
   clearSessionCache(sessionId: string) {
     delete this.state.messages[sessionId]
+    delete this.state.topics[sessionId]
+    delete this.state.moreBefore[sessionId]
     this.historyLoaded.delete(sessionId)
   }
 

@@ -140,11 +140,27 @@ public sealed class ChatController(
     }
 
     [HttpGet("sessions/{sessionId:guid}/messages")]
-    public async Task<IActionResult> Messages(Guid sessionId)
+    public async Task<IActionResult> Messages(Guid sessionId, [FromQuery] int? limit = null, [FromQuery] Guid? beforeId = null)
     {
         var session = await chat.GetSessionAsync(UserId, sessionId);
         if (session is null) return NotFound(Err("SESSION_NOT_FOUND"));
+        if (limit.HasValue)
+        {
+            var n = Math.Clamp(limit.Value, 1, 200);
+            var items = await chat.ListMessagesWindowAsync(UserId, sessionId, n, beforeId, HttpContext.RequestAborted);
+            // more：返回条数等于窗口大小，说明可能还有更早的消息
+            return Ok(new { items, more = items.Count == n });
+        }
         return Ok(await chat.ListMessagesAsync(UserId, sessionId));
+    }
+
+    /// <summary>会话话题索引（user 提问：id + 原文，正序）—— 话题导航条全量渲染用</summary>
+    [HttpGet("sessions/{sessionId:guid}/topics")]
+    public async Task<IActionResult> Topics(Guid sessionId)
+    {
+        var session = await chat.GetSessionAsync(UserId, sessionId);
+        if (session is null) return NotFound(Err("SESSION_NOT_FOUND"));
+        return Ok(await chat.ListTopicsAsync(UserId, sessionId, HttpContext.RequestAborted));
     }
 
     // ---------------- 流式对话（SSE） ----------------

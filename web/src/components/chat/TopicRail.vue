@@ -4,52 +4,99 @@ import type { UiMessage } from '@/kernel/plugins'
 
 /**
  * 话题导航条：消息区左侧垂直竖轨，一个话题（user 提问）一根横线。
- * hover 显示话题标题（限字数），点击平滑滚动到对应话题；随滚动高亮当前话题。
+ * 话题列表来自全量索引（props.topics），与当前已加载窗口解耦：
+ *  - hover 显示话题标题（限字数）
+ *  - 点击平滑滚动到对应话题；若该话题尚未加载（更早的消息），请求父组件补加载后自动跳转
+ *  - 随滚动高亮当前话题（仅已加载到 DOM 的话题参与计算）
  */
-const props = defineProps<{ messages: UiMessage[]; scroller: HTMLElement | null }>()
+const props = defineProps<{
+  messages: UiMessage[]
+  topics: { id: string; title: string }[]
+  scroller: HTMLElement | null
+}>()
+const emit = defineEmits<{ 'jump-topic': [topicId: string] }>()
 
-const topics = computed(() => props.messages.filter((m) => m.role === 'user'))
 const activeIndex = ref(-1)
+let pendingJumpId: string | null = null
 
-function titleOf(m: UiMessage): string {
-  const s = (m.content || '').replace(/\s+/g, ' ').trim()
+function titleOf(tp: { id: string; title: string }): string {
+  const s = (tp.title || '').replace(/\s+/g, ' ').trim()
   return s.length > 46 ? s.slice(0, 46) + '…' : s
 }
 
 /** 横条宽度：话题越多每条越短（14~44px），整体保持紧凑 */
 function lineWidth(i: number): string {
-  const n = topics.value.length
+  const n = props.topics.length
   const w = Math.max(14, Math.min(44, Math.round(320 / Math.max(1, n))))
   return w + 'px'
 }
 
-function jump(i: number) {
-  const m = topics.value[i]
-  if (!m) return
-  const sc = props.scroller
+function scrollToTopic(topicId: string) {
+  const sc = getScroller()
   if (!sc) return
-  const el = document.getElementById('topic-' + m.id)
+  const el = document.getElementById('topic-' + topicId)
   if (!el) return
-  // 立即高亮目标话题（scroll 事件随后跟上滚动跟随）
-  activeIndex.value = i
   // 只滚动消息列表（scroller）：scrollIntoView 会连带滚动侧栏/页面等所有祖先滚动容器（引发布局错乱）
   const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 12
   sc.scrollTo({ top, behavior: 'smooth' })
 }
+
+// 滚动容器：优先用已绑定的 props.scroller；首帧（prop 尚为 null）兜底 DOM 查询
+function getScroller(): HTMLElement | null {
+  return boundScroller ?? document.querySelector<HTMLElement>('.msg-list')
+}
+
+function jump(i: number) {
+  const tp = props.topics[i]
+  if (!tp) return
+  activeIndex.value = i // 立即高亮目标话题（滚动随后跟上）
+  if (document.getElementById('topic-' + tp.id)) {
+    scrollToTopic(tp.id)
+  } else {
+    // 话题尚未加载（更早消息）→ 请求补齐，DOM 出现后自动跳转
+    pendingJumpId = tp.id
+    emit('jump-topic', tp.id)
+  }
+}
+
+// 补齐加载完成后：目标话题锚点出现 → 执行跳转。
+// 注意：补齐加载同时会触发 MessageList 的锚点恢复补偿（把视口钉回原处）；
+// 若在其完成前发起 smooth 滚动，会被恢复的 scrollTop 赋值打断而停在半途。
+// 因此：等目标锚点出现后，再多等 ~45 帧（恢复流程上限约 40+2 帧）再跳转。
+watch(
+  () => props.messages.map((m) => m.id).join(','),
+  async () => {
+    if (!pendingJumpId) return
+    const id = pendingJumpId
+    let appeared = false
+    for (let tries = 0; tries < 80; tries++) {
+      if (document.getElementById('topic-' + id)) { appeared = true; break }
+      await new Promise<void>((r) => requestAnimationFrame(() => r()))
+    }
+    if (!appeared) {
+      pendingJumpId = null
+      return
+    }
+    for (let w = 0; w < 45; w++) await new Promise<void>((r) => requestAnimationFrame(() => r()))
+    pendingJumpId = null
+    scrollToTopic(id)
+  },
+  { flush: 'post' },
+)
 
 let raf = 0
 function onScroll() {
   if (raf) return
   raf = requestAnimationFrame(() => {
     raf = 0
-    const sc = props.scroller
+    const sc = getScroller()
     if (!sc) return
-    // 当前话题 = 视口 1/3 高度以上、最近的 user 提问（位置一律按 scroller 内坐标计算）
+    // 当前话题 = 视口 1/3 高度以上、最近的 user 提问（已加载到 DOM 的；位置一律按 scroller 内坐标计算）
     const scTop = sc.getBoundingClientRect().top
     const mid = sc.scrollTop + sc.clientHeight * 0.35
     let idx = -1
-    for (let i = 0; i < topics.value.length; i++) {
-      const el = document.getElementById('topic-' + topics.value[i].id)
+    for (let i = 0; i < props.topics.length; i++) {
+      const el = document.getElementById('topic-' + props.topics[i].id)
       if (!el) continue
       const relTop = el.getBoundingClientRect().top - scTop + sc.scrollTop
       if (relTop <= mid) idx = i
@@ -58,26 +105,26 @@ function onScroll() {
   })
 }
 
-// 仅当话题（user 提问）数量真正增长时才定位到最后一项：
-// 流式回复/其它消息更新会重建 topics 数组引用，若不判数量，会把用户手动滚动后的高亮强行拽回底部
-let lastTopicCount = 0
+// 话题数量变化（尾部流式追加 / 向上翻页前插）后按当前视口重算高亮，不强制位移
 watch(
-  topics,
-  (list) => {
-    const n = list.length
-    const grew = n > lastTopicCount
-    lastTopicCount = n
-    if (grew && n > 0) activeIndex.value = n - 1
-  },
+  () => props.topics.length,
+  () => onScroll(),
   { immediate: true },
 )
 
-onMounted(() => {
-  props.scroller?.addEventListener('scroll', onScroll, { passive: true })
-})
+// 滚动监听绑定：props.scroller 在首帧渲染时为 null（父 ref 赋值晚于子组件 props 快照），
+// 挂载后静态 addEventListener 会永久漏绑 → 用 watch 等父 re-render 后 prop 变为元素时再挂。
+let boundScroller: HTMLElement | null = null
+function bindScroller(sc: HTMLElement | null) {
+  if (boundScroller === sc) return
+  boundScroller?.removeEventListener('scroll', onScroll)
+  boundScroller = sc ?? null
+  sc?.addEventListener('scroll', onScroll, { passive: true })
+}
+watch(() => props.scroller, (sc) => bindScroller(sc), { immediate: true })
 
 onUnmounted(() => {
-  props.scroller?.removeEventListener('scroll', onScroll)
+  bindScroller(null)
   if (raf) cancelAnimationFrame(raf)
 })
 </script>

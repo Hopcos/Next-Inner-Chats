@@ -3,6 +3,9 @@ using NextChats.Core.Entities;
 
 namespace NextChats.Core.Abstractions;
 
+/// <summary>会话消息话题摘要（用户提问锚点）</summary>
+public sealed record ChatTopicBrief(Guid Id, string Title);
+
 /// <summary>会话/消息/审批/用量/幂等存储（按用户隔离）</summary>
 public interface IChatStore
 {
@@ -24,6 +27,16 @@ public interface IChatStore
     Task DeleteSessionAsync(Guid userId, Guid sessionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(Guid userId, Guid sessionId, CancellationToken ct = default);
+
+    /// <summary>话题摘要（user 提问：id + 原文，正序）</summary>
+    Task<IReadOnlyList<ChatTopicBrief>> ListTopicsAsync(Guid userId, Guid sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// 窗口加载消息（尾部优先/向上翻页）：
+    /// beforeId 为 null 时取最后 limit 条；否则取 beforeId 之前的 limit 条。
+    /// 均按 (CreatedAt, Id) 正序返回；返回条数不足 limit 表示已到会话最早（无更多）。
+    /// </summary>
+    Task<IReadOnlyList<ChatMessage>> ListMessagesWindowAsync(Guid userId, Guid sessionId, int limit, Guid? beforeId = null, CancellationToken ct = default);
 
     /// <summary>追加消息（幂等：同一 ClientMessageId 只落一条）</summary>
     Task<ChatMessage> AppendMessageAsync(ChatMessage message, CancellationToken ct = default);

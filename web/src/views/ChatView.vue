@@ -23,6 +23,11 @@ let fallbackTimer: number | undefined
 const current = computed(() => kernel.session.current)
 const user = computed(() => kernel.auth.state.user)
 const messages = computed(() => kernel.chat.messagesOf(kernel.session.state.currentId))
+/** 全量话题索引（话题导航条渲染） */
+const topics = computed(() => kernel.chat.state.topics[kernel.session.state.currentId ?? ''] ?? [])
+/** 会话是否还有更早消息（向上翻页） */
+const hasMoreBefore = computed(() => kernel.chat.state.moreBefore[kernel.session.state.currentId ?? ''] === true)
+const loadingOlder = computed(() => kernel.chat.isOlderLoading(kernel.session.state.currentId ?? ''))
 
 const lang = computed<AppLang>(() => getLang())
 const langOptions = [
@@ -269,9 +274,14 @@ function openToolsHub() {
         :key="kernel.session.state.currentId ?? 'none'"
         :session-id="kernel.session.state.currentId"
         :messages="messages"
+        :topics="topics"
+        :has-more-before="hasMoreBefore"
+        :loading-older="loadingOlder"
         @regenerate="onRegenerate"
         @remove="onRemoveMessage"
         @favorite="onFavoriteMessage"
+        @need-older="() => { const sid = kernel.session.state.currentId; if (sid) void kernel.chat.loadOlder(sid) }"
+        @jump-topic="(id: string) => { const sid = kernel.session.state.currentId; if (sid) void kernel.chat.ensureLoadedUntil(sid, id) }"
       />
       <ChatInputBar />
 
