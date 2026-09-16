@@ -94,6 +94,14 @@ public sealed class BuiltinToolOptions
     public int HttpFetchTimeoutSeconds { get; set; } = 12;
 }
 
+/// <summary>工具调用轨迹（toolTrace）落库/展示配置</summary>
+public sealed class ToolTraceOptions
+{
+    /// <summary>工具调用结果在消息记录中保存与默认展示的最大字符数（超出截断并加“…”）
+    /// —— 对应前端工具卡“结果”区；appsettings.json 中 “ToolTrace” 节可覆盖</summary>
+    public int MaxResultPreviewChars { get; set; } = 2000;
+}
+
 /// <summary>安全配置</summary>
 public sealed class SecurityOptions
 {

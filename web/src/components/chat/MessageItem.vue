@@ -3,7 +3,7 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MarkdownIt from 'markdown-it'
 import mermaid from 'mermaid'
-import type { UiMessage } from '@/kernel/plugins'
+import type { ToolCard as ToolCardModel, UiMessage } from '@/kernel/plugins'
 import ToolCard from '@/components/chat/ToolCard.vue'
 import { kernel } from '@/kernel'
 import { copyText } from '@/utils/clipboard'
@@ -233,6 +233,119 @@ const contentRef = ref<HTMLElement | null>(null)
 
 const shownContent = computed(() => props.message.content.slice(0, textShown.value))
 
+// ---------------- 按轮次分段展示（输出与工具调用交替） ----------------
+// 工具卡带 outputBefore（触发时已输出的字符数）时，正文按轮切分并交替呈现：
+// 第 N 轮输出文本段 → 第 N 轮工具卡 → 第 N+1 轮输出文本段 … → 最终结果。
+// 旧数据（任意卡缺 outputBefore）回退原布局（思考块内工具卡 + 正文整段）。
+interface ContentSeg {
+  key: string
+  text?: string
+  card?: ToolCardModel
+  /** 文本段在 content 中的起始偏移（打字机揭示按段截取） */
+  start: number
+}
+
+const segmentedEnabled = computed(() => {
+  const cs = props.message.tools
+  return cs.length > 0 && cs.every((t) => t.outputBefore != null)
+})
+
+const segments = computed<ContentSeg[]>(() => {
+  const content = props.message.content
+  const cards = props.message.tools
+  if (!cards.length) return []
+  // 按 outputBefore 升序；并行调用（同偏移）保持 push 顺序（Array.sort 稳定）
+  const sorted = [...cards].sort((a, b) => (a.outputBefore ?? 0) - (b.outputBefore ?? 0))
+  const segs: ContentSeg[] = []
+  let cursor = 0
+  sorted.forEach((c, idx) => {
+    const ob = c.outputBefore ?? 0
+    if (ob > cursor) segs.push({ key: `t${idx}`, text: content.slice(cursor, ob), start: cursor })
+    segs.push({ key: `c${idx}`, card: c, start: ob })
+    cursor = Math.max(cursor, ob)
+  })
+  if (cursor < content.length) segs.push({ key: `t${segs.length}`, text: content.slice(cursor), start: cursor })
+  return segs
+})
+
+// 揭示完成后才逐段渲染 Markdown（响应 mdReady / 段内容变化）
+const segHtmlMap = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  if (!mdReady.value) return map
+  for (const s of segments.value) {
+    if (s.text) map[s.key] = md.render(s.text)
+  }
+  return map
+})
+
+/** 打字机揭示阶段：文本段按其在 content 中的偏移截取已揭示部分 */
+function segShownText(s: ContentSeg): string {
+  if (!s.text) return ''
+  const shown = Math.max(0, Math.min(s.text.length, textShown.value - s.start))
+  return s.text.slice(0, shown)
+}
+
+// ---------------- 按轮次展示（第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果 → 第 N+1 轮思考） ----------------
+// 后端按轮结构化持久化（RoundsJson：每轮 { thinking, content, tools[] }），流式事件天然按上述顺序到达
+// （round_start 每轮必发，thinking/text/tool 事件依序落入当前轮），这里按轮直读渲染，无需偏移切片/重排。
+// 旧数据（无轮结构）回退：分段（输出↔卡交替）或原布局。
+interface RoundSeg {
+  key: string
+  idx: number
+  /** 该轮输出文本（服务端按轮持久化，流式实时追加） */
+  text: string
+  /** 该轮思考文本 */
+  thinkText: string
+  /** 该轮发起的工具卡（服务端按轮持久化；运行中实时更新结果） */
+  cards: ToolCardModel[]
+}
+
+const roundLayoutEnabled = computed(() => props.message.rounds.length > 0)
+
+const roundSegs = computed<RoundSeg[]>(() =>
+  props.message.rounds.map((r, i) => ({
+    key: r.key,
+    idx: i,
+    text: r.content,
+    thinkText: r.thinking,
+    cards: r.tools,
+  })),
+)
+
+/** 轮布局下：每轮思考独立折叠（完成态默认折叠，流式中最新一轮自动展开） */
+const roundOpen = ref<boolean[]>([])
+watch(
+  () => props.message.rounds.length,
+  (n) => {
+    roundOpen.value = Array.from({ length: n }, (_, i) => (i === n - 1 ? props.message.thinkingOpen : false))
+  },
+  { immediate: true },
+)
+watch(
+  () => props.message.thinkingOpen,
+  (v) => {
+    roundOpen.value = roundOpen.value.map((o, i) => (i === roundOpen.value.length - 1 ? v : o))
+  },
+)
+function toggleRound(i: number) {
+  roundOpen.value[i] = !roundOpen.value[i]
+}
+
+/** contextNotes 中“第 N 轮”类提示在轮布局下由轮标题承担，滤掉避免重复 */
+const nonRoundNotes = computed(() =>
+  props.message.contextNotes.filter((n) => !/^(第\s*\d+\s*轮|Round\s*\d+)/i.test(n.trim())),
+)
+
+// 揭示完成后才逐轮渲染 Markdown（响应 mdReady / 轮内容变化）
+const roundHtmlMap = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  if (!mdReady.value) return map
+  for (const s of roundSegs.value) {
+    if (s.text) map[s.key] = md.render(s.text)
+  }
+  return map
+})
+
 watch(
   () => [shownContent.value, props.message.content] as const,
   async () => {
@@ -242,7 +355,7 @@ watch(
       mdReady.value = false
       return
     }
-    mdHtml.value = md.render(full)
+    if (!segmentedEnabled.value && !roundLayoutEnabled.value) mdHtml.value = md.render(full)
     mdReady.value = true
     await nextTick()
     void renderMermaid()
@@ -470,9 +583,11 @@ function prettyArgs(raw?: string): string {
   >
     <div v-if="isAssistant" class="avatar-mini">NC</div>
     <div class="body">
-      <!-- 思考（可折叠）：浅灰背景与最终输出区分；折叠是收起动画，内容始终保留可展开 -->
+      <!-- 思考（可折叠）：浅灰背景与最终输出区分；折叠是收起动画，内容始终保留可展开。
+           轮布局（roundBoundariesJson 存在）时思考按轮嵌入正文（每轮“思考→工具→输出”），此处整块思考不再渲染；
+           否则旧数据（工具卡无轮次信息）保持原布局：思考之后是工具卡，再之后才是正文 -->
       <div
-        v-if="isAssistant && (message.reasoning || message.thinkingOpen || message.tools.length > 0 || (message.status === 'sending' && !message.content))"
+        v-if="isAssistant && !roundLayoutEnabled && (message.reasoning || message.thinkingOpen || message.contextNotes.length > 0 || (message.status === 'sending' && !message.content) || (!segmentedEnabled && message.tools.length > 0))"
         class="think-block"
       >
         <div class="think-head nc-dim" @click="thinkingOpen = !thinkingOpen">
@@ -488,7 +603,10 @@ function prettyArgs(raw?: string): string {
           <div v-if="message.reasoning" ref="thinkBodyRef" class="think-body">{{ message.reasoning.slice(0, thinkShown) }}</div>
           <div v-else-if="thinkingOpen || message.thinkingOpen" class="think-body nc-dim think-wait">{{ t('chat.thinkingWait') }}</div>
         </div>
-        <ToolCard v-for="tCard in message.tools" :key="tCard.key" :card="tCard" />
+        <!-- 旧数据：工具卡保持在思考之后、正文之前 -->
+        <template v-if="!segmentedEnabled">
+          <ToolCard v-for="tCard in message.tools" :key="tCard.key" :card="tCard" />
+        </template>
         <div v-for="(note, i) in message.contextNotes" :key="'n' + i" class="context-note nc-dim">
           ℹ️ {{ note }}
         </div>
@@ -505,13 +623,59 @@ function prettyArgs(raw?: string): string {
         />
       </div>
 
-      <!-- 正文（打字机揭示 → Markdown + Mermaid） -->
-      <div v-if="message.content || message.status !== 'sending'" ref="bubbleRef" class="bubble" :class="{ streaming: streamingNow }">
-        <template v-if="message.content && !mdReady"><div class="plain-text">{{ shownContent }}</div></template>
-        <div v-else-if="mdReady" ref="contentRef" class="md" v-html="mdHtml" @click="onContentClick" @mousedown="onMermaidPanStart" @wheel="onMermaidWheel"></div>
-        <span v-else-if="streamingNow" class="skeleton">▍</span>
-        <span v-else-if="message.status === 'stopped'" class="nc-dim">{{ t('chat.stoppedNote') }}</span>
-        <span v-else-if="message.status === 'failed'" class="nc-dim">{{ t('chat.failedNote') }}</span>
+      <!-- 正文（打字机揭示 → Markdown + Mermaid；带轮次锚点的新数据按“思考→工具→输出”逐轮展示，
+           仅带 outputBefore 的中期数据按“输出段↔工具卡”交替，旧数据整段展示） -->
+      <div
+        v-if="message.content || segmentedEnabled || roundLayoutEnabled || message.status !== 'sending'"
+        ref="bubbleRef"
+        class="bubble"
+        :class="{ streaming: streamingNow }"
+      >
+        <template v-if="roundLayoutEnabled">
+          <div ref="contentRef" class="md-host round-host" @click="onContentClick" @mousedown="onMermaidPanStart" @wheel="onMermaidWheel">
+            <div v-if="nonRoundNotes.length" class="context-notes">
+              <div v-for="(note, i) in nonRoundNotes" :key="'n' + i" class="context-note nc-dim">
+                ℹ️ {{ note }}
+              </div>
+            </div>
+            <div v-for="seg in roundSegs" :key="seg.key" class="round">
+              <!-- 该轮思考（可折叠标题，默认折叠，点击展开；流式中最新一轮自动展开） -->
+              <div v-if="seg.thinkText" class="round-think">
+                <div class="think-head nc-dim" @click="toggleRound(seg.idx)">
+                  <span :class="['caret', { open: roundOpen[seg.idx] }]">▸</span>
+                  <span>{{ t('chat.thinkRound', { round: seg.idx + 1, len: seg.thinkText.length }) }}</span>
+                </div>
+                <div v-if="roundOpen[seg.idx]" class="think-body">{{ seg.thinkText }}</div>
+              </div>
+              <!-- 该轮输出（模型在该轮先输出文本，响应末尾才发起工具调用）：流式实时纯文本，完成后渲染 Markdown -->
+              <div v-if="mdReady && seg.text && roundHtmlMap[seg.key]" class="md md-seg" v-html="roundHtmlMap[seg.key]"></div>
+              <div v-else-if="seg.text" class="md md-seg">{{ seg.text }}</div>
+              <!-- 该轮发起的工具调用结果（含参数/结果/耗时），紧随该轮输出显示 -->
+              <ToolCard v-for="card in seg.cards" :key="card.key" :card="card" />
+            </div>
+            <span v-if="!message.content && streamingNow" class="skeleton">▍</span>
+            <span v-else-if="!message.content && message.status === 'stopped'" class="nc-dim">{{ t('chat.stoppedNote') }}</span>
+            <span v-else-if="!message.content && message.status === 'failed'" class="nc-dim">{{ t('chat.failedNote') }}</span>
+          </div>
+        </template>
+        <template v-else-if="segmentedEnabled">
+          <div ref="contentRef" class="md-host" @click="onContentClick" @mousedown="onMermaidPanStart" @wheel="onMermaidWheel">
+            <template v-for="seg in segments" :key="seg.key">
+              <ToolCard v-if="seg.card" :card="seg.card" />
+              <div v-else-if="seg.text && (mdReady ? segHtmlMap[seg.key] : segShownText(seg))" class="md md-seg" v-html="mdReady ? segHtmlMap[seg.key] : segShownText(seg)"></div>
+            </template>
+            <span v-if="!message.content && streamingNow" class="skeleton">▍</span>
+            <span v-else-if="!message.content && message.status === 'stopped'" class="nc-dim">{{ t('chat.stoppedNote') }}</span>
+            <span v-else-if="!message.content && message.status === 'failed'" class="nc-dim">{{ t('chat.failedNote') }}</span>
+          </div>
+        </template>
+        <template v-else>
+          <template v-if="message.content && !mdReady"><div class="plain-text">{{ shownContent }}</div></template>
+          <div v-else-if="mdReady" ref="contentRef" class="md" v-html="mdHtml" @click="onContentClick" @mousedown="onMermaidPanStart" @wheel="onMermaidWheel"></div>
+          <span v-else-if="streamingNow" class="skeleton">▍</span>
+          <span v-else-if="message.status === 'stopped'" class="nc-dim">{{ t('chat.stoppedNote') }}</span>
+          <span v-else-if="message.status === 'failed'" class="nc-dim">{{ t('chat.failedNote') }}</span>
+        </template>
       </div>
 
       <!-- 用量/模型信息 -->
@@ -679,6 +843,34 @@ function prettyArgs(raw?: string): string {
 .context-note {
   font-size: 11.5px;
   margin-top: 3px;
+}
+
+/* ---- 轮次布局（思考 → 工具 → 输出）---- */
+.round-host .context-notes {
+  margin-bottom: 6px;
+}
+
+.round {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.round-think {
+  border: 1px solid var(--nc-border);
+  border-radius: 8px;
+  padding: 2px 10px;
+  background: color-mix(in srgb, var(--nc-text-dim) 8%, transparent);
+}
+
+.round-think .think-head {
+  padding: 2px 0;
+}
+
+.round-host .md-seg {
+  /* 轮内输出段与思考块/工具卡保持层级一致 */
+  margin: 0;
 }
 
 .skeleton {

@@ -462,6 +462,21 @@ public class ChatMessage
     /// <summary>工具调用/结果 JSON（前端可折叠卡片展示）</summary>
     public string? ToolCallsJson { get; set; }
 
+    /// <summary>
+    /// 每轮回调锚点 JSON（每轮开始时的 finalText/finalReasoning 字符偏移），如
+    /// [{"textBefore":0,"reasoningBefore":0},{"textBefore":12,"reasoningBefore":180},…]。
+    /// 前端据此把思考链与正文按“思考 → 工具 → 输出”逐轮展示；旧数据（无此字段）回退原布局。
+    /// 已废弃：改为直接按轮持久化（RoundsJson），此列仅保留供旧数据读取，新数据不再写入。
+    /// </summary>
+    public string? RoundBoundariesJson { get; set; }
+
+    /// <summary>
+    /// 按轮结构化持久化 JSON：每轮依次为 { thinking, content, tools[] }，
+    /// 与流式事件的天然顺序一致（第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果 → 第 N+1 轮思考）。
+    /// 前端按轮直接渲染，无需偏移重排；旧数据（无此字段）回退原布局。
+    /// </summary>
+    public string? RoundsJson { get; set; }
+
     public MessageStatus Status { get; set; } = MessageStatus.Complete;
 
     [MaxLength(128)] public string? Model { get; set; }

@@ -86,6 +86,7 @@ export default {
     shrinkInput: 'Collapse input',
     thinkInProgress: '✨ Thinking…',
     thinkProcess: '💭 Thinking ({len} chars)',
+    thinkRound: '🧠 Thinking (round {round} · {len} chars)',
     thinkingMode: 'Thinking',
     effortLow: 'Low',
     effortMedium: 'Medium',

@@ -102,6 +102,10 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentOutputTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "PlannerInputTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "PlannerOutputTokens", "INTEGER NOT NULL DEFAULT 0");
+            // 每轮展示锚点（思考→工具→输出 分轮）——老库补列；全新库由 EnsureCreated 直接建列
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "RoundBoundariesJson", "TEXT");
+            // 按轮结构化持久化（每轮 thinking/content/tools[]）——老库补列；全新库由 EnsureCreated 直接建列
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "RoundsJson", "TEXT");
             await AddTableIfMissingAsync(conn, "UserFavorites", """
                 CREATE TABLE "UserFavorites" (
                     "Id" TEXT NOT NULL CONSTRAINT "PK_UserFavorites" PRIMARY KEY,

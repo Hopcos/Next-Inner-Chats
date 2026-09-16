@@ -41,6 +41,21 @@ export interface ToolCard {
   durationMs?: number
   /** 工具调用唯一 id（服务端下发，start/result 精确配对，支持同名工具并行） */
   callId?: number
+  /**
+   * 工具调用发生时已输出的 assistant 文本字符数 = 轮次边界（后端 toolTrace.outputBefore）。
+   * 前端据此把正文与工具卡按轮次交替展示：第 N 轮输出 → 第 N 轮工具调用 → 第 N+1 轮输出…
+   */
+  outputBefore?: number
+}
+
+export interface RoundSeg {
+  key: string
+  /** 该轮思考全文 */
+  thinking: string
+  /** 该轮输出全文 */
+  content: string
+  /** 该轮发起的工具调用结果（服务端按轮持久化；引用与 message.tools 同卡共享，结果回填同步可见） */
+  tools: ToolCard[]
 }
 
 export interface UiMessage {
@@ -51,6 +66,10 @@ export interface UiMessage {
   thinkingOpen: boolean
   tools: ToolCard[]
   contextNotes: string[]
+  /** 按轮结构（后端 roundsJson；流式中由 round_start 开始、think/text/tool 事件依次累积入当前轮）——
+   *  存在时按“第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果 → 第 N+1 轮思考…”天然顺序展示；
+   *  旧数据（无轮结构）回退原布局（思考块 + 工具卡 + 正文交替） */
+  rounds: RoundSeg[]
   status: UiMessageStatus
   /** 实时流消息（本轮 send 产生）：前端以打字机呈现；历史/重放消息为 false，直接全量显示 */
   live: boolean
@@ -85,6 +104,7 @@ const emptyAssistant = (): UiMessage => ({
   thinkingOpen: false,
   tools: [],
   contextNotes: [],
+  rounds: [],
   status: 'sending',
   live: true,
   createdAt: Date.now(),
@@ -625,6 +645,7 @@ export class ChatService extends Service {
       resultPreview: r['preview'] as string | undefined,
       errorCode: r['errorCode'] as string | undefined,
       durationMs: typeof r['durationMs'] === 'number' ? (r['durationMs'] as number) : undefined,
+      outputBefore: typeof r['outputBefore'] === 'number' ? (r['outputBefore'] as number) : undefined,
     }
   }
 
@@ -638,6 +659,62 @@ export class ChatService extends Service {
     } catch {
       /* 忽略 */
     }
+    let rounds: RoundSeg[] = []
+    try {
+      if ((m as { roundsJson?: string }).roundsJson) {
+        const parsed = JSON.parse((m as { roundsJson?: string }).roundsJson!)
+        if (Array.isArray(parsed)) {
+          rounds = parsed.map((r, i) => ({
+            key: 'r' + i,
+            thinking: typeof (r as Record<string, unknown>)['thinking'] === 'string' ? (r as Record<string, string>)['thinking'] : '',
+            content: typeof (r as Record<string, unknown>)['content'] === 'string' ? (r as Record<string, string>)['content'] : '',
+            tools: Array.isArray((r as Record<string, unknown>)['tools']) ? ((r as Record<string, unknown[]>)['tools']).map((raw, k) => this.normalizeToolTrace(raw, k)) : [],
+          }))
+        }
+      }
+    } catch {
+      /* 忽略 */
+    }
+    // 旧锚点数据（roundBoundariesJson + tools.outputBefore，无 roundsJson）：推导成同构轮段，
+    // 使旧多轮会话也按“第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果”逐轮展示（不再顶部整块思考）
+    if (!rounds.length) {
+      try {
+        const rb = (m as { roundBoundariesJson?: string }).roundBoundariesJson
+        if (rb) {
+          const parsed = JSON.parse(rb)
+          if (Array.isArray(parsed)) {
+            const anchors = parsed.filter(
+              (r) => r && typeof (r as Record<string, unknown>)['textBefore'] === 'number' && typeof (r as Record<string, unknown>)['reasoningBefore'] === 'number',
+            ) as { textBefore: number; reasoningBefore: number }[]
+            if (anchors.length) {
+              const content = m.content ?? ''
+              const reasoning = m.reasoning ?? ''
+              rounds = anchors.map((r, i) => {
+                const next = anchors[i + 1]
+                return {
+                  key: 'r' + i,
+                  thinking: reasoning.slice(r.reasoningBefore, next ? next.reasoningBefore : reasoning.length),
+                  content: content.slice(r.textBefore, next ? next.textBefore : content.length),
+                  tools: [],
+                }
+              })
+              // 工具卡归属发起轮：工具在该轮响应末尾发起，outputBefore == 下一轮起点（textBefore）→ 归前一轮
+              for (const t of tools) {
+                const ob = t.outputBefore
+                let idx = ob == null ? rounds.length - 1 : -1
+                if (ob != null) {
+                  for (let k = 0; k < anchors.length; k++) if (anchors[k].textBefore < ob) idx = k
+                }
+                idx = Math.max(0, idx)
+                if (rounds[idx]) rounds[idx].tools.push(t)
+              }
+            }
+          }
+        }
+      } catch {
+        /* 忽略 */
+      }
+    }
     return {
       id: m.id,
       role: m.role === 'Assistant' ? 'assistant' : m.role === 'User' ? 'user' : 'system',
@@ -646,6 +723,7 @@ export class ChatService extends Service {
       thinkingOpen: false,
       tools,
       contextNotes: [],
+      rounds,
       status: (m.status === 'Complete' ? 'complete' : m.status === 'Stopped' ? 'stopped' : m.status === 'Failed' ? 'failed' : 'sending') as UiMessageStatus,
       live: false,
       model: m.model,
@@ -695,15 +773,19 @@ export class ChatService extends Service {
       thinkingOpen: false,
       tools: [],
       contextNotes: [],
+      rounds: [],
       status: 'complete',
       live: false,
       images,
       createdAt: Date.now(),
     }
     const clientMessageId = uid()
-    const pending = emptyAssistant()
+    let pending = emptyAssistant()
     pending.clientMessageId = clientMessageId
     list.push(userMsg, pending)
+    // 改用经代理的引用：list 是响应式数组，元素访问返回代理；此后所有流式写入
+    // （applyEvent/收尾状态）必须走代理才会触发 Vue 依赖 → 流式中轮布局/卡片实时更新
+    pending = list[list.length - 1] as UiMessage
     this.state.activeMessageId = pending.id
 
     // 首次消息自动命名会话
@@ -763,10 +845,11 @@ export class ChatService extends Service {
     }
     // 内存截断：删除该条起（含）之后
     list.splice(idx)
-    const pending = emptyAssistant()
     const clientMessageId = uid()
+    let pending = emptyAssistant()
     pending.clientMessageId = clientMessageId
     list.push(pending)
+    pending = list[list.length - 1] as UiMessage
     this.state.activeMessageId = pending.id
     await this.runStream(sid, pending, text, undefined, undefined, clientMessageId, topicId)
   }
@@ -836,30 +919,49 @@ export class ChatService extends Service {
   }
 
   private applyEvent(sessionId: string, pending: UiMessage, ev: AgentEventDto) {
+    // 响应式写入：pending 在 send() 中创建后以原始对象 push 进响应式列表，直接改原始对象
+    // 不会触发 Vue 依赖（rounds/computed 等只跟踪代理），导致流式中轮布局/卡片状态不更新。
+    // 这里改经代理取出的同源消息（找不到时回落 pending 本身，保证事件仍被消费）。
+    const list = this.state.messages[sessionId]
+    const proxied =
+      Array.isArray(list) && list.some((m) => m.id === pending.id || m.clientMessageId === pending.clientMessageId)
+        ? (list.find((m) => m.id === pending.id || m.clientMessageId === pending.clientMessageId) as UiMessage)
+        : pending
     switch (ev.kind) {
       case 'thinking_start':
-        // 展开思考区；不要清空 pending.reasoning —— 同一 AI 消息内多轮工具循环会产生多段思考，
+        // 展开思考区；不要清空 proxied.reasoning —— 同一 AI 消息内多轮工具循环会产生多段思考，
         // 清空会让前一轮思考链从界面上"消失"（服务端也是聚合存储的，刷新后同样完整）
-        pending.thinkingOpen = true
+        proxied.thinkingOpen = true
         break
       case 'round_start':
+        // 每轮开始（服务端每轮必发，含首轮）：开辟新一轮结构。
+        // 后续 think/text/tool 事件依序落入当前轮 → 展示天然为“第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果”。
+        proxied.rounds.push({ key: 'r' + proxied.rounds.length, thinking: '', content: '', tools: [] })
         // 每轮开始立即展开思考区：真实模型首 token（TTFT）可能长达数秒，
         // 提前让“正在思考…”占位可见，避免用户以为没有响应
-        pending.thinkingOpen = true
+        proxied.thinkingOpen = true
         break
       case 'thinking_delta':
-        pending.reasoning += ev.text ?? ''
+        proxied.reasoning += ev.text ?? ''
+        {
+          const seg = proxied.rounds[proxied.rounds.length - 1]
+          if (seg) seg.thinking += ev.text ?? ''
+        }
         break
       case 'thinking_end':
-        pending.thinkingOpen = false
+        proxied.thinkingOpen = false
         break
       case 'text_delta':
-        if (pending.thinkingOpen) pending.thinkingOpen = false
-        pending.content += ev.text ?? ''
+        if (proxied.thinkingOpen) proxied.thinkingOpen = false
+        proxied.content += ev.text ?? ''
+        {
+          const seg = proxied.rounds[proxied.rounds.length - 1]
+          if (seg) seg.content += ev.text ?? ''
+        }
         break
       case 'tool_start': {
         const card: ToolCard = {
-          key: `${ev.serverName ?? ''}.${ev.toolName ?? ''}.${pending.tools.length}`,
+          key: `${ev.serverName ?? ''}.${ev.toolName ?? ''}.${proxied.tools.length}`,
           serverName: ev.serverName,
           toolName: ev.toolName ?? 'tool',
           argumentsJson: ev.argumentsJson,
@@ -868,20 +970,26 @@ export class ChatService extends Service {
           status: 'running',
           callId: ev.toolCallId,
         }
-        pending.tools.push(card)
+        proxied.tools.push(card)
+        // 卡片同时挂到当前轮（同一引用：tool_result/approval 更新为同步可见）→
+        // 轮内“第 N 轮输出之后即显示第 N 轮工具卡”，与持久化 RoundsJson 结构一致
+        {
+          const seg = proxied.rounds[proxied.rounds.length - 1]
+          if (seg) seg.tools.push(card)
+        }
         if (ev.approvalId) {
           this.state.pendingApproval = {
             approvalId: ev.approvalId,
             serverName: ev.serverName ?? '',
             toolName: ev.toolName ?? 'tool',
             argumentsJson: ev.argumentsJson,
-            messageId: pending.id,
+            messageId: proxied.id,
           }
         }
         break
       }
       case 'approval_updated': {
-        const card = pending.tools.find((t) => t.approvalId === ev.approvalId)
+        const card = proxied.tools.find((t) => t.approvalId === ev.approvalId)
         if (card) card.approvalStatus = (ev.approvalStatus as ToolCard['approvalStatus']) ?? 'pending'
         if (ev.approvalStatus === 'approved' || ev.approvalStatus === 'rejected' || ev.approvalStatus === 'expired') {
           if (this.state.pendingApproval?.approvalId === ev.approvalId) this.state.pendingApproval = null
@@ -893,9 +1001,9 @@ export class ChatService extends Service {
         // 精确配对：仅匹配"尚未完成"的卡。callId 每轮从 0 重新编号（事件不带轮次），
         // 若不忽略已完成卡，多轮任务的 tool_result 会错误配对到上一轮同 callId 的卡，
         // 导致本轮新卡永远停留在 running（刷新/切回后从历史重建才恢复正常）。
-        const card = pending.tools.find((t) => t.status === 'running' && t.callId != null && t.callId === ev.toolCallId)
-          ?? pending.tools.find((t) => t.status === 'running' && t.serverName === ev.serverName && t.toolName === ev.toolName)
-        const target = card ?? pending.tools[pending.tools.length - 1]
+        const card = proxied.tools.find((t) => t.status === 'running' && t.callId != null && t.callId === ev.toolCallId)
+          ?? proxied.tools.find((t) => t.status === 'running' && t.serverName === ev.serverName && t.toolName === ev.toolName)
+        const target = card ?? proxied.tools[proxied.tools.length - 1]
         if (target) {
           target.status = ev.success ? 'ok' : 'error'
           target.resultPreview = ev.resultPreview
@@ -905,31 +1013,28 @@ export class ChatService extends Service {
         break
       }
       case 'message_done':
-        if (ev.messageId) pending.id = ev.messageId
-        break
-      case 'round_start':
-        pending.contextNotes.push(i18n.global.t('chat.roundsNote', { round: ev.round }))
+        if (ev.messageId) proxied.id = ev.messageId
         break
       case 'context': {
         const note = ev.text ?? ev.message
-        if (note) pending.contextNotes.push(note)
+        if (note) proxied.contextNotes.push(note)
         break
       }
         break
       case 'error': {
         if (ev.code === 'INTERRUPTED') {
-          pending.status = 'stopped'
+          proxied.status = 'stopped'
         } else {
-          pending.status = 'failed'
+          proxied.status = 'failed'
           ;(this.ctx.get('notify') as NotifyService).error(ev.message ?? i18n.global.t('err.UNKNOWN'), ev.code)
         }
         break
       }
       case 'done': {
-        pending.status = 'complete'
-        pending.model = ev.model
+        proxied.status = 'complete'
+        proxied.model = ev.model
         if (ev.totalTokens != null) {
-          pending.usage = {
+          proxied.usage = {
             promptTokens: ev.promptTokens ?? 0,
             completionTokens: ev.completionTokens ?? 0,
             reasoningTokens: ev.reasoningTokens ?? 0,

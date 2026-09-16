@@ -85,6 +85,7 @@ export default {
     shrinkInput: '收缩输入区',
     thinkInProgress: '✨ 思考中…',
     thinkProcess: '💭 思考过程（{len} 字）',
+    thinkRound: '🧠 思考（第 {round} 轮 · {len} 字）',
     thinkingMode: '思考模式',
     effortLow: '低',
     effortMedium: '中',

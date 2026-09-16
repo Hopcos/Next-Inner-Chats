@@ -16,7 +16,13 @@
 4. 删 `app_offline.htm` → sleep 12s → probe `http://localhost:6500/api/auth/providers` 必须 200
 
 ### 沙箱（测试环境），目标目录 `E:\temp\verify\next-chats-test`，端口 6510
-- 杀 dotnet（`CommandLine` 含 `*next-chats-test*`）→ 拷三 DLL → `Start-Process dotnet NextChats.Api.dll --urls http://localhost:6510 --WorkingDirectory E:\temp\verify\next-chats-test` → sleep 14s → probe 200
+- 杀 dotnet（`CommandLine` 含 `*next-chats-test*`）→ 拷三 DLL → **静默启动**（不弹控制台窗口）：
+  ```powershell
+  Remove-Item "$dst\start-out.log","$dst\start-err.log" -ErrorAction SilentlyContinue
+  Start-Process dotnet -ArgumentList 'NextChats.Api.dll','--urls','http://localhost:6510' -WorkingDirectory $dst -WindowStyle Hidden -RedirectStandardOutput "$dst\start-out.log" -RedirectStandardError "$dst\start-err.log"
+  ```
+  → sleep 14s → probe 200（失败时查看 `start-err.log`）
+- **用户偏好（2026-09）：沙箱必须静默启动（`-WindowStyle Hidden` + 输出重定向到日志），禁止弹出控制台窗口**
 
 ### 数据库迁移
 - 本项目用 `EnsureCreated + EnsureCompatibleSchemaAsync` 轻量补列（`AddColumnIfMissingAsync`）。新增实体字段时：

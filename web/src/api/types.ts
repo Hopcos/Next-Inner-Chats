@@ -185,6 +185,10 @@ export interface ChatMessageDto {
   content?: string
   reasoning?: string
   toolCallsJson?: string
+  /** 旧锚点方案（已废弃，仅旧数据残留）：[{textBefore, reasoningBefore}…] */
+  roundBoundariesJson?: string
+  /** 按轮结构化 JSON：每轮 { thinking, content, tools[] } —— 流式天然顺序持久化，前端按轮直读 */
+  roundsJson?: string
   status: 'Sending' | 'Complete' | 'Stopped' | 'Failed'
   model?: string
   promptTokens: number

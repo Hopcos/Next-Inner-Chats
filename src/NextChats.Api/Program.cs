@@ -47,6 +47,7 @@ builder.Services.AddOptions<NextChats.Core.Configuration.ContextOptions>().Bind(
 builder.Services.AddOptions<NextChats.Core.Configuration.ToolTrimOptions>().Bind(builder.Configuration.GetSection("ToolTrim"));
 builder.Services.AddOptions<NextChats.Core.Configuration.LlmConcurrencyOptions>().Bind(builder.Configuration.GetSection("LlmConcurrency"));
 builder.Services.AddOptions<NextChats.Core.Configuration.BuiltinToolOptions>().Bind(builder.Configuration.GetSection("BuiltinTool"));
+builder.Services.AddOptions<NextChats.Core.Configuration.ToolTraceOptions>().Bind(builder.Configuration.GetSection("ToolTrace"));
 
 builder.Services.AddNextChatsInfrastructure(builder.Configuration);
 

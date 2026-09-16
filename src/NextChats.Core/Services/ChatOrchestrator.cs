@@ -79,6 +79,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private readonly IAdminStore _admin;
     private readonly IOptions<SecurityOptions> _securityOptions;
     private readonly IOptions<BuiltinToolOptions> _builtinOptions;
+    private readonly IOptions<ToolTraceOptions> _toolTraceOptions;
     private readonly ILlmRouter _router;
     private readonly ILogger _logger;
 
@@ -102,6 +103,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         IAdminStore admin,
         IOptions<SecurityOptions> securityOptions,
         IOptions<BuiltinToolOptions> builtinOptions,
+        IOptions<ToolTraceOptions> toolTraceOptions,
         ILlmRouter router,
         ILogger<ChatOrchestrator> logger)
     {
@@ -118,6 +120,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         _admin = admin;
         _securityOptions = securityOptions;
         _builtinOptions = builtinOptions;
+        _toolTraceOptions = toolTraceOptions;
         _router = router;
         _logger = logger;
     }
@@ -441,6 +444,10 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
         var finalText = new System.Text.StringBuilder();
         var finalReasoning = new System.Text.StringBuilder();
+        // 按轮结构化捕获：每轮 (思考, 输出, 工具调用列表)。流式事件天然按
+        // “第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果 → 第 N+1 轮思考”到达（round_start 每轮必发、含首轮），
+        // 逐轮累积后整体落库 RoundsJson，前端按轮直读展示，无需偏移重排。
+        var roundBufs = new List<(System.Text.StringBuilder Thinking, System.Text.StringBuilder Content, List<JsonObject> Tools)>();
         var toolTrace = new List<JsonObject>();
         var assistantStatus = MessageStatus.Complete;
         string? model = null;
@@ -531,13 +538,20 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 {
                     case "text_delta":
                         finalText.Append(ev.Text);
+                        if (roundBufs.Count > 0) roundBufs[^1].Content.Append(ev.Text);
                         break;
                     case "thinking_delta":
                         finalReasoning.Append(ev.Text);
                         if (finalReasoning.Length > 40_000) finalReasoning.Length = 40_000;
+                        if (roundBufs.Count > 0) roundBufs[^1].Thinking.Append(ev.Text);
+                        break;
+                    case "round_start":
+                        // 每轮开始（引擎每轮必发，含首轮）：开辟新一轮缓冲，think→text→tool 事件依序落入
+                        roundBufs.Add((new System.Text.StringBuilder(), new System.Text.StringBuilder(), new List<JsonObject>()));
                         break;
                     case "tool_start":
-                        toolTrace.Add(new JsonObject
+                    {
+                        var toolEntry = new JsonObject
                         {
                             ["server"] = ev.ServerName,
                             ["tool"] = ev.ToolName,
@@ -545,8 +559,12 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                             ["callId"] = ev.ToolCallId,
                             ["approvalId"] = ev.ApprovalId?.ToString(),
                             ["approvalStatus"] = ev.ApprovalStatus,
-                        });
+                        };
+                        toolTrace.Add(toolEntry);
+                        // 卡片同时挂到当前轮（同一引用，tool_result 回填全局 toolTrace 时轮内同步可见）
+                        if (roundBufs.Count > 0) roundBufs[^1].Tools.Add(toolEntry);
                         break;
+                    }
                     case "tool_result":
                     case "tool_error":
                     {
@@ -558,7 +576,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         {
                             last["success"] = ev.Success;
                             last["durationMs"] = ev.DurationMs;
-                            last["preview"] = ev.ResultPreview is null ? null : truncate(ev.ResultPreview, 400);
+                            last["preview"] = ev.ResultPreview is null ? null
+                                : truncate(ev.ResultPreview, _toolTraceOptions.Value.MaxResultPreviewChars);
                             last["errorCode"] = ev.ErrorCode;
                         }
                         break;
@@ -623,6 +642,14 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         }
 
         // ---------- 持久化助手消息 + 用量 + 幂等 ----------
+        var roundsJson = roundBufs.Count > 0
+            ? JsonSerializer.Serialize(roundBufs.Select(r => new
+            {
+                thinking = r.Thinking.Length > 0 ? r.Thinking.ToString() : null,
+                content = r.Content.Length > 0 ? r.Content.ToString() : null,
+                tools = r.Tools.Count > 0 ? r.Tools : null,
+            }))
+            : null;
         var assistantMessage = await _chat.AppendMessageAsync(new ChatMessage
         {
             SessionId = session.Id,
@@ -631,6 +658,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             Content = finalText.Length > 0 ? finalText.ToString() : null,
             Reasoning = finalReasoning.Length > 0 ? finalReasoning.ToString() : null,
             ToolCallsJson = toolTrace.Count > 0 ? JsonSerializer.Serialize(toolTrace) : null,
+            RoundsJson = roundsJson,
             Status = assistantStatus,
             Model = model,
             PromptTokens = totalUsage?.PromptTokens ?? 0,
