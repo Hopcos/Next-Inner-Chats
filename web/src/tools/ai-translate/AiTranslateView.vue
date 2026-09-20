@@ -7,9 +7,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { kernel } from '@/kernel'
-import { streamPost } from '@/api/http'
+import { http, streamPost } from '@/api/http'
 import { copyText } from '@/utils/clipboard'
-import { DEFAULT_TRANSLATE_PROMPT, LS, loadDirection, loadModel, loadPrompt, savePrompt } from './config'
+import { DEFAULT_TRANSLATE_PROMPT, LS, loadDirection, loadModel, loadPrompt, loadStreamMode, savePrompt, saveStreamMode } from './config'
 import type { Direction } from './config'
 
 const { t } = useI18n()
@@ -20,6 +20,9 @@ const MAX_CHARS = 50000
 const direction = ref<Direction>(loadDirection())
 const promptText = ref(loadPrompt())
 const showPrompt = ref(false)
+// 输出模式：false(默认)= 完整模式（非流式，杜绝上游流式首增量偶发丢字）；true = 流式打字机
+const streamMode = ref(loadStreamMode())
+watch(streamMode, (v) => saveStreamMode(v))
 
 function setDir(d: Direction) {
   direction.value = d
@@ -94,21 +97,33 @@ async function run() {
   abort = new AbortController()
   let streamErr: { code?: string; message?: string } | null = null
   try {
-    await streamPost(
-      '/api/tools/llm/stream',
-      {
+    if (streamMode.value) {
+      // 流式打字机模式（透传上游 text_delta；已知上游网关偶发首增量缺字，个别情况会缺开头几个字）
+      await streamPost(
+        '/api/tools/llm/stream',
+        {
+          modelId: modelId.value,
+          systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
+          prompt: userPrompt,
+          // 输出上限对准 5 万字原文/译文（中文字 ≈ 2 token，5 万字 ≈ 100k token），留足余量
+          maxTokens: 128000,
+        },
+        (ev) => {
+          if (ev.kind === 'text_delta') target.value += String(ev.text ?? '')
+          else if (ev.kind === 'error') streamErr = { code: String(ev.code ?? ''), message: String(ev.message ?? '') }
+        },
+        abort.signal,
+      )
+    } else {
+      // 完整模式（默认）：非流式补全 —— 单次完整 JSON 响应，无增量边界，可根除"译文缺开头几个字"
+      const res = await http.post<{ text: string }>('/api/tools/llm/complete', {
         modelId: modelId.value,
         systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
         prompt: userPrompt,
-        // 输出上限对准 5 万字原文/译文（中文字 ≈ 2 token，5 万字 ≈ 100k token），留足余量
         maxTokens: 128000,
-      },
-      (ev) => {
-        if (ev.kind === 'text_delta') target.value += String(ev.text ?? '')
-        else if (ev.kind === 'error') streamErr = { code: String(ev.code ?? ''), message: String(ev.message ?? '') }
-      },
-      abort.signal,
-    )
+      })
+      target.value = res?.text ?? ''
+    }
     if (streamErr) throw streamErr
   } catch (e) {
     const err = e as { name?: string; code?: string; message?: string }
@@ -202,6 +217,12 @@ onBeforeUnmount(stopSpeak)
           </svg>
           {{ t('tools.translate.prompt') }}
         </button>
+
+        <!-- 输出模式：完整（默认，无丢字）vs 流式打字机 -->
+        <label class="tr-mode" :title="t('tools.translate.streamModeTip')">
+          <input v-model="streamMode" type="checkbox" />
+          <span>{{ t('tools.translate.streamMode') }}</span>
+        </label>
       </div>
 
       <!-- 专家提示词面板（仅存 localStorage） -->
@@ -376,6 +397,27 @@ onBeforeUnmount(stopSpeak)
 
 .tr-model {
   width: 250px;
+}
+
+.tr-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--nc-text-dim, #8a94a6);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tr-mode input {
+  accent-color: var(--nc-primary, #4e7cff);
+  cursor: pointer;
+  margin: 0;
+}
+
+.tr-mode:hover {
+  color: var(--nc-text);
 }
 
 .tr-ghost-btn {

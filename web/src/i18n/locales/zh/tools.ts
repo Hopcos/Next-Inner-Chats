@@ -39,6 +39,8 @@ export default {
       failed: '翻译失败',
       sourcePlaceholder: '粘贴或输入要翻译的文本…',
       translatedPlaceholder: '译文将出现在这里…',
+      streamMode: '流式输出',
+      streamModeTip: '默认关闭：完整模式（一次返回全文，避免上游流式首增量偶发丢字）；开启后为流式打字机（个别请求可能缺少开头几个字）',
       noPersistNote: '每次翻译都在全新的无状态会话中执行：仅包含固定的专家提示词与待翻译原文，不携带任何上下文；翻译相关内容不会持久化到数据库。',
     },
     json: {

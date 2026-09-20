@@ -39,6 +39,8 @@ export default {
       failed: 'Translation failed',
       sourcePlaceholder: 'Paste or type the text to translate…',
       translatedPlaceholder: 'The translation appears here…',
+      streamMode: 'Streaming output',
+      streamModeTip: 'Off by default: full response at once (avoids rare first-increment character loss from the upstream stream). On = streaming typewriter (an occasional request may lose its opening characters).',
       noPersistNote: 'Every translation runs in a brand-new stateless session: only the fixed expert prompt plus the source text, zero context, non-thinking mode. Nothing translation-related is persisted to the database.',
     },
     json: {

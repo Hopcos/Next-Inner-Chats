@@ -14,6 +14,7 @@ export const LS = {
   prompt: 'nc.tool.ai-translate.prompt',
   direction: 'nc.tool.ai-translate.direction',
   model: 'nc.tool.ai-translate.model',
+  stream: 'nc.tool.ai-translate.stream',
 } as const
 
 export type Direction = 'en2zh' | 'zh2en'
@@ -47,5 +48,27 @@ export function loadModel(): string {
     return localStorage.getItem(LS.model) ?? ''
   } catch {
     return ''
+  }
+}
+
+/**
+ * 输出模式开关（默认 false = 完整模式）：上游网关（llm-cs）在流式首增量存在偶发丢字
+ * （本服务逐帧透传、无法感知/补全），完整模式走非流式补全（单次完整 JSON，无增量边界，
+ * 可根除"译文缺开头几个字"）；true = 流式打字机模式（保留给需要即时预览的用户）。
+ */
+export function loadStreamMode(): boolean {
+  try {
+    const v = localStorage.getItem(LS.stream)
+    return v !== null ? v === '1' || v === 'true' : false
+  } catch {
+    return false
+  }
+}
+
+export function saveStreamMode(v: boolean): void {
+  try {
+    localStorage.setItem(LS.stream, v ? '1' : '0')
+  } catch {
+    /* ignore */
   }
 }

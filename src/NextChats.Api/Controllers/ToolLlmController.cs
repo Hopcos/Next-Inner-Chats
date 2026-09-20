@@ -131,10 +131,20 @@ public sealed class ToolLlmController(IConfigStore config, ILlmRouter router) : 
 
         try
         {
+            var chunkCount = 0;
             await foreach (var chunk in client.StreamAsync(request, HttpContext.RequestAborted))
             {
                 if (chunk is LlmChunk.TextDelta td)
                 {
+                    chunkCount++;
+                    // 取证：首个文本增量打点（偶现"译文缺开头几个字"时据此判定丢失发生在上游还是本链路）
+                    if (chunkCount == 1)
+                    {
+                        var prefix = td.Text.Length <= 40 ? td.Text : td.Text[..40];
+                        Serilog.Log.Information(
+                            "Tool llm stream 首delta trace={TraceId} provider={Provider} prefix={Prefix} len={Len}",
+                            HttpContext.TraceIdentifier, client.ProviderName, prefix, td.Text.Length);
+                    }
                     await WriteSse(new { kind = "text_delta", text = td.Text });
                 }
             }
