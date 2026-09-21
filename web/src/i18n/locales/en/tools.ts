@@ -148,6 +148,7 @@ export default {
       colKey: 'Key',
       colValue: 'Value',
       viewJson: 'Click to view formatted JSON',
+      copyFormatted: 'Copy formatted',
       decodeError: 'decode error',
       noEndpoint: 'No API Endpoint configured: in Admin → Tools, set the kafka-mcp endpoint for this tool (e.g. http://10.14.6.49:6523/).',
       requiredTip: 'Environment and topic are required',

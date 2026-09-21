@@ -11,10 +11,17 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { http } from '@/api/http'
 import { kernel } from '@/kernel'
+import { copyText } from '@/utils/clipboard'
 import { highlightJson } from './jsonHighlight'
 
 const { t } = useI18n()
 const TOOL_KEY = 'kafka-explorer'
+
+/** 列表 cell 默认截断长度（完整内容在弹窗中查看） */
+const TRUNCATE_LEN = 200
+function truncate(text: string): string {
+  return text.length > TRUNCATE_LEN ? `${text.slice(0, TRUNCATE_LEN)}…` : text
+}
 
 // ---------------- 端点配置（后台 AppTools.BaseUrl，经后端代理访问） ----------------
 async function loadBaseUrl() {
@@ -217,6 +224,14 @@ function openDetail(which: 'key' | 'value', rec: KfRecord) {
   dialog.value = true
 }
 
+/** 弹窗复制：JSON 可解析时复制格式化后的展示文本（所见即所得），否则复制原文 */
+async function onCopy() {
+  const text = dialogIsJson.value ? dialogPretty.value : dialogRaw.value
+  const ok = await copyText(text)
+  if (ok) kernel.notify.success(t('tools.common.copied'))
+  else kernel.notify.error(t('tools.common.copyFailed'))
+}
+
 onMounted(async () => {
   await loadBaseUrl()
   if (cfgOk.value) await loadEnvs()
@@ -333,13 +348,13 @@ onMounted(async () => {
               <td class="kf-td num">{{ rec.offset }}</td>
               <td class="kf-td kv">
                 <button type="button" class="kf-cell" :title="t('tools.kafka.viewJson')" @click="openDetail('key', rec)">
-                  {{ rec.key || '∅' }}
+                  {{ rec.key ? truncate(rec.key) : '∅' }}
                 </button>
               </td>
               <td class="kf-td kv">
                 <button type="button" class="kf-cell" :class="{ err: rec.decodeError }" :title="t('tools.kafka.viewJson')" @click="openDetail('value', rec)">
                   <span v-if="rec.decodeError" class="kf-dec-err">{{ t('tools.kafka.decodeError') }}</span>
-                  {{ rec.value }}
+                  {{ truncate(rec.value) }}
                 </button>
               </td>
             </tr>
@@ -350,8 +365,16 @@ onMounted(async () => {
 
     <!-- 弹窗：key/value JSON 格式化展示 -->
     <el-dialog v-model="dialog" :title="dialogTitle" width="720px" append-to-body destroy-on-close class="kf-dlg">
-      <div v-if="dialogIsJson" class="kf-json-pre" v-html="dialogHtml" />
-      <pre v-else class="kf-raw-pre">{{ dialogRaw }}</pre>
+      <div class="kf-dlg-body">
+        <div v-if="dialogIsJson" class="kf-json-pre" v-html="dialogHtml" />
+        <pre v-else class="kf-raw-pre">{{ dialogRaw }}</pre>
+      </div>
+      <template #footer>
+        <el-button :disabled="!dialog" @click="dialog = false">{{ t('common.close') }}</el-button>
+        <el-button type="primary" :disabled="!dialog" @click="onCopy">
+          {{ dialogIsJson ? t('tools.kafka.copyFormatted') : t('tools.common.copy') }}
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>

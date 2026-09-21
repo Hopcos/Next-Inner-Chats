@@ -148,6 +148,7 @@ export default {
       colKey: 'Key',
       colValue: 'Value',
       viewJson: '点击查看 JSON 格式化',
+      copyFormatted: '复制格式化文本',
       decodeError: '解码失败',
       noEndpoint: '未配置 API Endpoint：请在管理后台 → 工具 为该工具填写 kafka-mcp 端点地址（如 http://10.14.6.49:6523/）。',
       requiredTip: '环境与主题为必填',
