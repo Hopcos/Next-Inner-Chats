@@ -212,9 +212,14 @@ function backToEdit() {
   color: var(--nc-text-dim, #8a94a6);
 }
 
+/* 必须 display:flex column：对比态 .tc-compare 直接挂在 .tc-split 下，若保持 block 容器，
+   其 flex:1/min-height:0 全部失效、高度=内容高度(大表格 3 万 px)，被 .tc-page 的 overflow:hidden
+   裁掉且无滚动条。flex column 让对比体可收缩并在 .tc-compare-body 内滚动。 */
 .tc-split {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .tc-area {
@@ -268,8 +273,11 @@ function backToEdit() {
 }
 
 /* 对照表：table 布局，行/列锁定，左右两格永远并排（不存在被挤到下一行的可能） */
+/* min-height:0 必须：flex 子项默认 min-height:auto，行数超大时会撑开自身而不是收缩滚动，
+   结果是内容被父级 overflow:hidden 裁掉、滚动条不出现（对比结果"超窗且两侧拖不动"）。 */
 .tc-compare-body {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 10px;
   font-size: 12.5px;
