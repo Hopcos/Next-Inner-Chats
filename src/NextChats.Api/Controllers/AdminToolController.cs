@@ -8,7 +8,7 @@ namespace NextChats.Api.Controllers;
 [Route("api/admin/tools")]
 public sealed class AdminToolController(IAdminStore store, IAuditLogger audit) : AdminControllerBase
 {
-    public sealed record ToolInput(string ToolKey, string Name, string? Icon, string? Description, bool Enabled, Guid[]? RoleIds);
+    public sealed record ToolInput(string ToolKey, string Name, string? Icon, string? Description, string? BaseUrl, bool Enabled, Guid[]? RoleIds);
 
     [HttpGet]
     public async Task<IActionResult> List()
@@ -16,7 +16,7 @@ public sealed class AdminToolController(IAdminStore store, IAuditLogger audit) :
         var tools = await store.ListToolsAsync();
         return Ok(tools.Select(x => new
         {
-            x.Id, x.ToolKey, x.Name, x.Icon, x.Description, x.Enabled, x.CreatedAt, x.UpdatedAt,
+            x.Id, x.ToolKey, x.Name, x.Icon, x.Description, x.BaseUrl, x.Enabled, x.CreatedAt, x.UpdatedAt,
             roleIds = x.AllowedRoles.Select(r => r.Id).ToList(),
             roleNames = x.AllowedRoles.Select(r => r.Name).ToList(),
         }));
@@ -30,6 +30,7 @@ public sealed class AdminToolController(IAdminStore store, IAuditLogger audit) :
         var saved = await store.SaveToolAsync(
             Guid.Empty, input.ToolKey.Trim(), input.Name.Trim(), (input.Icon ?? "puzzle").Trim(),
             string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
+            string.IsNullOrWhiteSpace(input.BaseUrl) ? null : input.BaseUrl.Trim(),
             input.Enabled, input.RoleIds ?? [], HttpContext.RequestAborted);
         await audit.RecordAsync(AuditCategory.Admin, "TOOL.CREATE", $"trc_{Guid.NewGuid():N}"[..24], UserId,
             detail: new { toolKey = saved.ToolKey, name = saved.Name });
@@ -46,6 +47,7 @@ public sealed class AdminToolController(IAdminStore store, IAuditLogger audit) :
             await store.SaveToolAsync(
                 id, input.ToolKey.Trim(), input.Name.Trim(), (input.Icon ?? "puzzle").Trim(),
                 string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
+                string.IsNullOrWhiteSpace(input.BaseUrl) ? null : input.BaseUrl.Trim(),
                 input.Enabled, input.RoleIds ?? [], HttpContext.RequestAborted);
             await audit.RecordAsync(AuditCategory.Admin, "TOOL.UPDATE", $"trc_{Guid.NewGuid():N}"[..24], UserId,
                 detail: new { toolKey = input.ToolKey.Trim() });

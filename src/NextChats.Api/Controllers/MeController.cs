@@ -95,7 +95,7 @@ public sealed class MeController(
         var roleIds = user.Roles.Select(r => r.Id).ToArray();
         var isAdmin = user.Roles.Any(r => r.Code == "admin");
         var tools = await admin.ListToolsForUserAsync(roleIds, isAdmin);
-        return Ok(tools.Select(t => new { t.Id, key = t.ToolKey, t.Name, t.Icon, t.Description }));
+        return Ok(tools.Select(t => new { t.Id, key = t.ToolKey, t.Name, t.Icon, t.Description, t.BaseUrl }));
     }
 
     /// <summary>读取个人设置（JSON 值原样返回，前端解析）</summary>

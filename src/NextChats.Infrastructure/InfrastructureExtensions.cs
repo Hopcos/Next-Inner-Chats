@@ -84,6 +84,8 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "LlmModels", "ThinkingEffort", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "LlmProviders", "ThinkingParam", "TEXT NOT NULL DEFAULT 'None'");
             await AddColumnIfMissingAsync(conn, "McpServers", "Instructions", "TEXT");
+            // AppTools 外部 API 端点（管理端为工具配置，如 Kafka Explorer 的 kafka-mcp REST 地址）
+            await AddColumnIfMissingAsync(conn, "AppTools", "BaseUrl", "TEXT");
             // ChatSessions 置顶（聊天气泡内会话置顶区域）
             await AddColumnIfMissingAsync(conn, "ChatSessions", "IsPinned", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatSessions", "PinnedAt", "TEXT");

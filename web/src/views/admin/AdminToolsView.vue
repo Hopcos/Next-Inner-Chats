@@ -26,6 +26,7 @@ interface AdminToolDto {
   name: string
   icon: string
   description?: string | null
+  baseUrl?: string | null
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -54,6 +55,7 @@ const emptyForm = () => ({
   icon: 'toolbox',
   name: '',
   description: '',
+  baseUrl: '',
   enabled: true,
   roleIds: [] as string[],
 })
@@ -90,6 +92,7 @@ function openEdit(row: AdminToolDto) {
     icon: row.icon,
     name: row.name,
     description: row.description ?? '',
+    baseUrl: row.baseUrl ?? '',
     enabled: row.enabled,
     roleIds: [...row.roleIds],
   })
@@ -118,6 +121,7 @@ async function onSave() {
       name: form.name.trim(),
       icon: form.icon,
       description: form.description.trim() || null,
+      baseUrl: form.baseUrl.trim() || null,
       enabled: form.enabled,
       roleIds: form.roleIds,
     }
@@ -167,7 +171,8 @@ async function onDelete(row: AdminToolDto) {
         <template #default="{ row }"><code class="key">{{ row.toolKey }}</code></template>
       </el-table-column>
       <el-table-column prop="name" :label="t('admin.tools.name')" width="150" />
-      <el-table-column prop="description" :label="t('admin.tools.description')" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="description" :label="t('admin.tools.description')" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="baseUrl" :label="t('admin.tools.endpoint')" min-width="180" show-overflow-tooltip />
       <el-table-column :label="t('admin.tools.roles')" width="200">
         <template #default="{ row }">
           <el-tag v-for="rn in row.roleNames" :key="rn" size="small" class="role-tag">{{ rn }}</el-tag>
@@ -224,6 +229,11 @@ async function onDelete(row: AdminToolDto) {
 
         <el-form-item :label="t('admin.tools.description')">
           <el-input v-model="form.description" type="textarea" :rows="2" maxlength="256" show-word-limit />
+        </el-form-item>
+
+        <el-form-item :label="t('admin.tools.endpoint')">
+          <el-input v-model="form.baseUrl" maxlength="512" :placeholder="`https://host:port/`" clearable />
+          <div class="field-tip">{{ t('admin.tools.endpointTip') }}</div>
         </el-form-item>
 
         <el-form-item :label="t('admin.tools.roles')">

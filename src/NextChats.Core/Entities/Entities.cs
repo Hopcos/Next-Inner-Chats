@@ -175,6 +175,9 @@ public class AppTool
     /// <summary>缩略描述（工具主页卡片展示）</summary>
     [MaxLength(256)] public string? Description { get; set; }
 
+    /// <summary>工具需要的外部 API 基础地址（如 Kafka Explorer 的 kafka-mcp REST 端点，http://host:port/），管理端可配置</summary>
+    [MaxLength(512)] public string? BaseUrl { get; set; }
+
     public bool Enabled { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

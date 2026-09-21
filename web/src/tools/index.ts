@@ -5,6 +5,7 @@ import { MarkdownPreviewToolPlugin } from './md-preview/plugin'
 import { RandomGenToolPlugin } from './random-gen/plugin'
 import { MermaidEditorToolPlugin } from './mermaid-editor/plugin'
 import { ColorPickerToolPlugin } from './color-picker/plugin'
+import { KafkaExplorerToolPlugin } from './kafka-explorer/plugin'
 
 /**
  * 工具插件聚合入口 —— 沉浸式工具栏的"插拔面板"：
@@ -18,4 +19,5 @@ export const toolPlugins = [
   RandomGenToolPlugin,
   MermaidEditorToolPlugin,
   ColorPickerToolPlugin,
+  KafkaExplorerToolPlugin,
 ]

@@ -206,6 +206,8 @@ export default {
       icon: '图标',
       name: '显示名称',
       description: '描述',
+      endpoint: 'API Endpoint',
+      endpointTip: '工具需要的外部 API 基础地址（如 Kafka Explorer 的 kafka-mcp 端点 http://10.14.6.49:6523/）；不需要外部接口的工具可留空。',
       roles: '允许角色',
       rolesTip: '所选角色的用户可在工具主页看到此工具；不选 = 仅管理员可见。',
       enabled: '启用状态',

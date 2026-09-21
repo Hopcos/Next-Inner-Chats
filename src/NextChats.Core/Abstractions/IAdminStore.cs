@@ -129,7 +129,7 @@ public interface IAdminStore
     Task<AppTool?> GetToolByKeyAsync(string toolKey, CancellationToken ct = default);
 
     /// <summary>新建（id=Guid.Empty）或整体更新工具（角色绑定全量替换）</summary>
-    Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, bool enabled, Guid[] roleIds, CancellationToken ct = default);
+    Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, bool enabled, Guid[] roleIds, CancellationToken ct = default);
 
     Task DeleteToolAsync(Guid id, CancellationToken ct = default);
 

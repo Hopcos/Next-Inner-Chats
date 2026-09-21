@@ -206,6 +206,8 @@ export default {
       icon: 'Icon',
       name: 'Display Name',
       description: 'Description',
+      endpoint: 'API Endpoint',
+      endpointTip: 'External API base URL the tool needs (e.g. the kafka-mcp endpoint http://10.14.6.49:6523/ for Kafka Explorer); leave empty when not needed.',
       roles: 'Allowed Roles',
       rolesTip: 'Users of selected roles see this tool in the hub; none selected = admin only.',
       enabled: 'Enabled',
