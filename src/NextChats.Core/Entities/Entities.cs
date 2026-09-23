@@ -529,6 +529,13 @@ public class ChatMessage
 
     [MaxLength(64)] public string? TraceId { get; set; }
 
+    /// <summary>
+    /// 图片附件 JSON：[{ "fileName": string, "mimeType": "image/png", "url": "/api/chat/images/202609/xxx.png" }]。
+    /// 图片实体保存在站点 uploads/chat 目录（不入库、不进列表响应体），消息只存相对访问 URL；
+    /// 刷新/切会话后前端据此恢复图片展示（旧数据无此字段则无图）。
+    /// </summary>
+    [MaxLength(8192)] public string? AttachmentsJson { get; set; }
+
     /// <summary>客户端消息 ID（写操作幂等）</summary>
     [MaxLength(64)] public string? ClientMessageId { get; set; }
 

@@ -214,6 +214,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 Status = MessageStatus.Complete,
                 TraceId = trace,
                 ClientMessageId = request.ClientMessageId,
+                AttachmentsJson = request.AttachmentsJson,
             }, ct);
         }
 

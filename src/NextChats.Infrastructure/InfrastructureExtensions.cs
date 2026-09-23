@@ -108,6 +108,8 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "ChatMessages", "RoundBoundariesJson", "TEXT");
             // 按轮结构化持久化（每轮 thinking/content/tools[]）——老库补列；全新库由 EnsureCreated 直接建列
             await AddColumnIfMissingAsync(conn, "ChatMessages", "RoundsJson", "TEXT");
+            // 图片附件 JSON（[{fileName,mimeType,url}]，文件落在 uploads/chat）——老库补列；全新库由 EnsureCreated 直接建列
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "AttachmentsJson", "TEXT");
             await AddTableIfMissingAsync(conn, "UserFavorites", """
                 CREATE TABLE "UserFavorites" (
                     "Id" TEXT NOT NULL CONSTRAINT "PK_UserFavorites" PRIMARY KEY,

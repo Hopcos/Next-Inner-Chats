@@ -17,7 +17,8 @@ public sealed class ChatController(
     IChatOrchestrator orchestrator,
     ISessionCancellationRegistry cancellations,
     NextChats.Core.Abstractions.IConfigStore config,
-    IAuditLogger audit) : ApiControllerBase
+    IAuditLogger audit,
+    NextChats.Api.Services.ChatImageStorage images) : ApiControllerBase
 {
     private static readonly JsonSerializerOptions SseJson = new()
     {
@@ -27,6 +28,33 @@ public sealed class ChatController(
 
     /// <summary>图片附件（标准 base64；MCP 视觉工具参数名 image_source）</summary>
     public sealed record ImageInput(string? FileName, string? MimeType, string Base64);
+
+    /// <summary>
+    /// 把请求图片 base64 落盘（uploads/chat），返回持久化附件 JSON（[{fileName,mimeType,url}]），
+    /// 随用户消息入库；保存失败（非法/IO）的图跳过并记日志，不阻塞对话。
+    /// </summary>
+    private string? PersistAttachments(List<ImageInput>? requestImages)
+    {
+        if (requestImages is not { Count: > 0 }) return null;
+        var list = new List<object>();
+        foreach (var img in requestImages)
+        {
+            var rel = images.SaveImage(img.MimeType, img.Base64, img.FileName);
+            if (rel is null) continue;
+            list.Add(new { img.FileName, img.MimeType, url = $"/api/chat/images/{rel}" });
+        }
+        return list.Count > 0 ? JsonSerializer.Serialize(list, SseJson) : null;
+    }
+
+    /// <summary>图片读取端点：/api/chat/images/{yyyyMM}/{guid}.{ext}（登录鉴权 + 缓存头）</summary>
+    [HttpGet("images/{**name}")]
+    public IActionResult Image(string name)
+    {
+        var img = images.ReadImage(name);
+        if (img is null) return NotFound(Err("IMAGE_NOT_FOUND", name));
+        Response.Headers.CacheControl = "public, max-age=3600";
+        return File(img.Value.Bytes, img.Value.Mime);
+    }
 
     public sealed record StreamRequest(
         Guid SessionId,
@@ -126,7 +154,9 @@ public sealed class ChatController(
     [HttpDelete("sessions/{sessionId:guid}")]
     public async Task<IActionResult> DeleteSession(Guid sessionId)
     {
+        var toDelete = await CollectSessionAttachmentsAsync(sessionId);
         await chat.DeleteSessionAsync(UserId, sessionId);
+        images.DeleteImages(toDelete);
         await audit.RecordAsync(AuditCategory.Chat, "SESSION.DELETE", $"trc_{Guid.NewGuid():N}"[..24], UserId, sessionId.ToString());
         return NoContent();
     }
@@ -135,8 +165,51 @@ public sealed class ChatController(
     [HttpDelete("sessions/{sessionId:guid}/messages/{messageId:guid}")]
     public async Task<IActionResult> DeleteMessage(Guid sessionId, Guid messageId)
     {
+        var toDelete = await CollectSessionAttachmentsAsync(sessionId, fromMessageId: messageId);
         var ok = await chat.TruncateFromMessageAsync(UserId, sessionId, messageId);
+        if (toDelete.Count > 0) images.DeleteImages(toDelete);
         return ok ? NoContent() : NotFound(Err("MESSAGE_NOT_FOUND"));
+    }
+
+    /// <summary>收集会话消息附件文件相对路径（删会话全量；删消息窗口取 fromMessageId 起的消息），供删除时清理。</summary>
+    private async Task<List<string>> CollectSessionAttachmentsAsync(Guid sessionId, Guid? fromMessageId = null)
+    {
+        var result = new List<string>();
+        try
+        {
+            var messages = await chat.ListMessagesAsync(UserId, sessionId, HttpContext.RequestAborted);
+            if (fromMessageId.HasValue)
+            {
+                var start = messages.ToList().FindIndex(m => m.Id == fromMessageId.Value);
+                if (start < 0) return result;
+                messages = messages.Skip(start).ToList();
+            }
+            foreach (var m in messages)
+            {
+                if (string.IsNullOrWhiteSpace(m.AttachmentsJson)) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(m.AttachmentsJson);
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        if (el.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
+                        {
+                            var url = urlEl.GetString();
+                            if (url is not null && url.StartsWith("/api/chat/images/", StringComparison.Ordinal))
+                            {
+                                result.Add(url["/api/chat/images/".Length..]);
+                            }
+                        }
+                    }
+                }
+                catch (JsonException) { /* 忽略坏数据 */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "收集会话图片附件失败 session={Session}", sessionId);
+        }
+        return result;
     }
 
     [HttpGet("sessions/{sessionId:guid}/messages")]
@@ -179,6 +252,9 @@ public sealed class ChatController(
         Response.Headers.Append("X-Accel-Buffering", "no");
         Response.ContentType = "text/event-stream; charset=utf-8";
 
+        // 图片落盘 + 生成附件 JSON（随用户消息持久化，刷新/切会话后仍能展示）；失败不阻塞对话
+        var attachmentsJson = PersistAttachments(request.Images);
+
         var req = new ChatStreamRequest
         {
             UserId = UserId,
@@ -200,6 +276,7 @@ public sealed class ChatController(
             ThinkingEffort = request.ThinkingEffort,
             RegenerateFromMessageId = request.RegenerateFromMessageId,
             Lang = Lang,
+            AttachmentsJson = attachmentsJson,
         };
 
         try

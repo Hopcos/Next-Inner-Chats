@@ -189,6 +189,8 @@ export interface ChatMessageDto {
   roundBoundariesJson?: string
   /** 按轮结构化 JSON：每轮 { thinking, content, tools[] } —— 流式天然顺序持久化，前端按轮直读 */
   roundsJson?: string
+  /** 图片附件 JSON：[{ fileName, mimeType, url }]，图片实体在服务器 uploads/chat，刷新后据此恢复展示 */
+  attachmentsJson?: string
   status: 'Sending' | 'Complete' | 'Stopped' | 'Failed'
   model?: string
   promptTokens: number

@@ -51,6 +51,12 @@ public sealed record ChatStreamRequest
 
     /// <summary>话题级重新生成：传入要重跑的 user 消息 ID（后端不追加新 user 消息，直接以该条提问重新生成）</summary>
     public Guid? RegenerateFromMessageId { get; init; }
+
+    /// <summary>
+    /// 图片附件持久化结果 JSON：[{ "fileName": string, "mimeType": string, "url": "/api/chat/images/yyyyMM/xxx.png" }]。
+    /// Api 层已把 base64 落盘（uploads/chat），随用户消息持久化，前端刷新后据此恢复图片。null = 无图。
+    /// </summary>
+    public string? AttachmentsJson { get; init; }
 }
 
 /// <summary>

@@ -39,6 +39,7 @@ public static class Texts
         ["IMAGE_INVALID"] = ("One or more images are invalid (not standard base64 or too large). Please re-upload.", "图片数据无效（非标准 base64 或超出大小限制），请重新上传"),
         ["IMAGE_RECOGNITION_FAILED"] = ("Vision recognition failed for this image", "该图片视觉识别失败"),
         ["IMAGE_NO_VISION_TOOL"] = ("No vision-capable MCP is bound; the image was not recognized. Bind a vision MCP in Chat Settings to enable image recognition.", "当前未绑定支持视觉识别的 MCP 工具，图片未识别；请在「聊天设置」中绑定 Vision 类 MCP 以启用图片识别"),
+        ["IMAGE_NOT_FOUND"] = ("Image not found or already deleted", "图片不存在或已被删除"),
         ["INTERRUPTED"] = ("Stopped", "已中断"),
         ["AGENT_MAX_STEPS"] = ("⚠ Reached the maximum of {0} tool rounds, so the answer may be incomplete. Try splitting the question into smaller steps.", "⚠ 已达最大工具轮次（{0}），回答可能不完整。建议把问题拆分成更小的步骤后重试。"),
         ["LLM_ERROR"] = ("Model call failed. Please retry or switch the model.", "模型调用出现异常，请稍后重试或更换模型"),

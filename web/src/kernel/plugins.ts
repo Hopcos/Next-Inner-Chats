@@ -73,7 +73,8 @@ export interface UiMessage {
   status: UiMessageStatus
   /** 实时流消息（本轮 send 产生）：前端以打字机呈现；历史/重放消息为 false，直接全量显示 */
   live: boolean
-  images?: { fileName?: string; mimeType?: string; base64: string }[]
+  /** 图片附件：流式中/内存消息带 base64 直显；服务端重拉（刷新/切会话）后带 url 经 /api/chat/images 回读 */
+  images?: { fileName?: string; mimeType?: string; base64?: string; url?: string }[]
   model?: string
   usage?: {
     promptTokens: number
@@ -715,6 +716,23 @@ export class ChatService extends Service {
         /* 忽略 */
       }
     }
+    // 服务端持久化的图片附件（[{fileName,mimeType,url}] → 渲染走 url；与内存 pending 的 base64 形态并存）
+    let images: NonNullable<UiMessage['images']> | undefined
+    try {
+      const aj = (m as { attachmentsJson?: string }).attachmentsJson
+      if (aj) {
+        const parsed = JSON.parse(aj)
+        if (Array.isArray(parsed)) {
+          images = parsed.map((a) => ({
+            fileName: String((a as Record<string, unknown>)['fileName'] ?? ''),
+            mimeType: String((a as Record<string, unknown>)['mimeType'] ?? ''),
+            url: String((a as Record<string, unknown>)['url'] ?? ''),
+          }))
+        }
+      }
+    } catch {
+      /* 忽略 */
+    }
     return {
       id: m.id,
       role: m.role === 'Assistant' ? 'assistant' : m.role === 'User' ? 'user' : 'system',
@@ -745,6 +763,7 @@ export class ChatService extends Service {
         plannerInputTokens: m.plannerInputTokens ?? 0,
         plannerOutputTokens: m.plannerOutputTokens ?? 0,
       },
+      images,
       createdAt: new Date(m.createdAt).getTime(),
     }
   }

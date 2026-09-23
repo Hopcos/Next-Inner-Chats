@@ -5,8 +5,10 @@ import MarkdownIt from 'markdown-it'
 import mermaid from 'mermaid'
 import type { ToolCard as ToolCardModel, UiMessage } from '@/kernel/plugins'
 import ToolCard from '@/components/chat/ToolCard.vue'
+import ImageViewer from '@/components/chat/ImageViewer.vue'
 import { kernel } from '@/kernel'
 import { copyText } from '@/utils/clipboard'
+import { tokenStore } from '@/api/http'
 import { captureElementToPng, downloadBlob, stamp } from '@/utils/capture'
 import { installMarkdownMath } from '@/utils/markdownMath'
 import { canFormat, formatCode, highlightCode, hljs } from '@/utils/codeBlock'
@@ -20,6 +22,43 @@ const { t } = useI18n()
 const thinkingOpen = ref(false)
 
 const isAssistant = computed(() => props.message.role === 'assistant')
+
+/** 图片可显示源（与 message.images 一一对应）：持久化 url 经鉴权 fetch → blob objectURL；内存 pending 直接 base64 data-url */
+const loadedSrcs = ref<string[]>([])
+watch(
+  () => props.message.images,
+  async (imgs) => {
+    const items = imgs ?? []
+    const srcs: string[] = []
+    for (let i = 0; i < items.length; i++) {
+      const x = items[i]
+      if (x.url) {
+        try {
+          const res = await fetch(x.url, {
+            headers: tokenStore.get() ? { Authorization: `Bearer ${tokenStore.get()}` } : {},
+          })
+          srcs.push(res.ok ? URL.createObjectURL(await res.blob()) : '')
+        } catch {
+          srcs.push('')
+        }
+      } else {
+        srcs.push(`data:${x.mimeType || 'image/png'};base64,${x.base64 ?? ''}`)
+      }
+    }
+    loadedSrcs.value.forEach((u) => {
+      if (u.startsWith('blob:')) URL.revokeObjectURL(u)
+    })
+    loadedSrcs.value = srcs
+  },
+  { immediate: true },
+)
+/** 图片全屏查看器图源（与消息图片顺序一致） */
+const previewSrcList = computed(() => [...loadedSrcs.value])
+/** 全屏查看器当前图片索引（-1 = 关闭） */
+const viewerIndex = ref(-1)
+function openViewer(i: number) {
+  if (loadedSrcs.value[i]) viewerIndex.value = i
+}
 
 interface MermaidView {
   scale: number
@@ -135,6 +174,9 @@ revealTimer = window.setInterval(tick, 32)
 
 onUnmounted(() => {
   window.clearInterval(revealTimer)
+  loadedSrcs.value.forEach((u) => {
+    if (u.startsWith('blob:')) URL.revokeObjectURL(u)
+  })
 })
 
 // 首 token 等待反馈（真实模型 TTFT 可能很长）：显示“思考中…N秒”
@@ -612,16 +654,19 @@ function prettyArgs(raw?: string): string {
         </div>
       </div>
 
-      <!-- 用户附件图片 -->
+      <!-- 用户附件图片：持久化后走 url（/api/chat/images 鉴权 fetch → blob），内存 pending 走 base64；
+           点击进入全屏查看器（滚轮/按钮调 Scale 比例，拖拽移动位置） -->
       <div v-if="!isAssistant && message.images && message.images.length" class="images">
         <img
           v-for="(img, i) in message.images"
           :key="i"
           class="msg-image"
-          :src="'data:' + (img.mimeType || 'image/png') + ';base64,' + img.base64"
+          :src="loadedSrcs[i] || ''"
           :alt="img.fileName || ''"
+          @click="openViewer(i)"
         />
       </div>
+      <ImageViewer :visible="viewerIndex >= 0" :srcs="previewSrcList" :index="Math.max(0, viewerIndex)" @close="viewerIndex = -1" />
 
       <!-- 正文（打字机揭示 → Markdown + Mermaid；带轮次锚点的新数据按“思考→工具→输出”逐轮展示，
            仅带 outputBefore 的中期数据按“输出段↔工具卡”交替，旧数据整段展示） -->
@@ -783,6 +828,7 @@ function prettyArgs(raw?: string): string {
   border-radius: 8px;
   border: 1px solid var(--nc-border);
   object-fit: cover;
+  cursor: zoom-in;
 }
 
 .status {
