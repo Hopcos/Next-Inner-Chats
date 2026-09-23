@@ -214,97 +214,106 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         var finish = "stop";
 
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
-        await foreach (var data in SseParser.ReadDataAsync(stream, ct))
+        // 首块超时须真正生效：把 firstChunkCts 作为读取 token —— 上游“200 响应头 + 流式 body 迟迟不产出
+        // data: 事件”（如网关吞掉请求）时，ReadLineAsync 将在首块超时后中止（否则会无限死等，只能用户中断）。
+        // 首个 data: 到达后取消计时（总时长不设上限：长思考/长流式输出不做中断）。
+        var e = SseParser.ReadDataAsync(stream, firstChunkCts.Token).GetAsyncEnumerator(firstChunkCts.Token);
+        await using (e)
         {
-            // 首块迟迟不来（上游吞掉请求不往下发）→ 按首 token 超时处理（非 catch 版，兼容 yield）
-            if (!firstChunkSeen && firstChunkCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            while (true)
             {
-                throw new LlmHttpException(408, $"first chunk timeout after {Math.Max(5, _provider.TimeoutSeconds)}s");
-            }
-            using var doc = SseParser.Parse(data);
-            if (doc is null) continue;
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
-            {
-                usage = new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"), 0, GetCacheTokens(u));
-            }
-
-            if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
-            {
-                if (root.TryGetProperty("error", out var err))
+                bool moved;
+                try
                 {
-                    throw new LlmHttpException(400, err.ToString());
+                    moved = await e.MoveNextAsync();
                 }
-                continue;
-            }
-
-            var choice = choices[0];
-            if (choice.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(fr.GetString()))
-            {
-                finish = fr.GetString()!;
-            }
-            if (!choice.TryGetProperty("delta", out var delta)) continue;
-
-            // 思考内容字段名兼容：OpenAI/DeepSeek 官方用 reasoning_content；llm-cs 网关（vLLM 中转）用 reasoning
-            var reasoningText = GetStringProp(delta, "reasoning_content", "reasoning");
-            if (!string.IsNullOrEmpty(reasoningText))
-            {
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // 首块超时（上游吞掉请求不往下发）→ 转 408；用户主动中断(ct)则正常传播取消，不误报
+                    throw new LlmHttpException(408, $"first chunk timeout after {Math.Max(5, _provider.TimeoutSeconds)}s");
+                }
+                if (!moved) break;
+                var data = e.Current;
                 if (!firstChunkSeen)
                 {
                     firstChunkSeen = true;
                     firstChunkCts.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan);
                 }
-                reasoningSb.Append(reasoningText);
-                // 尊重产品开关：关闭思考模式时仍累积（用于 usage 估算/历史回传），但不向客户端产出思考增量
-                if (request.ThinkingEnabled)
-                {
-                    if (ttft < 0) ttft = (int)sw.ElapsedMilliseconds;
-                    yield return new LlmChunk.ReasoningDelta(reasoningText);
-                }
-                continue;
-            }
+                using var doc = SseParser.Parse(data);
+                if (doc is null) continue;
+                var root = doc.RootElement;
 
-            if (delta.TryGetProperty("content", out var dc) && dc.ValueKind == JsonValueKind.String)
-            {
-                var t = dc.GetString();
-                if (!string.IsNullOrEmpty(t))
+                if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
                 {
-                    if (!firstChunkSeen)
+                    usage = new LlmUsage(GetInt(u, "prompt_tokens"), GetInt(u, "completion_tokens"), 0, GetCacheTokens(u));
+                }
+
+                if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                {
+                    if (root.TryGetProperty("error", out var err))
                     {
-                        firstChunkSeen = true;
-                        firstChunkCts.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan);
+                        throw new LlmHttpException(400, err.ToString());
                     }
-                    if (ttft < 0) ttft = (int)sw.ElapsedMilliseconds;
-                    textSb.Append(t);
-                    yield return new LlmChunk.TextDelta(t);
                     continue;
                 }
-            }
 
-            if (delta.TryGetProperty("tool_calls", out var tcs))
-            {
-                foreach (var tc in tcs.EnumerateArray())
+                var choice = choices[0];
+                if (choice.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(fr.GetString()))
                 {
-                    var idx = tc.TryGetProperty("index", out var ix) ? ix.GetInt32() : 0;
-                    if (!toolAggregators.TryGetValue(idx, out var agg))
+                    finish = fr.GetString()!;
+                }
+                if (!choice.TryGetProperty("delta", out var delta)) continue;
+
+                // 思考内容字段名兼容：OpenAI/DeepSeek 官方用 reasoning_content；llm-cs 网关（vLLM 中转）用 reasoning
+                var reasoningText = GetStringProp(delta, "reasoning_content", "reasoning");
+                if (!string.IsNullOrEmpty(reasoningText))
+                {
+                    reasoningSb.Append(reasoningText);
+                    // 尊重产品开关：关闭思考模式时仍累积（用于 usage 估算/历史回传），但不向客户端产出思考增量
+                    if (request.ThinkingEnabled)
                     {
-                        toolAggregators[idx] = ("", new StringBuilder());
-                        agg = toolAggregators[idx];
+                        if (ttft < 0) ttft = (int)sw.ElapsedMilliseconds;
+                        yield return new LlmChunk.ReasoningDelta(reasoningText);
                     }
-                    if (tc.TryGetProperty("function", out var fn))
+                    continue;
+                }
+
+                if (delta.TryGetProperty("content", out var dc) && dc.ValueKind == JsonValueKind.String)
+                {
+                    var t = dc.GetString();
+                    if (!string.IsNullOrEmpty(t))
                     {
-                        if (fn.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(name.GetString()))
-                        {
-                            toolAggregators[idx] = (name.GetString()!, agg.Args);
-                        }
-                        if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
-                        {
-                            agg.Args.Append(args.GetString());
-                        }
+                        if (ttft < 0) ttft = (int)sw.ElapsedMilliseconds;
+                        textSb.Append(t);
+                        yield return new LlmChunk.TextDelta(t);
+                        continue;
                     }
                 }
-                if (ttft < 0) ttft = (int)sw.ElapsedMilliseconds;
+
+                if (delta.TryGetProperty("tool_calls", out var tcs))
+                {
+                    foreach (var tc in tcs.EnumerateArray())
+                    {
+                        var idx = tc.TryGetProperty("index", out var ix) ? ix.GetInt32() : 0;
+                        if (!toolAggregators.TryGetValue(idx, out var agg))
+                        {
+                            toolAggregators[idx] = ("", new StringBuilder());
+                            agg = toolAggregators[idx];
+                        }
+                        if (tc.TryGetProperty("function", out var fn))
+                        {
+                            if (fn.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(name.GetString()))
+                            {
+                                toolAggregators[idx] = (name.GetString()!, agg.Args);
+                            }
+                            if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
+                            {
+                                agg.Args.Append(args.GetString());
+                            }
+                        }
+                    }
+                    if (ttft < 0) ttft = (int)sw.ElapsedMilliseconds;
+                }
             }
         }
 
