@@ -243,11 +243,13 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             yield break;
         }
 
+        // 用户显式勾选生效：settings 空列表（未勾选任何 MCP）= 不注入任何 MCP 工具（仅内置工具）。
+        // 语义：勾选式管理，空 = 无；仍然要求角色绑定交集（勾选但角色未绑定的不会注入）。
         var servers = (await _config.GetEnabledMcpServersAsync(ct))
-            .Where(s => roleMcpIds.Contains(s.Id) && (requestedMcp.Count == 0 || requestedMcp.Contains(s.Id)))
+            .Where(s => requestedMcp.Contains(s.Id) && roleMcpIds.Contains(s.Id))
             .ToList();
         var enabledSkills = (await _config.GetEnabledSkillsAsync(ct))
-            .Where(s => roleSkillIds.Contains(s.Id) && (requestedSkills.Count == 0 || requestedSkills.Contains(s.Id)))
+            .Where(s => requestedSkills.Contains(s.Id) && roleSkillIds.Contains(s.Id))
             .ToList();
 
         var unifiedTools = new List<UnifiedTool>();
