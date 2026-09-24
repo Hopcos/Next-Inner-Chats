@@ -345,7 +345,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 trace, server.Name, visionTool.Name, r.ErrorMessage);
                         }
                         visionLines.Add(r.Success
-                            ? $"[image {i + 1}] {truncate(r.ResultText, 500)}"
+                            ? $"[image {i + 1}] {truncate(r.ResultText, 2000)}"
                             : $"[image {i + 1}] {Texts.Get("IMAGE_RECOGNITION_FAILED", lang)}");
                     }
                     catch (Exception ex)
