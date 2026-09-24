@@ -97,6 +97,8 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "ChatMessages", "ToolCalls", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "Cost", "TEXT NOT NULL DEFAULT '0'");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "CacheTokens", "INTEGER NOT NULL DEFAULT 0");
+            // ChatMessages 图片识别（视觉 MCP）总耗时：历史对话也可查看 OCR 耗时
+            await AddColumnIfMissingAsync(conn, "ChatMessages", "OcrMs", "INTEGER NOT NULL DEFAULT 0");
             // TokenUsageRecords 用量流水也记录缓存命中（老库补列；全新库由 EnsureCreated 直接建列）
             await AddColumnIfMissingAsync(conn, "TokenUsageRecords", "CacheTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "SubAgentCount", "INTEGER NOT NULL DEFAULT 0");

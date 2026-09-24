@@ -199,6 +199,7 @@ export interface ChatMessageDto {
   cacheTokens: number
   ttftMs: number
   totalMs: number
+  ocrMs: number
   rounds: number
   toolCalls: number
   cost: number
@@ -305,6 +306,7 @@ export interface AgentEventDto {
   cost?: number
   ttftMs?: number
   totalMs?: number
+  ocrMs?: number
   model?: string
 }
 

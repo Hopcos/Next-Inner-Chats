@@ -87,6 +87,7 @@ export interface UiMessage {
     cost: number
     ttftMs: number
     totalMs: number
+    ocrMs: number
     subAgentCount: number
     subAgentInputTokens: number
     subAgentOutputTokens: number
@@ -757,6 +758,7 @@ export class ChatService extends Service {
         cost: m.cost ?? 0,
         ttftMs: m.ttftMs ?? 0,
         totalMs: m.totalMs ?? 0,
+        ocrMs: m.ocrMs ?? 0,
         subAgentCount: m.subAgentCount ?? 0,
         subAgentInputTokens: m.subAgentInputTokens ?? 0,
         subAgentOutputTokens: m.subAgentOutputTokens ?? 0,
@@ -1064,6 +1066,7 @@ export class ChatService extends Service {
             cost: ev.cost ?? 0,
             ttftMs: ev.ttftMs ?? 0,
             totalMs: ev.totalMs ?? 0,
+            ocrMs: ev.ocrMs ?? 0,
             subAgentCount: ev.subAgentCount ?? 0,
             subAgentInputTokens: ev.subAgentInputTokens ?? 0,
             subAgentOutputTokens: ev.subAgentOutputTokens ?? 0,

@@ -309,8 +309,10 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
         // ---------- MCP 视觉：多张逐个识别为文本（工具参数名 image_source = 标准 base64） ----------
         var visionLines = new List<string>();
+        int ocrMs = 0;
         if (request.Images is { Count: > 0 })
         {
+            var ocrSw = System.Diagnostics.Stopwatch.StartNew();
             foreach (var server in servers.Where(s => s.IsVision))
             {
                 // 视觉工具选择：精确名优先（describe_image / vision / recognize_image / read_image_text），
@@ -353,6 +355,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                     }
                 }
             }
+            ocrSw.Stop();
+            ocrMs = (int)ocrSw.ElapsedMilliseconds;
         }
         if (visionLines.Count > 0)
         {
@@ -456,6 +460,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var failureCode = (string?)null;
         var failureMessage = (string?)null;
         int doneTtftMs = 0, doneTotalMs = 0, doneRounds = 0;
+        int doneOcrMs = 0;
         int doneSubCount = 0, doneSubIn = 0, doneSubOut = 0;
         int donePlannerIn = 0, donePlannerOut = 0;
         decimal doneCost = 0m;
@@ -599,6 +604,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                         model ??= ev.Model;
                         doneTtftMs = ev.TtftMs ?? 0;
                         doneTotalMs = ev.TotalMs ?? 0;
+                        doneOcrMs = ocrMs; // OCR 耗时在本方法内计算（识别发生在 AgentLoop 之前，事件里没有）
                         doneRounds = ev.Usage?.Rounds ?? 0;
                         doneSubCount = ev.Usage?.SubAgentCount ?? 0;
                         doneSubIn = ev.Usage?.SubAgentInputTokens ?? 0;
@@ -627,7 +633,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 SubAgentOutputTokens = ev.Usage.SubAgentOutputTokens,
                                 PlannerInputTokens = donePlannerIn,
                                 PlannerOutputTokens = donePlannerOut,
-                            }, doneCost, doneTtftMs, doneTotalMs, trace, model);
+                            }, doneCost, doneTtftMs, doneTotalMs, trace, model, doneOcrMs);
                         }
                         break;
                     default:
@@ -669,6 +675,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             CacheTokens = totalUsage?.CacheTokens ?? 0,
             TtftMs = doneTtftMs,
             TotalMs = doneTotalMs,
+            OcrMs = doneOcrMs,
             Rounds = doneRounds,
             ToolCalls = toolTrace.Count,
             Cost = doneCost,

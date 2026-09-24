@@ -76,6 +76,9 @@ public sealed class AgentEvent
 
     public int? TotalMs { get; init; }
 
+    /// <summary>图片识别（视觉 MCP 工具）总耗时（ms）；0/空 = 本次无图片识别</summary>
+    public int? OcrMs { get; init; }
+
     public string? Model { get; init; }
 
     public JsonUsage? Usage { get; init; }
@@ -116,9 +119,9 @@ public sealed class AgentEvent
 
     public static AgentEvent Error(string code, string message, string traceId) => new() { Kind = "error", Code = code, Message = message, TraceId = traceId };
 
-    public static AgentEvent Done(JsonUsage usage, decimal cost, int ttftMs, int totalMs, string traceId, string? model = null) => new()
+    public static AgentEvent Done(JsonUsage usage, decimal cost, int ttftMs, int totalMs, string traceId, string? model = null, int ocrMs = 0) => new()
     {
-        Kind = "done", Usage = usage, Cost = cost, TtftMs = ttftMs, TotalMs = totalMs, TraceId = traceId,
+        Kind = "done", Usage = usage, Cost = cost, TtftMs = ttftMs, TotalMs = totalMs, TraceId = traceId, OcrMs = ocrMs,
         PromptTokens = usage.PromptTokens, CompletionTokens = usage.CompletionTokens, TotalTokens = usage.TotalTokens,
         ReasoningTokens = usage.ReasoningTokens, CacheTokens = usage.CacheTokens, Rounds = usage.Rounds, ToolCalls = usage.ToolCalls,
         SubAgentCount = usage.SubAgentCount, SubAgentInputTokens = usage.SubAgentInputTokens, SubAgentOutputTokens = usage.SubAgentOutputTokens,

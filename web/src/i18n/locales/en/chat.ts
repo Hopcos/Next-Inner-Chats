@@ -148,6 +148,7 @@ export default {
     interruptedNote: 'The assistant response was stopped.',
     providerOption: '{name} ({model})',
     usageTokens: '{model} · {tokens} tokens',
+    usageOcr: 'OCR · {ms}ms',
     usageTtft: ' · TTFT {ms}ms',
     usageTotalMs: ' · {ms}ms',
     toolDuration: '{ms}ms',

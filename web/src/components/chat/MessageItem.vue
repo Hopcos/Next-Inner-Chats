@@ -725,6 +725,7 @@ function prettyArgs(raw?: string): string {
 
       <!-- 用量/模型信息 -->
       <div v-if="isAssistant && message.usage" class="usage nc-dim">
+        <template v-if="message.usage.ocrMs > 0">{{ t('chat.usageOcr', { ms: message.usage.ocrMs }) }}</template>
         {{ t('chat.usageTokens', { model: message.model ?? '', tokens: message.usage.totalTokens }) }}
         <template v-if="message.usage.ttftMs > 0">{{ t('chat.usageTtft', { ms: message.usage.ttftMs }) }}</template>
         <template v-if="message.usage.totalMs > 0">{{ t('chat.usageTotalMs', { ms: message.usage.totalMs }) }}</template>

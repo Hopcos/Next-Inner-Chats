@@ -147,6 +147,7 @@ export default {
     interruptedNote: '助手回复已被中断。',
     providerOption: '{name}（{model}）',
     usageTokens: '{model} · {tokens} tokens',
+    usageOcr: 'OCR · {ms}ms',
     usageTtft: ' · TTFT {ms}ms',
     usageTotalMs: ' · {ms}ms',
     toolDuration: '{ms}ms',

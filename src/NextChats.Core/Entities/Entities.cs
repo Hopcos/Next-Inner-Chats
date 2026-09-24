@@ -503,6 +503,9 @@ public class ChatMessage
     /// <summary>本次回答总耗时（ms）</summary>
     public int TotalMs { get; set; }
 
+    /// <summary>图片识别（视觉 MCP 工具）总耗时（ms）；0 = 本次无图片识别</summary>
+    public int OcrMs { get; set; }
+
     /// <summary>ReAct 推理轮数</summary>
     public int Rounds { get; set; }
 
