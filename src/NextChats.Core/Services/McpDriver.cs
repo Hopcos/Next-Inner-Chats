@@ -225,7 +225,14 @@ public sealed class McpDriver : IMcpDriver
 
                 if (result.IsError == true)
                 {
-                    return new McpToolResult(false, "", text, "MCP_TOOL_ERROR", (int)sw.ElapsedMilliseconds, attempts, Retryable: false);
+                    // 业务错误：透传服务端返回内容；并附加结构化错误详情（部分服务器把真实错误放 structuredContent）
+                    var structured = result.StructuredContent is null
+                        ? string.Empty
+                        : $" | structured={TruncateJson(result.StructuredContent, 800)}";
+                    var detail = string.IsNullOrWhiteSpace(text) || text == Texts.Get("MCP_NO_CONTENT", "en")
+                        ? $"MCP server returned isError=true without content (tool '{toolName}'){structured}"
+                        : $"{text}{structured}";
+                    return new McpToolResult(false, "", detail, "MCP_TOOL_ERROR", (int)sw.ElapsedMilliseconds, attempts, Retryable: false);
                 }
                 return new McpToolResult(true, text, null, null, (int)sw.ElapsedMilliseconds, attempts, Retryable: false);
             }
@@ -252,15 +259,65 @@ public sealed class McpDriver : IMcpDriver
         return new McpToolResult(false, "", MaskMcpError(lastEx, lang ?? "en"), "MCP_ERROR", (int)sw.ElapsedMilliseconds, attempts, Retryable: true);
     }
 
-    /// <summary>对模型/用户：不给 stack/Endpoint/Header，只给友好错误</summary>
+    /// <summary>
+    /// 对模型/用户：不暴露堆栈/请求头，但保留实际异常消息链（最多 3 层、截断），便于排查工具失败根因。
+    /// </summary>
     private static string MaskMcpError(Exception? ex, string lang) => ex switch
     {
         null => Texts.Get("MCP_UNKNOWN_ERROR", lang),
-        TimeoutException => Texts.Get("MCP_TIMEOUT", lang),
-        HttpRequestException => Texts.Get("MCP_NETWORK_ERROR", lang),
-        McpException => Texts.Get("MCP_PROTOCOL_ERROR", lang),
-        _ => Texts.Get("MCP_GENERIC_ERROR", lang),
+        TimeoutException => Compose(Texts.Get("MCP_TIMEOUT", lang), ex),
+        HttpRequestException => Compose(Texts.Get("MCP_NETWORK_ERROR", lang), ex),
+        McpException => Compose(Texts.Get("MCP_PROTOCOL_ERROR", lang), ex),
+        _ => Compose(Texts.Get("MCP_GENERIC_ERROR", lang), ex),
     };
+
+    private static string Compose(string friendly, Exception ex)
+    {
+        var brief = Brief(ex);
+        return string.IsNullOrWhiteSpace(brief) ? friendly : $"{friendly}: {brief}";
+    }
+
+    /// <summary>structuredContent 的 JSON 渲染（截断，防止把超长结构体塞回对话）</summary>
+    private static string TruncateJson(JsonElement? node, int maxLen)
+    {
+        if (node is not { } value || value.ValueKind == JsonValueKind.Undefined || value.ValueKind == JsonValueKind.Null)
+        {
+            return "(no structured detail)";
+        }
+        string json;
+        try
+        {
+            json = value.GetRawText();
+        }
+        catch
+        {
+            return "(structured content unreadable)";
+        }
+        return json.Length > maxLen ? json[..maxLen] + "…" : json;
+    }
+
+    private static string Brief(Exception ex)
+    {
+        const int maxLen = 500;
+        var sb = new System.Text.StringBuilder();
+        Exception? cur = ex;
+        var depth = 0;
+        while (cur is not null && depth < 3)
+        {
+            var msg = cur.Message?.Trim();
+            if (!string.IsNullOrWhiteSpace(msg)
+                && sb.ToString().IndexOf(msg, StringComparison.Ordinal) < 0) // 去重（外层常含内层摘要）
+            {
+                if (sb.Length > 0) sb.Append(" → ");
+                sb.Append(msg);
+                if (sb.Length >= maxLen) break;
+            }
+            cur = cur.InnerException;
+            depth++;
+        }
+        var result = sb.ToString();
+        return result.Length > maxLen ? result[..maxLen] + "…" : result;
+    }
 
     private static string RenderContent(IList<ContentBlock> blocks)
     {
