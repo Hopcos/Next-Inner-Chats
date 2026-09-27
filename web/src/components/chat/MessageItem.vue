@@ -89,7 +89,8 @@ const usageStats = computed(() => {
   if (!u) return null
   const reasoning = u.reasoningTokens > 0 ? u.reasoningTokens : null
   const generated = reasoning != null ? Math.max(0, u.completionTokens - reasoning) : u.completionTokens
-  const speed = generated > 0 && u.totalMs > 0 ? (generated / (u.totalMs / 1000)).toFixed(1) : null
+  // 响应速度 = 输出 Tokens（含推理）÷ 总耗时（秒）
+  const speed = u.completionTokens > 0 && u.totalMs > 0 ? (u.completionTokens / (u.totalMs / 1000)).toFixed(1) : null
   const rows: { label: string; value: string }[] = [
     { label: t('chat.tokenInput'), value: String(u.promptTokens) },
     { label: t('chat.tokenOutput'), value: String(u.completionTokens) },
