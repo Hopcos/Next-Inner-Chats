@@ -131,15 +131,23 @@ onUnmounted(() => {
 
 <template>
   <div v-if="topics.length > 1" class="topic-rail" aria-hidden="true">
-    <div v-for="(tp, i) in topics" :key="tp.id" class="rail-line-wrap" @click="jump(i)">
-      <el-tooltip :content="titleOf(tp)" placement="left" :show-after="300" :offset="8">
+    <el-tooltip
+      v-for="(tp, i) in topics"
+      :key="tp.id"
+      :content="titleOf(tp)"
+      placement="left"
+      :show-after="250"
+      :offset="10"
+    >
+      <!-- tooltip 触发元素 = 整个热区（46×14px）而非 3px 细条：跨机器/分辨率 hover 稳定出现 -->
+      <div class="rail-line-wrap" @click="jump(i)">
         <div
           class="rail-line"
           :class="{ active: i === activeIndex }"
           :style="{ '--rail-i': i, '--rail-w': lineWidth(i), animationDelay: -0.16 * i + 's' }"
         />
-      </el-tooltip>
-    </div>
+      </div>
+    </el-tooltip>
   </div>
 </template>
 
@@ -217,25 +225,23 @@ onUnmounted(() => {
   }
 }
 
-/* 用户系统偏好减少动态效果时，停止跳动（保留高亮/宽窄功能） */
-@media (prefers-reduced-motion: reduce) {
-  .rail-line {
-    animation: none;
-  }
-}
+/* 注：话题导航条是装饰性 UI（aria-hidden），为保证局域网/各机器视觉一致，不随系统
+   prefers-reduced-motion 停用跳动动画（若个别终端需要静止，可在系统侧关闭动画）。CSS 动画本身
+   由 transform 驱动，不触发布局/滚动，对性能与无障碍影响很小。 */
 
-/* hover（整行热区）：横条加长，更易看清与选中 */
+/* hover（整行热区）：横条加长，更易看清与选中（background 用主题色 + 透明度，兼容旧 Edge） */
 .rail-line-wrap:hover .rail-line {
   width: min(calc(var(--rail-w, 20px) * 1.7), 46px);
-  background: color-mix(in srgb, var(--nc-primary) 55%, transparent);
+  background: var(--nc-primary);
+  opacity: 0.55;
 }
 
 .rail-line.active {
   background: var(--nc-primary);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--nc-primary) 60%, transparent);
+  box-shadow: 0 0 6px var(--nc-primary);
 }
 
 .rail-line-wrap:hover .rail-line.active {
-  box-shadow: 0 0 8px color-mix(in srgb, var(--nc-primary) 70%, transparent);
+  box-shadow: 0 0 8px var(--nc-primary);
 }
 </style>
