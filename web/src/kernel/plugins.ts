@@ -11,6 +11,7 @@ import type {
   ChatSettings,
   LoginResponse,
   UserProfile,
+  WorkspaceDto,
 } from '@/api/types'
 import { uuid } from '@/utils/uuid'
 
@@ -406,6 +407,8 @@ export class SessionService extends Service {
     currentId: null as string | null,
     loading: false,
     sidebarCollapsed: false,
+    /** 当前用户可用的工作空间（角色绑定派生） */
+    workspaces: [] as WorkspaceDto[],
   })
 
   constructor(ctx: Context) {
@@ -501,6 +504,24 @@ export class SessionService extends Service {
   toggleSidebar() {
     this.state.sidebarCollapsed = !this.state.sidebarCollapsed
     localStorage.setItem('nextchats.sidebar', this.state.sidebarCollapsed ? '1' : '0')
+  }
+
+  // ---------- 工作空间（编码会话） ----------
+  async loadWorkspaces() {
+    try {
+      this.state.workspaces = await http.get<WorkspaceDto[]>('/api/chat/workspaces')
+    } catch (err) {
+      console.error('[session] loadWorkspaces failed:', err)
+      this.state.workspaces = []
+    }
+  }
+
+  /** 绑定/解除当前会话工作空间（null=普通聊天）；成功后同步本地会话对象 */
+  async setWorkspace(sessionId: string, workspaceId: string | null) {
+    const r = await http.put<{ workspaceId: string | null }>(`/api/chat/sessions/${sessionId}/workspace`, { workspaceId })
+    const found = this.state.sessions.find((s) => s.id === sessionId)
+    if (found) found.workspaceId = r.workspaceId ?? null
+    return r.workspaceId ?? null
   }
 }
 

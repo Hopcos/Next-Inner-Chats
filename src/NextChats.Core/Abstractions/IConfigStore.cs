@@ -1,3 +1,4 @@
+using NextChats.Core.Domain;
 using NextChats.Core.Entities;
 
 namespace NextChats.Core.Abstractions;
@@ -42,6 +43,30 @@ public interface IConfigStore
     Task<bool> CanAccessPromptAsync(Guid userId, Guid promptId, CancellationToken ct = default);
 
     Task<bool> CanAccessSkillAsync(Guid userId, Guid skillId, CancellationToken ct = default);
+
+    // ---------- 工作空间（编码会话） ----------
+    /// <summary>全部工作空间（含禁用；管理端用）</summary>
+    Task<IReadOnlyList<Workspace>> GetAllWorkspacesAsync(CancellationToken ct = default);
+
+    /// <summary>启用中的工作空间</summary>
+    Task<IReadOnlyList<Workspace>> GetEnabledWorkspacesAsync(CancellationToken ct = default);
+
+    Task<Workspace?> GetWorkspaceAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>用户（经角色绑定）可用的工作空间及级别（<see cref="WorkspaceAccessLevel"/>；管理员豁免 = 全部 Enabled 工作空间 + FullAccess）</summary>
+    Task<IReadOnlyList<(Guid WorkspaceId, WorkspaceAccessLevel Level)>> GetRoleWorkspaceBindingsAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>某工作空间的角色绑定明细（管理端）</summary>
+    Task<IReadOnlyList<RoleWorkspaceBinding>> GetWorkspaceBindingsAsync(Guid workspaceId, CancellationToken ct = default);
+
+    /// <summary>新增/更新工作空间</summary>
+    Task SaveWorkspaceAsync(Workspace workspace, CancellationToken ct = default);
+
+    /// <summary>删除工作空间（级联清理角色绑定；不删除磁盘目录）</summary>
+    Task DeleteWorkspaceAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>全量替换某工作空间的角色绑定（roles 中未出现的角色绑定被移除）</summary>
+    Task SetWorkspaceRoleBindingsAsync(Guid workspaceId, IReadOnlyList<(Guid RoleId, WorkspaceAccessLevel Level)> bindings, CancellationToken ct = default);
 
     // ---------- 用户设置 ----------
     Task<IDictionary<string, string>> GetUserSettingsAsync(Guid userId, CancellationToken ct = default);

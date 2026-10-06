@@ -47,9 +47,11 @@ public static class InfrastructureExtensions
         services.AddSingleton<IPolicyEngine, PolicyEngine>();
         services.AddSingleton<IMcpDriver, McpDriver>();
         services.AddSingleton<IApprovalCoordinator, ApprovalCoordinator>();
+        services.AddSingleton<IAutonomousApprovalPolicy, AutonomousApprovalPolicy>();
         services.AddSingleton<ILlmRouter, LlmRouter>();
         services.AddSingleton<IContextManager, ContextManager>();
         services.AddSingleton<ISkillExecutionEngine, SkillExecutionEngine>();
+        services.AddSingleton<IWorkspaceSandbox, WorkspaceSandbox>();
         services.AddSingleton<IAgentLoopEngine, AgentLoopEngine>();
         services.AddSingleton<IChatOrchestrator, ChatOrchestrator>();
 
@@ -89,6 +91,8 @@ public static class InfrastructureExtensions
             // ChatSessions 置顶（聊天气泡内会话置顶区域）
             await AddColumnIfMissingAsync(conn, "ChatSessions", "IsPinned", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatSessions", "PinnedAt", "TEXT");
+            // 编码会话绑定的工作空间（null = 普通聊天）
+            await AddColumnIfMissingAsync(conn, "ChatSessions", "WorkspaceId", "TEXT");
             // ChatMessages 用量明细列（历史对话也可查看 Token 指标；decimal 同 TokenUsageRecords.Cost 存 TEXT）
             await AddColumnIfMissingAsync(conn, "ChatMessages", "ReasoningTokens", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatMessages", "TtftMs", "INTEGER NOT NULL DEFAULT 0");
@@ -224,6 +228,30 @@ public static class InfrastructureExtensions
                     CONSTRAINT "FK_AppToolRoleBindings_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE CASCADE
                 );
                 CREATE INDEX "IX_AppToolRoleBindings_RoleId" ON "AppToolRoleBindings" ("RoleId");
+                """);
+            // ---------- 工作空间编码会话（注册表 + 角色绑定带级别） ----------
+            await AddTableIfMissingAsync(conn, "Workspaces", """
+                CREATE TABLE "Workspaces" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_Workspaces" PRIMARY KEY,
+                    "Name" TEXT NOT NULL,
+                    "RootPath" TEXT NOT NULL,
+                    "Description" TEXT,
+                    "Enabled" INTEGER NOT NULL,
+                    "CreatedAt" TEXT NOT NULL,
+                    "UpdatedAt" TEXT NOT NULL
+                );
+                CREATE INDEX "IX_Workspaces_Name" ON "Workspaces" ("Name");
+                """);
+            await AddTableIfMissingAsync(conn, "RoleWorkspaceBindings", """
+                CREATE TABLE "RoleWorkspaceBindings" (
+                    "RoleId" TEXT NOT NULL,
+                    "WorkspaceId" TEXT NOT NULL,
+                    "Level" INTEGER NOT NULL,
+                    CONSTRAINT "PK_RoleWorkspaceBindings" PRIMARY KEY ("RoleId", "WorkspaceId"),
+                    CONSTRAINT "FK_RoleWorkspaceBindings_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE CASCADE,
+                    CONSTRAINT "FK_RoleWorkspaceBindings_Workspaces_WorkspaceId" FOREIGN KEY ("WorkspaceId") REFERENCES "Workspaces" ("Id") ON DELETE CASCADE
+                );
+                CREATE INDEX "IX_RoleWorkspaceBindings_WorkspaceId" ON "RoleWorkspaceBindings" ("WorkspaceId");
                 """);
         }
         finally

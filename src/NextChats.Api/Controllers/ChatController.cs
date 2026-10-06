@@ -121,11 +121,26 @@ public sealed class ChatController(
     {
         // 默认标题留空：前端按用户语言显示 “未命名/Untitled”，且首条消息时自动以前文命名（避免硬编码中文“新会话”）
         var session = await chat.CreateSessionAsync(UserId, req?.Title?.Trim() ?? "");
-        await audit.RecordAsync(AuditCategory.Chat, "SESSION.CREATE", $"trc_{Guid.NewGuid():N}"[..24], UserId, session.Id.ToString());
+        // 创建时可选绑定工作空间（须角色已授权；未授权则忽略并返回 400）
+        if (req?.WorkspaceId is { } wsId)
+        {
+            var bindings = await config.GetRoleWorkspaceBindingsAsync(UserId, HttpContext.RequestAborted);
+            if (bindings.Any(b => b.WorkspaceId == wsId))
+            {
+                await chat.SetSessionWorkspaceAsync(UserId, session.Id, wsId, HttpContext.RequestAborted);
+                session.WorkspaceId = wsId;
+            }
+            else
+            {
+                return BadRequest(Err("WS_NOT_AUTHORIZED"));
+            }
+        }
+        await audit.RecordAsync(AuditCategory.Chat, "SESSION.CREATE", $"trc_{Guid.NewGuid():N}"[..24], UserId, session.Id.ToString(),
+            req?.WorkspaceId is null ? null : new { workspaceId = req.WorkspaceId });
         return Ok(session);
     }
 
-    public sealed record CreateSessionRequest(string? Title);
+    public sealed record CreateSessionRequest(string? Title, Guid? WorkspaceId = null);
 
     [HttpPut("sessions/{sessionId:guid}")]
     public async Task<IActionResult> RenameSession(Guid sessionId, [FromBody] RenameSessionRequest req)

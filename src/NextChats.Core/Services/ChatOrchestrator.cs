@@ -81,6 +81,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private readonly IOptions<BuiltinToolOptions> _builtinOptions;
     private readonly IOptions<ToolTraceOptions> _toolTraceOptions;
     private readonly ILlmRouter _router;
+    private readonly IWorkspaceSandbox _workspaces;
     private readonly ILogger _logger;
 
     /// <summary>http_fetch 专用 HttpClient（禁用自动重定向 —— 手动跟随并逐跳校验白名单，防 SSRF）</summary>
@@ -105,6 +106,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         IOptions<BuiltinToolOptions> builtinOptions,
         IOptions<ToolTraceOptions> toolTraceOptions,
         ILlmRouter router,
+        IWorkspaceSandbox workspaces,
         ILogger<ChatOrchestrator> logger)
     {
         _config = config;
@@ -122,6 +124,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         _builtinOptions = builtinOptions;
         _toolTraceOptions = toolTraceOptions;
         _router = router;
+        _workspaces = workspaces;
         _logger = logger;
     }
 
@@ -309,6 +312,39 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 DelegateTaskSchemaJson, IsSkill: false));
         }
 
+        // ---------- 工作空间编码会话（ws_* 工具）：会话绑定工作空间且用户角色被授权时注入 ----------
+        // 授权失败不阻断聊天：以 context 事件提示，行为与普通聊天一致（不影响现有功能）。
+        WsContext? wsCtx = null;
+        var wsTools = Array.Empty<UnifiedTool>();
+        if (session.WorkspaceId is { } wsId)
+        {
+            var wsBindings = (await _config.GetRoleWorkspaceBindingsAsync(request.UserId, ct)).ToList();
+            var binding = wsBindings.FirstOrDefault(b => b.WorkspaceId == wsId);
+            if (binding.WorkspaceId == Guid.Empty)
+            {
+                yield return AgentEvent.ContextEvent("workspace", Texts.Get("WS_NOT_AUTHORIZED", lang), trace);
+            }
+            else
+            {
+                wsCtx = await _workspaces.ResolveAsync(wsId, binding.Level, ct);
+                if (wsCtx is null)
+                {
+                    var ws = await _config.GetWorkspaceAsync(wsId, ct);
+                    yield return AgentEvent.ContextEvent("workspace",
+                        ws is null || !ws.Enabled
+                            ? Texts.Get("WS_DISABLED", lang)
+                            : Texts.Get("WS_ROOT_MISSING", lang, ws.RootPath), trace);
+                }
+                else
+                {
+                    wsTools = WorkspaceToolCatalog.ForLevel(wsCtx.Level, wsCtx.Name).ToArray();
+                    unifiedTools.AddRange(wsTools);
+                    _logger.LogInformation("[Orchestrator] workspace trace={Trace} ws={Ws} level={Level} tools={Tools}",
+                        trace, wsCtx.Name, wsCtx.Level, wsTools.Length);
+                }
+            }
+        }
+
         // ---------- MCP 视觉：多张逐个识别为文本（工具参数名 image_source = 标准 base64） ----------
         var visionLines = new List<string>();
         int ocrMs = 0;
@@ -423,6 +459,17 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         {
             systemBlocks.Add(Texts.Get("MCP_INSTRUCTIONS_HEADER", lang) + "\n" + string.Join("\n", mcpGuides));
         }
+
+        // ---------- 工作空间上下文注入（仅编码会话；明确根目录与级别约束） ----------
+        if (wsCtx is not null)
+        {
+            systemBlocks.Add(Texts.Get("WORKSPACE_CTX_HEADER", lang) + "\n" +
+                $"- root: {wsCtx.Root}\n" +
+                $"- level: {wsCtx.Level}\n" +
+                $"- rules: all ws_* file paths are validated against the root (escape is rejected server-side); " +
+                "ws_write/ws_edit/ws_mkdir/ws_delete/ws_exec require workspace-write level and may trigger approval; " +
+                "ws_exec working directory is always inside the root.");
+        }
         var systemPrompt = string.Join("\n\n---\n\n", systemBlocks);
 
         // ---------- 会话历史（按用户隔离） ----------
@@ -497,7 +544,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             // 思考模式：前端全局开关（默认启用）+ 强度（默认 high）；映射在客户端统一执行
             ThinkingEnabled = request.ThinkingEnabled ?? true,
             ThinkingEffort = ParseEffort(request.ThinkingEffort) ?? NextChats.Core.Domain.LlmThinkingEffort.High,
-            ToolExecutor = (tool, args, t, tct) => ExecuteToolAsync(tool, args, t, tct, request2, servers, skillByName, lang, subAgentModelId),
+            ToolExecutor = (tool, args, t, tct) => ExecuteToolAsync(tool, args, t, tct, request2, servers, skillByName, lang, subAgentModelId, wsCtx),
         };
 
         // ---------- 主-从委派启动前拆解（Planner）：可拆时首轮自动并行 delegate_task，不依赖模型自觉 ----------
@@ -588,6 +635,15 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 : truncate(ev.ResultPreview, _toolTraceOptions.Value.MaxResultPreviewChars);
                             last["errorCode"] = ev.ErrorCode;
                         }
+                        break;
+                    }
+                    case "approval_updated":
+                    {
+                        // 审批状态回写持久化记录：避免刷新/切会话后历史卡片永远显示"等待审批"
+                        var entry = ev.ApprovalId is null
+                            ? null
+                            : toolTrace.LastOrDefault(t => t["approvalId"]?.GetValue<string>() == ev.ApprovalId.ToString());
+                        if (entry is not null) entry["approvalStatus"] = ev.ApprovalStatus;
                         break;
                     }
                     case "error":
@@ -732,7 +788,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
     /// <summary>统一工具执行器：Skill 元工具 → SkillExecutionEngine；MCP 工具 → IMcpDriver；内置工具 → 本地执行器</summary>
     private async Task<McpToolResult> ExecuteToolAsync(UnifiedTool tool, string? args, string traceId, CancellationToken ct,
-        AgentRunRequest request, IReadOnlyList<McpServer> servers, Dictionary<string, Skill> skillByName, string lang, Guid? subAgentModelId)
+        AgentRunRequest request, IReadOnlyList<McpServer> servers, Dictionary<string, Skill> skillByName, string lang, Guid? subAgentModelId, WsContext? wsCtx = null)
     {
         if (tool.IsSkill)
         {
@@ -754,6 +810,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 McpResourcesToolName => await ExecuteMcpResourcesAsync(args, servers, traceId, lang, ct),
                 McpReadResourceToolName => await ExecuteMcpReadResourceAsync(args, servers, traceId, lang, ct),
                 DelegateTaskToolName => await ExecuteDelegateTaskAsync(args, request, subAgentModelId, traceId, lang, ct),
+                // 工作空间工具：仅当会话绑定工作空间且已注入时可用；每次执行重校验角色绑定（权限即时生效）
+                _ when wsCtx is not null && IsWorkspaceTool(tool.Name)
+                    => await ExecuteWorkspaceToolAsync(tool.Name, args, wsCtx, request, traceId, lang, ct),
                 _ => new McpToolResult(false, "", Texts.Get("TOOL_NOT_FOUND", lang, tool.Name), "TOOL_NOT_FOUND", 0, 1),
             };
         }
@@ -764,6 +823,79 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             return new McpToolResult(false, "", Texts.Get("MCP_SERVER_NOT_FOUND", lang), "SERVER_NOT_FOUND", 0, 1);
         }
         return await _mcp.CallToolAsync(server, tool.Name, args, traceId, lang, ct);
+    }
+
+    private static bool IsWorkspaceTool(string name) =>
+        WorkspaceToolCatalog.ReadTools.Contains(name, StringComparer.OrdinalIgnoreCase)
+        || WorkspaceToolCatalog.WriteTools.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 执行 ws_* 工作空间工具（L1 路径沙箱 + L2 Job Object，见 WorkspaceSandbox）。
+    /// 安全刷新：每次执行重新解析用户角色绑定 —— 权限被收回/降级立即生效，不依赖注入时的快照。
+    /// </summary>
+    private async Task<McpToolResult> ExecuteWorkspaceToolAsync(string toolName, string? args, WsContext wsCtx,
+        AgentRunRequest request, string traceId, string lang, CancellationToken ct)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var wsBindings = (await _config.GetRoleWorkspaceBindingsAsync(request.UserId, ct)).ToList();
+        var binding = wsBindings.FirstOrDefault(b => b.WorkspaceId == wsCtx.WorkspaceId);
+        if (binding.WorkspaceId == Guid.Empty)
+        {
+            await _audit.RecordAsync(AuditCategory.Security, "WS.DENIED", traceId, request.UserId,
+                wsCtx.WorkspaceId.ToString(), new { tool = toolName, reason = "binding removed" }, isSuspicious: true, ct: ct);
+            return new McpToolResult(false, "", Texts.Get("WS_NOT_AUTHORIZED", lang), "WS_NOT_AUTHORIZED", (int)sw.ElapsedMilliseconds, 1);
+        }
+        if (binding.Level != wsCtx.Level) wsCtx = wsCtx with { Level = binding.Level }; // 级别即时生效
+
+        var isWrite = WorkspaceToolCatalog.WriteTools.Contains(toolName, StringComparer.OrdinalIgnoreCase);
+        if (isWrite && binding.Level < WorkspaceAccessLevel.WorkspaceWrite)
+        {
+            await _audit.RecordAsync(AuditCategory.Security, "WS.DENIED", traceId, request.UserId,
+                wsCtx.WorkspaceId.ToString(), new { tool = toolName, level = binding.Level.ToString() }, isSuspicious: true, ct: ct);
+            return new McpToolResult(false, "", Texts.Get("WS_DENIED_TOOL", lang, toolName, binding.Level), "WS_DENIED", (int)sw.ElapsedMilliseconds, 1);
+        }
+
+        var result = _workspaces.Execute(wsCtx, toolName, args);
+        var detail = ExtractWsDetail(toolName, args);
+        object? auditDetail;
+        if (result.Ok)
+        {
+            auditDetail = detail;
+        }
+        else
+        {
+            auditDetail = new { baseDetail = detail, error = result.ErrorCode };
+        }
+        await _audit.RecordAsync(AuditCategory.Tool, $"WS.{toolName}", traceId, request.UserId,
+            wsCtx.WorkspaceId.ToString(), auditDetail, ct: ct);
+
+        return new McpToolResult(result.Ok, result.Text, result.Ok ? null : result.Text, result.ErrorCode,
+            (int)sw.ElapsedMilliseconds, 1, Retryable: false);
+    }
+
+    /// <summary>从 ws_* 参数提取审计摘要（path / command，敏感/超长裁剪）</summary>
+    private static object? ExtractWsDetail(string toolName, string? args)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(args)) return new { tool = toolName };
+            var node = System.Text.Json.Nodes.JsonNode.Parse(args);
+            var obj = node as System.Text.Json.Nodes.JsonObject ??
+                      new System.Text.Json.Nodes.JsonObject();
+            var path = obj["path"]?.ToString() ?? "";
+            var command = obj["command"]?.ToString() ?? "";
+            return new
+            {
+                tool = toolName,
+                path = truncate(path, 200),
+                command = string.IsNullOrEmpty(command) ? null : truncate(command, 100),
+                contentLen = obj["content"]?.ToString().Length,
+            };
+        }
+        catch
+        {
+            return new { tool = toolName };
+        }
     }
 
     // ================= 主-从委派（delegate_task → 并行 Sub-Agent） =================

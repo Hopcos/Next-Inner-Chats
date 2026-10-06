@@ -115,21 +115,36 @@ public sealed class MockLlmClient : ILlmClient
             return ("", reasoning, calls);
         }
 
-        // 演示 ReAct：显式触发指定工具（tool:工具名）或危险工具（danger:工具名 → 审批流）
+        // 演示 ReAct：显式触发指定工具（tool:工具名 [可选 JSON 参数]）或危险工具（danger:工具名 → 审批流）
         var trigger = lastUser.Trim();
         if (!hasToolContext &&
             (trigger.StartsWith("tool:", StringComparison.OrdinalIgnoreCase) ||
              trigger.StartsWith("danger:", StringComparison.OrdinalIgnoreCase)))
         {
             var dangerous = trigger.StartsWith("danger:", StringComparison.OrdinalIgnoreCase);
-            var toolName = trigger[(trigger.IndexOf(':') + 1)..].Trim();
+            var rest = trigger[(trigger.IndexOf(':') + 1)..].Trim();
+            var spaceIdx = rest.IndexOf(' ');
+            var toolName = spaceIdx > 0 ? rest[..spaceIdx].Trim() : rest;
             var target = request.Tools?.FirstOrDefault(t => t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
             if (target is not null)
             {
                 reasoning = dangerous
                     ? Texts.Get("MOCK_REASONING_DANGER", _lang)
                     : Texts.Get("MOCK_REASONING_CALL", _lang, toolName);
+                // 显式 JSON 参数透传（ws_* / http_fetch 等需要参数的演示工具）
                 var args = new JsonObject();
+                if (spaceIdx > 0)
+                {
+                    var jsonTail = rest[(spaceIdx + 1)..].Trim();
+                    try
+                    {
+                        if (JsonNode.Parse(jsonTail) is JsonObject jo) args = jo;
+                    }
+                    catch
+                    {
+                        /* 非 JSON 尾部忽略 */
+                    }
+                }
                 switch (toolName.ToLowerInvariant())
                 {
                     case "echo":
@@ -151,18 +166,18 @@ public sealed class MockLlmClient : ILlmClient
                         args["confirm"] = true;
                         break;
                     case "http_fetch":
-                        args["url"] = "https://raw.githubusercontent.com/Hopcos/next-chats/main/README.md";
+                        if (!args.ContainsKey("url")) args["url"] = "https://raw.githubusercontent.com/Hopcos/next-chats/main/README.md";
                         break;
                     case "mcp_prompt":
-                        args["name"] = "code_review";
-                        args["server"] = "Vision";
+                        if (!args.ContainsKey("name")) args["name"] = "code_review";
+                        if (!args.ContainsKey("server")) args["server"] = "Vision";
                         break;
                     case "mcp_resources":
-                        args["server"] = "Vision";
+                        if (!args.ContainsKey("server")) args["server"] = "Vision";
                         break;
                     case "mcp_read_resource":
-                        args["uri"] = "vision://status";
-                        args["server"] = "Vision";
+                        if (!args.ContainsKey("uri")) args["uri"] = "vision://status";
+                        if (!args.ContainsKey("server")) args["server"] = "Vision";
                         break;
                     case "maybe_fail":
                         args["forceFail"] = true;

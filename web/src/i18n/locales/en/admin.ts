@@ -9,6 +9,7 @@ export default {
       skills: 'SKILL',
       users: 'Users',
       roles: 'Roles & Bindings',
+      workspaces: 'Workspaces',
       tools: 'Toolbox',
       internalAuth: 'Internal Auth',
       approvals: 'Approvals',

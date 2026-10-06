@@ -440,9 +440,41 @@ public class ChatSession
     /// <summary>置顶时间（置顶区内按此倒序排列）</summary>
     public DateTimeOffset? PinnedAt { get; set; }
 
+    /// <summary>绑定的工作空间（编码会话用）；null = 普通聊天（行为与以往完全一致）</summary>
+    public Guid? WorkspaceId { get; set; }
+
     public AppUser? User { get; set; }
 
     public List<ChatMessage> Messages { get; set; } = [];
+}
+
+/// <summary>工作空间（服务端本地目录；编码会话绑定后注入 ws_* 工具，按角色绑定的级别强制权限）</summary>
+public class Workspace
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    [Required, MaxLength(128)] public string Name { get; set; } = "";
+
+    /// <summary>工作空间根目录（服务器本地绝对路径，如 D:\workspaces\repoX；全程禁止逃逸该目录）</summary>
+    [Required, MaxLength(512)] public string RootPath { get; set; } = "";
+
+    [MaxLength(512)] public string? Description { get; set; }
+
+    public bool Enabled { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>角色 × 工作空间 绑定（级别在绑定上配置：ReadOnly / WorkspaceWrite / FullAccess）</summary>
+public class RoleWorkspaceBinding
+{
+    public Guid RoleId { get; set; }
+
+    public Guid WorkspaceId { get; set; }
+
+    public WorkspaceAccessLevel Level { get; set; } = WorkspaceAccessLevel.ReadOnly;
 }
 
 /// <summary>聊天消息</summary>

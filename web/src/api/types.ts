@@ -176,6 +176,24 @@ export interface ChatSessionDto {
   /** 置顶（会话排到侧栏顶部的置顶区域） */
   isPinned?: boolean
   pinnedAt?: string | null
+  /** 绑定的工作空间（编码会话；null=普通聊天） */
+  workspaceId?: string | null
+}
+
+/** 工作空间（用户端可见：角色绑定派生级别 10=只读 20=工作空间写 30=完全访问） */
+export interface WorkspaceDto {
+  id: string
+  name: string
+  rootPath: string
+  description?: string | null
+  level: number
+}
+
+/** 目录浏览条目 */
+export interface FsEntryDto {
+  name: string
+  type: 'dir' | 'file'
+  size: number
 }
 
 export interface ChatMessageDto {

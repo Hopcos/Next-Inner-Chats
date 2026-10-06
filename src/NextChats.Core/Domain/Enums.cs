@@ -94,6 +94,22 @@ public enum AuditCategory
     Approval = 6,
 }
 
+/// <summary>工作空间访问级别（角色绑定取值；工具按最小级别放行：只读 10 / 写 20 / 完全 30 / 自主 40）</summary>
+public enum WorkspaceAccessLevel
+{
+    /// <summary>只读：查看/搜索/差异/浏览（ws_info ws_list ws_read ws_grep ws_diff ws_stat ws_browse）</summary>
+    ReadOnly = 10,
+
+    /// <summary>工作空间写：可修改工作空间根目录内文件（+ ws_write ws_edit ws_mkdir ws_delete；ws_exec 仅限工作空间内 cwd 且命令黑名单）</summary>
+    WorkspaceWrite = 20,
+
+    /// <summary>完全访问：额外解锁任意路径读写与任意命令执行（等同以服务用户身份开终端，危险，需管理员显式授权）</summary>
+    FullAccess = 30,
+
+    /// <summary>自主模式：在完全访问基础上跳过所有人工确认（审批自动放行）。管理员默认仍为完全访问，不自动获得自主模式。</summary>
+    Autonomous = 40,
+}
+
 /// <summary>审批动作</summary>
 public enum ApprovalDecision
 {

@@ -35,7 +35,42 @@ const langOptions = [
   { value: 'zh' as AppLang, label: '中文' },
 ]
 
+// ---------- 工作空间选择（编码会话） ----------
+const currentWorkspaceId = computed(() => kernel.session.current?.workspaceId ?? null)
+const wsLevelLabel = (level: number) =>
+  level >= 40
+    ? t('chat.workspaceAuto')
+    : level >= 30
+      ? t('chat.workspaceFull')
+      : level >= 20
+        ? t('chat.workspaceWrite')
+        : t('chat.workspaceReadOnly')
+
+async function onWorkspaceChange(id: string | null | undefined) {
+  const cur = kernel.session.current
+  if (!cur) return
+  const target = id ?? null // 归一化：clear 图标会 emit undefined/'' → 一律视为 null（解绑）
+  // 同值幂等：@change 与 clear 双事件下避免重复处理（重复走确认/重复请求）
+  if (target === (cur.workspaceId ?? null)) return
+  // 解绑工作空间需弹窗确认（避免误触回到普通聊天、丢失工作空间上下文）
+  if (target === null && cur.workspaceId) {
+    const confirmed = await ElMessageBox.confirm(t('chat.workspaceUnbindConfirm'), t('common.confirm'), { type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') })
+      .then(() => true)
+      .catch(() => false)
+    if (!confirmed) return
+  }
+  try {
+    const bound = await kernel.session.setWorkspace(cur.id, target)
+    kernel.notify.success(target ? t('chat.workspaceBound', { name: kernel.session.state.workspaces.find((w) => w.id === target)?.name ?? '' }) : t('chat.workspaceUnbound'))
+    if (bound) void kernel.session.loadWorkspaces().catch(() => {})
+  } catch (err) {
+    kernel.notify.error(t('chat.workspaceBindFailed'))
+    console.error('[chat] setWorkspace failed:', err)
+  }
+}
+
 onMounted(() => {
+  void kernel.session.loadWorkspaces().catch(() => {})
   void (async () => {
     await kernel.session.loadAll().catch(() => {})
     // 首次使用引导：没有任何会话时自动创建一个（否则输入问题后发送会因无可归属会话而不显示）
@@ -188,6 +223,19 @@ function openToolsHub() {
           <template v-else>
             <h2 class="session-title" @dblclick="startRename">{{ current?.title ?? t('common.appName') }}</h2>
           </template>
+          <!-- 工作空间选择（编码会话；仅当用户角色被授予 ≥1 个工作空间时显示） -->
+          <el-select
+            v-if="kernel.session.state.workspaces.length > 0"
+            :model-value="currentWorkspaceId"
+            size="small"
+            class="ws-picker"
+            :placeholder="t('chat.workspaceNone')"
+            clearable
+            @change="onWorkspaceChange"
+          >
+            <el-option :value="null" :label="t('chat.workspaceNone')" />
+            <el-option v-for="w in kernel.session.state.workspaces" :key="w.id" :value="w.id" :label="`${w.name} · ${wsLevelLabel(w.level)}`" />
+          </el-select>
         </div>
 
         <div class="actions">
@@ -333,6 +381,12 @@ function openToolsHub() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ws-picker {
+  margin-left: 10px;
+  max-width: 220px;
+  flex-shrink: 1;
 }
 
 /* 右侧操作区：永不收缩（头像最右永远完整可见可点），并提升层级防被任何覆盖层遮挡 */

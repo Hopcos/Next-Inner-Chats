@@ -24,6 +24,9 @@ public interface IChatStore
     /// <summary>置顶/取消置顶会话（仅本人；置顶成功返回 true）</summary>
     Task<bool> SetSessionPinnedAsync(Guid userId, Guid sessionId, bool pinned, CancellationToken ct = default);
 
+    /// <summary>绑定/解除会话工作空间（仅本人；workspaceId 为 null = 解除 → 普通聊天）</summary>
+    Task<bool> SetSessionWorkspaceAsync(Guid userId, Guid sessionId, Guid? workspaceId, CancellationToken ct = default);
+
     Task DeleteSessionAsync(Guid userId, Guid sessionId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(Guid userId, Guid sessionId, CancellationToken ct = default);

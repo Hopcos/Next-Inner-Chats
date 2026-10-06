@@ -23,6 +23,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
     private readonly ILlmRouter _router;
     private readonly IPolicyEngine _policy;
     private readonly IApprovalCoordinator _approvals;
+    private readonly IAutonomousApprovalPolicy _autonomy;
     private readonly IContextManager _context;
     private readonly IOptions<PolicyOptions> _policyOptions;
     private readonly IOptions<ToolTrimOptions> _trimOptions;
@@ -46,6 +47,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         ILlmRouter router,
         IPolicyEngine policy,
         IApprovalCoordinator approvals,
+        IAutonomousApprovalPolicy autonomy,
         IContextManager context,
         IOptions<PolicyOptions> policyOptions,
         IOptions<ToolTrimOptions> trimOptions,
@@ -54,6 +56,7 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
         _router = router;
         _policy = policy;
         _approvals = approvals;
+        _autonomy = autonomy;
         _context = context;
         _policyOptions = policyOptions;
         _trimOptions = trimOptions;
@@ -232,6 +235,15 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
 
                     if (verdict == PolicyVerdict.RequireApproval)
                     {
+                        // 自主模式（会话绑定工作空间级别=Autonomous）：跳过人工确认，直接自动放行执行
+                        if (await _autonomy.IsAutonomousAsync(request.UserId, request.SessionId, ct))
+                        {
+                            _logger.LogInformation("[AgentLoop] autonomous bypass trace={Trace} tool={Server}.{Tool}", trace, tool.ServerName, tool.Name);
+                            yield return AgentEvent.ToolStart(tool.ServerName, tool.Name, argsJson, false, null, trace, callId);
+                            execs.Add((call, tool, argsJson, callId));
+                            continue;
+                        }
+
                         usage.Approvals++;
                         var approval = await _approvals.CreateAsync(request.UserId, request.SessionId, trace,
                             tool.ServerName, tool.Name, call.Arguments,

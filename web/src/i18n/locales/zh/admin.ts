@@ -9,6 +9,7 @@ export default {
       skills: 'SKILL',
       users: '用户管理',
       roles: '角色与绑定',
+      workspaces: '工作空间',
       tools: '工具栏管理',
       internalAuth: '内部鉴权管理',
       approvals: '审批中心',
