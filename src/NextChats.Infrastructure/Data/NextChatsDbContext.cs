@@ -28,6 +28,7 @@ public sealed class NextChatsDbContext(DbContextOptions<NextChatsDbContext> opti
     public DbSet<AppTool> Tools => Set<AppTool>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<RoleWorkspaceBinding> RoleWorkspaceBindings => Set<RoleWorkspaceBinding>();
+    public DbSet<TeamEngineer> TeamEngineers => Set<TeamEngineer>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -191,6 +192,12 @@ public sealed class NextChatsDbContext(DbContextOptions<NextChatsDbContext> opti
         b.Entity<IdempotencyRecord>(e =>
         {
             e.HasIndex(x => new { x.UserId, x.Key }).IsUnique();
+        });
+
+        // ---------- 团队工程师（会话级） ----------
+        b.Entity<TeamEngineer>(e =>
+        {
+            e.HasIndex(x => x.SessionId);
         });
 
         // ---------- 用户收藏（按用户隔离 + 问题消息去重） ----------

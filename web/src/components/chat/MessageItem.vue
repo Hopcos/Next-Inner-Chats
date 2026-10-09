@@ -6,6 +6,7 @@ import mermaid from 'mermaid'
 import type { ToolCard as ToolCardModel, UiMessage } from '@/kernel/plugins'
 import ToolCard from '@/components/chat/ToolCard.vue'
 import ImageViewer from '@/components/chat/ImageViewer.vue'
+import TeamPanel from '@/components/chat/TeamPanel.vue'
 import { kernel } from '@/kernel'
 import { copyText } from '@/utils/clipboard'
 import { tokenStore } from '@/api/http'
@@ -22,6 +23,9 @@ const { t } = useI18n()
 const thinkingOpen = ref(false)
 
 const isAssistant = computed(() => props.message.role === 'assistant')
+
+/** 团队协作消息（roundsJson 团队形态 → teamRounds；渲染 TeamPanel + 最终正文） */
+const isTeamMessage = computed(() => (props.message.teamRounds?.length ?? 0) > 0)
 
 /** 图片可显示源（与 message.images 一一对应）：持久化 url 经鉴权 fetch → blob objectURL；内存 pending 直接 base64 data-url */
 const loadedSrcs = ref<string[]>([])
@@ -630,7 +634,7 @@ function prettyArgs(raw?: string): string {
            轮布局（roundBoundariesJson 存在）时思考按轮嵌入正文（每轮“思考→工具→输出”），此处整块思考不再渲染；
            否则旧数据（工具卡无轮次信息）保持原布局：思考之后是工具卡，再之后才是正文 -->
       <div
-        v-if="isAssistant && !roundLayoutEnabled && (message.reasoning || message.thinkingOpen || message.contextNotes.length > 0 || (message.status === 'sending' && !message.content) || (!segmentedEnabled && message.tools.length > 0))"
+        v-if="isAssistant && !roundLayoutEnabled && !isTeamMessage && (message.reasoning || message.thinkingOpen || message.contextNotes.length > 0 || (message.status === 'sending' && !message.content) || (!segmentedEnabled && message.tools.length > 0))"
         class="think-block"
       >
         <div class="think-head nc-dim" @click="thinkingOpen = !thinkingOpen">
@@ -668,6 +672,9 @@ function prettyArgs(raw?: string): string {
         />
       </div>
       <ImageViewer :visible="viewerIndex >= 0" :srcs="previewSrcList" :index="Math.max(0, viewerIndex)" @close="viewerIndex = -1" />
+
+      <!-- 团队协作轮次面板（责任方案 → 协助建议 → 评估 → 最终结果；流式中实时增长） -->
+      <TeamPanel v-if="isAssistant && isTeamMessage" :rounds="message.teamRounds ?? []" :running="streamingNow" />
 
       <!-- 正文（打字机揭示 → Markdown + Mermaid；带轮次锚点的新数据按“思考→工具→输出”逐轮展示，
            仅带 outputBefore 的中期数据按“输出段↔工具卡”交替，旧数据整段展示） -->

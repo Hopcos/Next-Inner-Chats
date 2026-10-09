@@ -38,6 +38,7 @@ public sealed class MockLlmClient : ILlmClient
 
     public async Task<LlmResult> CompleteAsync(LlmRequest request, CancellationToken ct)
     {
+        if (Model == "FailOnly") throw new InvalidOperationException("mock forced failure (FailOnly)");
         var sw = Stopwatch.StartNew();
         var (text, reasoning, toolCalls) = Compose(request);
         await Task.Delay(80, ct);
@@ -54,6 +55,8 @@ public sealed class MockLlmClient : ILlmClient
 
     public async IAsyncEnumerable<LlmChunk> StreamAsync(LlmRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
+        // 故障注入（仅演示 provider）：模型名 FailOnly 时始终抛错，用于验证团队失败重试/兜底与恢复
+        if (Model == "FailOnly") throw new InvalidOperationException("mock forced failure (FailOnly)");
         var sw = Stopwatch.StartNew();
         var (text, reasoning, toolCalls) = Compose(request);
 
@@ -94,6 +97,28 @@ public sealed class MockLlmClient : ILlmClient
         var hasToolContext = request.Messages.Count(m => m.Role == "tool") > 0
                              || request.Messages.Any(m => m.ToolCallId is not null);
 
+        // 故障注入（仅演示 provider）：模型名 ToolLoop = 每步都调 http_fetch、从不输出正文，
+        // 用于验证团队工具循环“上限耗尽 → 无工具收尾强制正文”的兜底（真实深度推理模型偶发同样行为）
+        if (Model == "ToolLoop")
+        {
+            var probeTool = request.Tools?.FirstOrDefault(t => t.Name == "http_fetch");
+            if (probeTool is not null)
+            {
+                return ("", Texts.Get("MOCK_REASONING_TOOL", _lang),
+                    [new LlmToolCall($"call_{Guid.NewGuid():N}", "http_fetch", new JsonObject { ["url"] = "https://raw.githubusercontent.com/Hopcos/next-chats/main/README.md" })]);
+            }
+        }
+
+        // 验证“无争议提前结束”的两种路径：显式 [CONSENSUS] 标记 / 自然语言共识表述
+        if (Model == "ConsensusMock")
+        {
+            return ("All suggestions reviewed and incorporated; the plan is final. [CONSENSUS]", "", []);
+        }
+        if (Model == "ConsensusNLMock")
+        {
+            return ("I have reviewed every assistant suggestion. There are no remaining disputes and no further change is needed, so the current plan stands.", "", []);
+        }
+
         var mockTools = request.Tools?.Where(t => t.Name.StartsWith("mock.", StringComparison.Ordinal)).ToList() ?? [];
 
         var reasoning = string.Empty;
@@ -115,14 +140,17 @@ public sealed class MockLlmClient : ILlmClient
             return ("", reasoning, calls);
         }
 
-        // 演示 ReAct：显式触发指定工具（tool:工具名 [可选 JSON 参数]）或危险工具（danger:工具名 → 审批流）
+        // 演示 ReAct：显式触发指定工具（tool:工具名 [可选 JSON 参数]）或危险工具（danger:工具名 → 审批流）。
+        // 团队协作（TeamOrchestrator）工程师内部调用消息固定为 "Proceed."：带工具集时演示一次 http_fetch，
+        // 使团队模式也能端到端验证"工具调用 → 结果回灌 → 继续生成"链路（普通聊天用户消息不会恰好等于 "Proceed."）
         var trigger = lastUser.Trim();
+        var teamToolProbe = !hasToolContext && lastUser == "Proceed." && request.Tools is { Count: > 0 };
         if (!hasToolContext &&
             (trigger.StartsWith("tool:", StringComparison.OrdinalIgnoreCase) ||
-             trigger.StartsWith("danger:", StringComparison.OrdinalIgnoreCase)))
-        {
-            var dangerous = trigger.StartsWith("danger:", StringComparison.OrdinalIgnoreCase);
-            var rest = trigger[(trigger.IndexOf(':') + 1)..].Trim();
+             trigger.StartsWith("danger:", StringComparison.OrdinalIgnoreCase) ||
+             teamToolProbe))
+        {            var dangerous = trigger.StartsWith("danger:", StringComparison.OrdinalIgnoreCase);
+            var rest = teamToolProbe ? "http_fetch" : trigger[(trigger.IndexOf(':') + 1)..].Trim();
             var spaceIdx = rest.IndexOf(' ');
             var toolName = spaceIdx > 0 ? rest[..spaceIdx].Trim() : rest;
             var target = request.Tools?.FirstOrDefault(t => t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));

@@ -178,6 +178,10 @@ export interface ChatSessionDto {
   pinnedAt?: string | null
   /** 绑定的工作空间（编码会话；null=普通聊天） */
   workspaceId?: string | null
+  /** 团队协作模式（该会话按责任-建议-评估迭代执行） */
+  teamMode?: boolean
+  /** 团队配置 JSON：{"maxRounds":2,"parallel":true,"stopOnConsensus":true,"maxParallel":4} */
+  teamConfigJson?: string | null
 }
 
 /** 工作空间（用户端可见：角色绑定派生级别 10=只读 20=工作空间写 30=完全访问） */
@@ -326,6 +330,11 @@ export interface AgentEventDto {
   totalMs?: number
   ocrMs?: number
   model?: string
+  // ---------- 团队协作（team_* 事件） ----------
+  engineerId?: string
+  engineer?: string
+  teamRound?: number
+  teamPhase?: string
 }
 
 export interface ChatSettings {

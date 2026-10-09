@@ -113,9 +113,23 @@ function onBoardConfirm(dataUrl: string) {
   images.value.push({ id: uuid(), fileName: 'board.png', mimeType: 'image/png', dataUrl, base64 })
 }
 
+/** 当前会话团队模式：发送走 责任→建议→评估 团队流水线（普通聊天零影响） */
+const teamMode = computed(() => !!kernel.session.current?.teamMode)
+
 async function send() {
   const content = text.value.trim()
   if ((!content && images.value.length === 0) || streaming.value) return
+  // 团队模式：提问走团队流水线；图片附件暂不支持（后端团队管道为纯 LLM 调用）
+  if (teamMode.value) {
+    if (images.value.length > 0) {
+      kernel.notify.warning(t('chat.teamConfig'))
+      return
+    }
+    text.value = ''
+    expanded.value = false
+    await kernel.chat.sendTeam(content)
+    return
+  }
   const imgs = images.value.map((i) => ({ fileName: i.fileName, mimeType: i.mimeType, base64: i.base64 }))
   text.value = ''
   images.value = []
@@ -173,6 +187,9 @@ function interrupt() {
           <template v-else>
             {{ t('chat.policyHint') }}
           </template>
+          <template v-if="teamMode">
+            <span class="team-badge">👥 {{ t('chat.teamBadge') }}</span>
+          </template>
           <template v-if="visionSupported">
             <el-tooltip :content="t('chat.imagePasteHint')" placement="top">
               <el-button text size="small" type="primary" @click="fileInput?.click()">🖼 {{ t('chat.uploadImage') }}</el-button>
@@ -197,7 +214,9 @@ function interrupt() {
           </span>
         </span>
         <el-button v-if="streaming" type="danger" plain @click="interrupt">■ {{ t('chat.interrupt') }}</el-button>
-        <el-button v-else type="primary" :disabled="noSession || (!text.trim() && images.length === 0)" @click="send">{{ t('chat.send') }}</el-button>
+        <el-button v-else type="primary" :disabled="noSession || (!text.trim() && images.length === 0)" @click="send">
+          <template v-if="teamMode">👥 </template>{{ t('chat.send') }}
+        </el-button>
       </div>
     </div>
   </div>
@@ -315,6 +334,19 @@ function interrupt() {
 .thinking-label {
   font-size: 12px;
   white-space: nowrap;
+}
+
+.team-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--nc-primary);
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--nc-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--nc-primary) 8%, transparent);
 }
 
 .thinking-effort {

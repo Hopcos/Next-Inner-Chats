@@ -59,6 +59,44 @@ export interface RoundSeg {
   tools: ToolCard[]
 }
 
+/**
+ * 团队协作轮段（服务端 RoundsJson 团队形态：[{round, phase, engineerId, engineer, text, thinking, tools}]）：
+ * phase: solution=责任方案 / suggestion=协助建议 / eval=责任评估 / final=最终结果
+ */
+export interface TeamRoundSeg {
+  round: number
+  phase: string
+  engineerId?: string
+  engineer?: string
+  text: string
+  /** 该工程师的推理过程（流式中 team_think_delta 持续累积；思考先于正文） */
+  thinking?: string
+  /** 该工程师本段调用的工具卡（流式中 team_tool_start/team_tool_result 更新；与普通聊天 ToolCard 同结构） */
+  tools: ToolCard[]
+}
+
+/** 团队工程师（会话级配置） */
+export interface TeamEngineerDto {
+  id?: string | null
+  name: string
+  role: number // 1=Responsible, 2=Assistant
+  providerId: string
+  modelId: string
+  displayOrder: number
+  enabled: boolean
+}
+
+export interface TeamConfigDto {
+  enabled: boolean
+  maxRounds: number
+  parallel: boolean
+  stopOnConsensus: boolean
+  maxParallel: number
+  engineers: TeamEngineerDto[]
+}
+
+export type TeamConfigUpsert = Omit<TeamConfigDto, 'engineers'> & { engineers: TeamEngineerDto[] }
+
 export interface UiMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -71,6 +109,8 @@ export interface UiMessage {
    *  存在时按“第 N 轮思考 → 第 N 轮输出 → 第 N 轮工具结果 → 第 N+1 轮思考…”天然顺序展示；
    *  旧数据（无轮结构）回退原布局（思考块 + 工具卡 + 正文交替） */
   rounds: RoundSeg[]
+  /** 团队协作轮段（团队模式消息；与 rounds 互斥：roundsJson 只要含 phase 即归此结构） */
+  teamRounds: TeamRoundSeg[]
   status: UiMessageStatus
   /** 实时流消息（本轮 send 产生）：前端以打字机呈现；历史/重放消息为 false，直接全量显示 */
   live: boolean
@@ -108,6 +148,7 @@ const emptyAssistant = (): UiMessage => ({
   tools: [],
   contextNotes: [],
   rounds: [],
+  teamRounds: [],
   status: 'sending',
   live: true,
   createdAt: Date.now(),
@@ -704,16 +745,34 @@ export class ChatService extends Service {
       /* 忽略 */
     }
     let rounds: RoundSeg[] = []
+    let teamRounds: TeamRoundSeg[] = []
     try {
       if ((m as { roundsJson?: string }).roundsJson) {
         const parsed = JSON.parse((m as { roundsJson?: string }).roundsJson!)
         if (Array.isArray(parsed)) {
-          rounds = parsed.map((r, i) => ({
-            key: 'r' + i,
-            thinking: typeof (r as Record<string, unknown>)['thinking'] === 'string' ? (r as Record<string, string>)['thinking'] : '',
-            content: typeof (r as Record<string, unknown>)['content'] === 'string' ? (r as Record<string, string>)['content'] : '',
-            tools: Array.isArray((r as Record<string, unknown>)['tools']) ? ((r as Record<string, unknown[]>)['tools']).map((raw, k) => this.normalizeToolTrace(raw, k)) : [],
-          }))
+          const first = parsed[0] as Record<string, unknown> | undefined
+          // 团队协作形态：[{round, phase, engineerId, engineer, text}]；普通形态：{thinking, content, tools}
+          if (first && typeof first['phase'] === 'string') {
+            teamRounds = parsed.map((r) => {
+              const row = r as Record<string, unknown>
+              return {
+                round: typeof row['round'] === 'number' ? (row['round'] as number) : 0,
+                phase: String(row['phase'] ?? ''),
+                engineerId: typeof row['engineerId'] === 'string' ? (row['engineerId'] as string) : undefined,
+                engineer: typeof row['engineer'] === 'string' ? (row['engineer'] as string) : undefined,
+                text: typeof row['text'] === 'string' ? (row['text'] as string) : '',
+                thinking: typeof row['thinking'] === 'string' ? (row['thinking'] as string) : '',
+                tools: Array.isArray(row['tools']) ? (row['tools'] as unknown[]).map((raw, k) => this.normalizeToolTrace(raw, k)) : [],
+              }
+            })
+          } else {
+            rounds = parsed.map((r, i) => ({
+              key: 'r' + i,
+              thinking: typeof (r as Record<string, unknown>)['thinking'] === 'string' ? (r as Record<string, string>)['thinking'] : '',
+              content: typeof (r as Record<string, unknown>)['content'] === 'string' ? (r as Record<string, string>)['content'] : '',
+              tools: Array.isArray((r as Record<string, unknown>)['tools']) ? ((r as Record<string, unknown[]>)['tools']).map((raw, k) => this.normalizeToolTrace(raw, k)) : [],
+            }))
+          }
         }
       }
     } catch {
@@ -785,6 +844,7 @@ export class ChatService extends Service {
       tools,
       contextNotes: [],
       rounds,
+      teamRounds,
       status: (m.status === 'Complete' ? 'complete' : m.status === 'Stopped' ? 'stopped' : m.status === 'Failed' ? 'failed' : 'sending') as UiMessageStatus,
       live: false,
       model: m.model,
@@ -838,6 +898,7 @@ export class ChatService extends Service {
       tools: [],
       contextNotes: [],
       rounds: [],
+      teamRounds: [],
       status: 'complete',
       live: false,
       images,
@@ -916,6 +977,266 @@ export class ChatService extends Service {
     pending = list[list.length - 1] as UiMessage
     this.state.activeMessageId = pending.id
     await this.runStream(sid, pending, text, undefined, undefined, clientMessageId, topicId)
+  }
+
+  // ================= 团队协作（Team Review） =================
+
+  /** 读取会话团队配置（含工程师；会话不存在/请求失败返回 null） */
+  async fetchTeamConfig(sid: string): Promise<TeamConfigDto | null> {
+    try {
+      const cfg = await http.get<TeamConfigDto>(`/api/chat/sessions/${sid}/team`)
+      if (!cfg || !Array.isArray(cfg.engineers)) return null
+      return cfg
+    } catch {
+      return null
+    }
+  }
+
+  /** 保存会话团队配置（整体替换工程师；成功时同步本地会话 teamMode） */
+  async saveTeamConfig(sid: string, cfg: TeamConfigUpsert): Promise<TeamConfigDto> {
+    const dto = await http.put<TeamConfigDto>(`/api/chat/sessions/${sid}/team`, cfg)
+    const sessionService = this.ctx.get('session') as SessionService
+    const session = sessionService.state.sessions.find((s) => s.id === sid)
+    if (session) {
+      session.teamMode = dto.enabled
+      session.teamConfigJson = JSON.stringify({
+        maxRounds: dto.maxRounds,
+        parallel: dto.parallel,
+        stopOnConsensus: dto.stopOnConsensus,
+        maxParallel: dto.maxParallel,
+      })
+    }
+    return dto
+  }
+
+  /** 团队协作发送：用户提问走 责任→建议（并行隔离）→评估 迭代（仅团队模式会话使用） */
+  async sendTeam(text: string) {
+    const sessionService = this.ctx.get('session') as SessionService
+    const session = await sessionService.ensureSession()
+    const list = this.messagesOf(session.id)
+
+    const userMsg: UiMessage = {
+      id: uid(),
+      role: 'user',
+      content: text,
+      reasoning: '',
+      thinkingOpen: false,
+      tools: [],
+      contextNotes: [],
+      rounds: [],
+      teamRounds: [],
+      status: 'complete',
+      live: false,
+      createdAt: Date.now(),
+    }
+    const clientMessageId = uid()
+    let pending = emptyAssistant()
+    pending.clientMessageId = clientMessageId
+    list.push(userMsg, pending)
+    pending = list[list.length - 1] as UiMessage
+    this.state.activeMessageId = pending.id
+
+    // 首次消息自动命名会话
+    if (!session.title) {
+      const title = text.replace(/\s+/g, ' ').slice(0, 20)
+      if (title) {
+        session.title = title
+        void sessionService.rename(session.id, title).catch(() => undefined)
+      }
+    }
+
+    await this.runTeamStream(session.id, pending, text, clientMessageId)
+  }
+
+  /** 团队流式主体：消费 team_* SSE 事件（结束/失败后同样刷新历史，保证持久化一致） */
+  private async runTeamStream(sid: string, pending: UiMessage, text: string, clientMessageId?: string) {
+    const controller = new AbortController()
+    this.controllers.set(sid, controller)
+    this.markStreaming(sid, true)
+
+    const onEvent = (ev: Record<string, unknown>) => this.applyTeamEvent(sid, pending, ev as unknown as AgentEventDto)
+
+    try {
+      await streamPost(
+        `/api/chat/sessions/${sid}/team/stream`,
+        { message: text, clientMessageId },
+        onEvent,
+        controller.signal,
+      )
+      if (pending.status === 'sending') pending.status = 'complete'
+    } catch (err) {
+      const isAbort = (err as { name?: string })?.name === 'AbortError'
+      if (isAbort) {
+        pending.status = 'stopped'
+      } else {
+        pending.status = 'failed'
+        const e = err as { code?: string; message?: string }
+        ;(this.ctx.get('notify') as NotifyService).error(translateError(e.code, e.message ?? ''), e.code)
+      }
+    } finally {
+      this.markStreaming(sid, false)
+      this.controllers.delete(sid)
+      this.state.activeMessageId = null
+      pending.live = false
+      const sessionService = this.ctx.get('session') as SessionService
+      if (sessionService.state.currentId === sid) {
+        this.historyLoaded.delete(sid)
+        void this.loadHistory(sid)
+      }
+    }
+  }
+
+  /** 定位团队事件所属段（同轮+同阶段+同工程师，向后查找 —— 并行建议流交错时也能归位） */
+  private findTeamSeg(ev: AgentEventDto, proxied: UiMessage): TeamRoundSeg | undefined {
+    const segs = proxied.teamRounds
+    if (!Array.isArray(segs)) return undefined
+    const round = ev.teamRound ?? 0
+    const phase = ev.teamPhase ?? ''
+    const engId = ev.engineerId ?? undefined
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const s = segs[i]
+      if (s.round === round && s.phase === phase && (s.engineerId ?? undefined) === engId) return s
+    }
+    return undefined
+  }
+
+  private applyTeamEvent(sessionId: string, pending: UiMessage, ev: AgentEventDto) {    const list = this.state.messages[sessionId]
+    const proxied =
+      Array.isArray(list) && list.some((m) => m.id === pending.id || m.clientMessageId === pending.clientMessageId)
+        ? (list.find((m) => m.id === pending.id || m.clientMessageId === pending.clientMessageId) as UiMessage)
+        : pending
+    switch (ev.kind) {
+      case 'team_start':
+        if (!Array.isArray(proxied.teamRounds)) proxied.teamRounds = []
+        else proxied.teamRounds.length = 0
+        break
+      case 'team_text':
+        proxied.teamRounds.push({
+          round: ev.teamRound ?? 0,
+          phase: ev.teamPhase ?? '',
+          engineerId: ev.engineerId ?? undefined,
+          engineer: ev.engineer ?? undefined,
+          text: ev.text ?? '',
+          thinking: '',
+          tools: [],
+        })
+        break
+      case 'team_think_delta': {
+        // 推理过程增量：追加到同轮+同阶段+同工程师的段（并行流可能交错，向后查找）
+        const segs = proxied.teamRounds
+        const round = ev.teamRound ?? 0
+        const phase = ev.teamPhase ?? ''
+        const engId = ev.engineerId ?? undefined
+        const delta = ev.text ?? ''
+        if (Array.isArray(segs)) {
+          let target: TeamRoundSeg | undefined
+          for (let i = segs.length - 1; i >= 0; i--) {
+            const s = segs[i]
+            if (s.round === round && s.phase === phase && (s.engineerId ?? undefined) === engId) {
+              target = s
+              break
+            }
+          }
+          if (target) target.thinking = (target.thinking ?? '') + delta
+          else segs.push({ round, phase, engineerId: engId, engineer: ev.engineer ?? undefined, text: '', thinking: delta, tools: [] })
+        }
+        break
+      }
+      case 'team_tool_start': {
+        // 工程师工具调用开始：在对应段追加一张 running 工具卡（与普通聊天 tool_start 同结构）
+        const seg = this.findTeamSeg(ev, proxied)
+        if (seg) {
+          const card: ToolCard = {
+            key: `${seg.round}:${seg.phase}:${seg.engineerId ?? seg.engineer ?? ''}.${ev.toolCallId ?? seg.tools.length}`,
+            serverName: ev.serverName,
+            toolName: ev.toolName ?? 'tool',
+            argumentsJson: ev.argumentsJson,
+            status: 'running',
+            callId: ev.toolCallId ?? 0,
+          }
+          seg.tools.push(card)
+        }
+        break
+      }
+      case 'team_tool_result': {
+        // 工具调用结果（成功/失败统一事件）：更新对应段内匹配的工具卡
+        const seg = this.findTeamSeg(ev, proxied)
+        if (seg) {
+          const card = seg.tools.find((t) => t.status === 'running' && t.callId === ev.toolCallId)
+            ?? seg.tools[seg.tools.length - 1]
+          if (card) {
+            card.status = ev.success ? 'ok' : 'error'
+            card.resultPreview = ev.resultPreview
+            card.errorCode = ev.errorCode
+            card.durationMs = ev.durationMs
+          }
+        }
+        break
+      }
+      case 'team_delta': {
+        // 流式增量：找同轮+同阶段+同工程师的最近一段追加；并行流可能交错，向后查找
+        const segs = proxied.teamRounds
+        const round = ev.teamRound ?? 0
+        const phase = ev.teamPhase ?? ''
+        const engId = ev.engineerId ?? undefined
+        const delta = ev.text ?? ''
+        if (Array.isArray(segs)) {
+          let target: TeamRoundSeg | undefined
+          for (let i = segs.length - 1; i >= 0; i--) {
+            const s = segs[i]
+            if (s.round === round && s.phase === phase && (s.engineerId ?? undefined) === engId) {
+              target = s
+              break
+            }
+          }
+          if (target) target.text += delta
+          else segs.push({ round, phase, engineerId: engId, engineer: ev.engineer ?? undefined, text: delta, thinking: '', tools: [] })
+        }
+        break
+      }
+      case 'team_end':
+        proxied.content = ev.text ?? ''
+        break
+      case 'message_done':
+        if (ev.messageId) proxied.id = ev.messageId
+        break
+      case 'done': {
+        proxied.status = 'complete'
+        proxied.model = ev.model
+        if (ev.totalTokens != null) {
+          proxied.usage = {
+            promptTokens: ev.promptTokens ?? 0,
+            completionTokens: ev.completionTokens ?? 0,
+            reasoningTokens: ev.reasoningTokens ?? 0,
+            cacheTokens: ev.cacheTokens ?? 0,
+            totalTokens: ev.totalTokens ?? 0,
+            rounds: ev.rounds ?? 0,
+            tools: ev.toolCalls ?? 0,
+            cost: ev.cost ?? 0,
+            ttftMs: ev.ttftMs ?? 0,
+            totalMs: ev.totalMs ?? 0,
+            ocrMs: ev.ocrMs ?? 0,
+            subAgentCount: ev.subAgentCount ?? 0,
+            subAgentInputTokens: ev.subAgentInputTokens ?? 0,
+            subAgentOutputTokens: ev.subAgentOutputTokens ?? 0,
+            plannerInputTokens: ev.plannerInputTokens ?? 0,
+            plannerOutputTokens: ev.plannerOutputTokens ?? 0,
+          }
+        }
+        break
+      }
+      case 'error': {
+        if (ev.code === 'INTERRUPTED') {
+          proxied.status = 'stopped'
+        } else {
+          proxied.status = 'failed'
+          ;(this.ctx.get('notify') as NotifyService).error(ev.message ?? i18n.global.t('err.UNKNOWN'), ev.code)
+        }
+        break
+      }
+      default:
+        break
+    }
   }
 
   /** 流式主体：推送 pending 回复并消费 SSE 事件（send 与 regenerate 共用） */

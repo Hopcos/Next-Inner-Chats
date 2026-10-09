@@ -11,7 +11,7 @@ namespace NextChats.Infrastructure.Data;
 /// 统一数据存储（单例）：基于 IDbContextFactory（EF Core 池化），内存缓存高频配置；
 /// 后续可平滑迁移到 Redis 缓存 + MySQL 实例（同一接口）。
 /// </summary>
-public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore
+public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITeamStore
 {
     private readonly IDbContextFactory<NextChatsDbContext> _db;
     private readonly ICacheService _cache;
@@ -356,6 +356,9 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore
         row.LlmProviderId = session.LlmProviderId;
         row.IsPinned = session.IsPinned;
         row.PinnedAt = session.PinnedAt;
+        row.WorkspaceId = session.WorkspaceId;
+        row.TeamMode = session.TeamMode;
+        row.TeamConfigJson = session.TeamConfigJson;
         await db.SaveChangesAsync(ct);
     }
 
@@ -398,6 +401,7 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore
         await using var db = await _db.CreateDbContextAsync(ct);
         var session = await db.ChatSessions.FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct);
         if (session is null) return;
+        await db.TeamEngineers.Where(e => e.SessionId == sessionId).ExecuteDeleteAsync(ct);
         db.ChatSessions.Remove(session);
         await db.SaveChangesAsync(ct);
     }
@@ -1229,6 +1233,29 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore
         if (isAdmin) return all;
         // 普通用户：仅显示绑定了其任一角色的工具（未绑定 = 不可见）
         return all.Where(t => t.AllowedRoles.Any(r => roleIds.Contains(r.Id))).ToList();
+    }
+
+    // ---------------- 团队协作（会话级工程师） ----------------
+
+    public async Task<IReadOnlyList<TeamEngineer>> ListTeamEngineersAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        await using var db = await _db.CreateDbContextAsync(ct);
+        return await db.TeamEngineers.AsNoTracking()
+            .Where(e => e.SessionId == sessionId)
+            .OrderBy(e => e.DisplayOrder)
+            .ThenBy(e => e.CreatedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task SaveTeamEngineersAsync(Guid sessionId, IReadOnlyList<TeamEngineer> engineers, CancellationToken ct = default)
+    {
+        await using var db = await _db.CreateDbContextAsync(ct);
+        await db.TeamEngineers.Where(e => e.SessionId == sessionId).ExecuteDeleteAsync(ct);
+        if (engineers.Count > 0)
+        {
+            db.TeamEngineers.AddRange(engineers);
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     // ---------------- 辅助 ----------------

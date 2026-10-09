@@ -18,7 +18,8 @@ public sealed class ChatController(
     ISessionCancellationRegistry cancellations,
     NextChats.Core.Abstractions.IConfigStore config,
     IAuditLogger audit,
-    NextChats.Api.Services.ChatImageStorage images) : ApiControllerBase
+    NextChats.Api.Services.ChatImageStorage images,
+    ITeamOrchestrator team) : ApiControllerBase
 {
     private static readonly JsonSerializerOptions SseJson = new()
     {
@@ -249,6 +250,94 @@ public sealed class ChatController(
         var session = await chat.GetSessionAsync(UserId, sessionId);
         if (session is null) return NotFound(Err("SESSION_NOT_FOUND"));
         return Ok(await chat.ListTopicsAsync(UserId, sessionId, HttpContext.RequestAborted));
+    }
+
+    // ---------------- 团队协作（责任工程师 + 协助工程师迭代；不影响普通聊天） ----------------
+
+    /// <summary>读取会话团队配置（工程师 + 参数）</summary>
+    [HttpGet("sessions/{sessionId:guid}/team")]
+    public async Task<IActionResult> TeamConfig(Guid sessionId)
+    {
+        var cfg = await team.GetConfigAsync(UserId, sessionId, HttpContext.RequestAborted);
+        return cfg is null ? NotFound(Err("SESSION_NOT_FOUND")) : Ok(cfg);
+    }
+
+    public sealed record TeamEngineerInput(string? Id, string Name, int Role, Guid ProviderId, Guid ModelId, int DisplayOrder, bool Enabled);
+
+    public sealed record TeamConfigInput(bool Enabled, int MaxRounds, bool Parallel, bool StopOnConsensus, int MaxParallel, List<TeamEngineerInput>? Engineers);
+
+    /// <summary>保存会话团队配置（整体替换工程师；校验模型可用/角色绑定）</summary>
+    [HttpPut("sessions/{sessionId:guid}/team")]
+    public async Task<IActionResult> SaveTeamConfig(Guid sessionId, [FromBody] TeamConfigInput? req)
+    {
+        if (req is null) return BadRequest(Err("TEAM_CONFIG_INVALID"));
+        try
+        {
+            var dto = await team.SaveConfigAsync(UserId, sessionId, new TeamConfigUpsert(
+                req.Enabled, req.MaxRounds, req.Parallel, req.StopOnConsensus, req.MaxParallel,
+                req.Engineers?.Select(e => new TeamEngineerDto(
+                    e.Id is null ? null : Guid.TryParse(e.Id, out var g) ? g : null,
+                    e.Name, e.Role, e.ProviderId, e.ModelId, e.DisplayOrder, e.Enabled)).ToList()),
+                HttpContext.RequestAborted);
+            return Ok(dto);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(Err("SESSION_NOT_FOUND"));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(Err(string.IsNullOrWhiteSpace(ex.Message) ? "TEAM_CONFIG_INVALID" : ex.Message));
+        }
+    }
+
+    public sealed record TeamStreamBody(string? Message, string? ClientMessageId);
+
+    /// <summary>团队协作流式执行（责任-建议-评估迭代，SSE）</summary>
+    [HttpPost("sessions/{sessionId:guid}/team/stream")]
+    public async Task TeamStream(Guid sessionId, [FromBody] TeamStreamBody? body)
+    {
+        if (body is null || string.IsNullOrWhiteSpace(body.Message))
+        {
+            await WriteSse(AgentEvent.Error("EMPTY_MESSAGE", Texts.Get("EMPTY_MESSAGE", Lang), ""));
+            await WriteSse(new { kind = "end" });
+            return;
+        }
+
+        Response.Headers.Append("Cache-Control", "no-cache");
+        Response.Headers.Append("Connection", "keep-alive");
+        Response.Headers.Append("X-Accel-Buffering", "no");
+        Response.ContentType = "text/event-stream; charset=utf-8";
+
+        var req = new TeamStreamRequest
+        {
+            UserId = UserId,
+            SessionId = sessionId,
+            UserInput = body.Message,
+            ClientMessageId = body.ClientMessageId,
+            Lang = Lang,
+        };
+
+        try
+        {
+            await foreach (var ev in team.StreamAsync(req, HttpContext.RequestAborted))
+            {
+                await WriteSse(ev);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            await WriteSse(AgentEvent.Error("INTERRUPTED", Texts.Get("INTERRUPTED", Lang), ""));
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Team stream 异常 TraceId={TraceId}", HttpContext.TraceIdentifier);
+            await WriteSse(AgentEvent.Error("STREAM_ERROR", Texts.Get("STREAM_ERROR", Lang), ""));
+        }
+        finally
+        {
+            await WriteSse(new { kind = "end" });
+        }
     }
 
     // ---------------- 流式对话（SSE） ----------------

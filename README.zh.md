@@ -394,6 +394,17 @@ sequenceDiagram
 - **Prompt 构建**：模板引擎（`{{var}}` / `#if` / `#each` / `#section`）渲染系统提示。
 - **ReAct 循环（AgentLoopEngine）**：生产者-消费者 Channel 架构；LLM 流式事件与循环主流程解耦，可安全中断。
 
+### 团队协作（TeamOrchestrator）
+- **执行模型**：每条团队消息按「责任工程师产出方案 → 协助工程师并行/串行独立建议（互不感知）→ 责任工程师评估并产出下一轮方案（共识即收敛）→ 终轮汇总」迭代，最多 `maxRounds` 轮。
+- **SSE 编排**：单 Channel 生产/消费解耦，事件带 `round/phase/engineerId` 归属：`team_start → team_round → team_text（开段）→ team_think_delta（思考增量）→ team_tool_start/team_tool_result（工具调用）→ team_delta（正文增量）→ team_end → end`；并行建议流交错时按「同轮+同阶段+同工程师」归位到对应折叠段（Round / 参与者双折叠）。
+- **工具循环（与普通聊天同口径）**：工程师调用携带与普通聊天一致的工具集（设置勾选 MCP/技能 ∩ 角色绑定 ∩ 内置 `http_fetch`/`mcp_*` ∩ 会话工作空间 `ws_*`），模型可多步决策：思考实时展示 → 发起工具调用（团队场景无审批，等同 Autonomous 直接执行）→ 结果回灌 `messages` 继续决策 → 直接输出正文为止；工具卡事件与普通聊天同一 `ToolCard` 组件、同一 toolTrace 持久化结构。
+- **工具循环兜底**：单次工程师调用上限 8 个工具决策步；若模型持续调工具而始终未输出正文（深度推理模型偶发），自动追加一次**无工具收尾调用**强制基于已有工具结果直接作答，避免「空方案」；跨步思考累积展示，正文实时下发。
+- **无争议提前结束（stopOnConsensus）**：评估阶段判定共识后提前收敛（不再进入下一轮）。共识检测为**双通道**：`[CONSENSUS]` 显式标记，或输出末尾区域的自然语言共识表述（"no remaining dispute / 达成一致 / 无异议…"，仅检查结尾避免"部分同意但仍有异议"误判）。
+- **失败容错**：方案/建议/评估/终稿任一调用失败（网关瞬断）或空回复自动重试一次，重试成功的 token/费用全部计入；仍失败才落 `TEAM_*_FAIL`，失败原因作为占位内容持久化（刷新可见），会话可继续提问、不中断。
+- **配置语义**：关闭团队模式允许工程师列表为空/模型暂缺（配置保留供下次启用复用，不做完整性校验）；仅**启用**时严格校验（责任 1 人 + 至少 1 协助 + 名称查重 + 模型可用/角色绑定）。
+- **Token / 耗时口径**：TTFT = 每段真实首 token（思考/正文首增量）时延；总耗时 = 各段墙钟累加；`ReasoningTokens` 独立字段（前端明细面板展示），费用计算**含推理 token**（按输出单价）；`RoundsJson` 每段持久化 `text/thinking/tools`（工具轨迹同普通聊天），历史重放即渲染。
+- **工程师模型要求**：思考模式开启（`ThinkingEnabled/EnableReasoning`，强度 Medium），推理增量以 `team_think_delta` 下发并持久化，可折叠展示。
+
 ### 引擎（Core）
 - **LLM Router**：多供应商优先级 + 轮询 + 故障转移（mark-unhealthy 熔断），OpenAI 兼容 / Mock 双客户端。
 - **MCP 驱动**：严格最新 MCP 规范（引用 [MCP 2026-07 修订](https://blog.modelcontextprotocol.io/posts/2026-07-28/)）；连接池复用；调用重试（指数退避）；

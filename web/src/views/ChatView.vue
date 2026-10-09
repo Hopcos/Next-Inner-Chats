@@ -11,17 +11,21 @@ import SessionSidebar from '@/components/chat/SessionSidebar.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatInputBar from '@/components/chat/ChatInputBar.vue'
 import ChatSettingsDrawer from '@/components/chat/ChatSettingsDrawer.vue'
+import TeamConfigDrawer from '@/components/chat/TeamConfigDrawer.vue'
 import MusicPlayer from '@/components/chat/MusicPlayer.vue'
 
 const router = useRouter()
 const { t } = useI18n()
 const drawerOpen = ref(false)
+const teamDrawerOpen = ref(false)
 const editingTitle = ref(false)
 const titleDraft = ref('')
 let fallbackTimer: number | undefined
 
 const current = computed(() => kernel.session.current)
 const user = computed(() => kernel.auth.state.user)
+/** 当前会话团队模式标识（顶栏徽标 + 发送通道切换） */
+const currentTeamMode = computed(() => !!kernel.session.current?.teamMode)
 const messages = computed(() => kernel.chat.messagesOf(kernel.session.state.currentId))
 /** 全量话题索引（话题导航条渲染） */
 const topics = computed(() => kernel.chat.state.topics[kernel.session.state.currentId ?? ''] ?? [])
@@ -230,7 +234,10 @@ function openToolsHub() {
             <el-input v-model="titleDraft" size="small" style="width: 280px" @keyup.enter="commitRename" @blur="commitRename" />
           </template>
           <template v-else>
-            <h2 class="session-title" @dblclick="startRename">{{ current?.title ?? t('common.appName') }}</h2>
+            <h2 class="session-title" @dblclick="startRename">
+              {{ current?.title ?? t('common.appName') }}
+              <span v-if="currentTeamMode" class="team-chip" :title="t('chat.teamConfig')">👥 {{ t('chat.teamBadge') }}</span>
+            </h2>
           </template>
           <!-- 工作空间选择（编码会话；仅当用户角色被授予 ≥1 个工作空间时显示）。
                自绘 dropdown 触发器：绑定后触发器恒以正常文字展示“工作空间名 · 级别”，
@@ -278,6 +285,17 @@ function openToolsHub() {
               <button class="toolbar-entry" :aria-label="t('chat.favorites')" @click="router.push('/favorites')">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="m12 3.5 2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.85 6.75 19.6l1-5.85L3.5 9.65l5.9-.85L12 3.5Z" />
+                </svg>
+              </button>
+            </el-tooltip>
+
+            <el-tooltip :content="t('chat.teamConfig')" placement="bottom">
+              <button class="toolbar-entry" :class="{ active: currentTeamMode || teamDrawerOpen }" :aria-label="t('chat.teamConfig')" @click="teamDrawerOpen = true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="9" cy="8" r="3.2" />
+                  <path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" />
+                  <circle cx="17" cy="9" r="2.4" />
+                  <path d="M15.6 14.8c2.2.3 4 1.6 4.7 4" />
                 </svg>
               </button>
             </el-tooltip>
@@ -358,6 +376,7 @@ function openToolsHub() {
       <ChatInputBar />
 
       <ChatSettingsDrawer v-model="drawerOpen" />
+      <TeamConfigDrawer v-model="teamDrawerOpen" :session-id="kernel.session.state.currentId" />
     </main>
   </div>
 </template>
@@ -405,6 +424,22 @@ function openToolsHub() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 团队模式徽标（紧贴会话标题） */
+.team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 2px;
+  color: var(--nc-primary);
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--nc-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--nc-primary) 8%, transparent);
 }
 
 .ws-picker {
@@ -523,6 +558,12 @@ function openToolsHub() {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-primary) 15%, transparent);
 }
 
+.toolbar-entry.active {
+  color: var(--nc-primary);
+  border-color: color-mix(in srgb, var(--nc-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--nc-primary) 12%, transparent);
+}
+
 /* 窄窗口自适应：actions 固定总宽约 790px 时，最右的头像下拉会被推出视口右侧，
    导致整块区域悬停/点击失效（指针不变、点了没反应；缩小页面后视口变宽才恢复）。
    这里按宽度分级压缩次要控件，保证头像始终落在视口内。 */
@@ -557,8 +598,8 @@ function openToolsHub() {
     display: none;
   }
 
-  .icon-actions .toolbar-entry:nth-child(3),
-  .icon-actions .toolbar-entry:nth-child(4) {
+  .icon-actions .toolbar-entry:nth-child(4),
+  .icon-actions .toolbar-entry:nth-child(5) {
     display: none;
   }
 

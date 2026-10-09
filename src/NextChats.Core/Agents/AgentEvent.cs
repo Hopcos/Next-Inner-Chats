@@ -83,6 +83,20 @@ public sealed class AgentEvent
 
     public JsonUsage? Usage { get; init; }
 
+    // ---------- 团队协作（team_* 事件） ----------
+
+    /// <summary>工程师 Id（会话级 TeamEngineer.Id）</summary>
+    public Guid? EngineerId { get; init; }
+
+    /// <summary>工程师名称（责任/协助工程师展示名）</summary>
+    public string? Engineer { get; init; }
+
+    /// <summary>团队轮次（1-based）</summary>
+    public int? TeamRound { get; init; }
+
+    /// <summary>团队阶段：solution=责任方案 / suggestion=协助建议 / eval=责任评估 / final=最终结果</summary>
+    public string? TeamPhase { get; init; }
+
     public static AgentEvent ThinkingStart(string traceId) => new() { Kind = "thinking_start", TraceId = traceId };
 
     public static AgentEvent ThinkingDelta(string text, string traceId) => new() { Kind = "thinking_delta", Text = text, TraceId = traceId };
@@ -127,6 +141,56 @@ public sealed class AgentEvent
         SubAgentCount = usage.SubAgentCount, SubAgentInputTokens = usage.SubAgentInputTokens, SubAgentOutputTokens = usage.SubAgentOutputTokens,
         PlannerInputTokens = usage.PlannerInputTokens, PlannerOutputTokens = usage.PlannerOutputTokens,
         Model = model,
+    };
+
+    // ---------- 团队协作事件 ----------
+
+    public static AgentEvent TeamStart(int maxRounds, string responsible, int assistantCount, bool parallel, string traceId) => new()
+    {
+        Kind = "team_start", TeamRound = 0, TraceId = traceId, Text = $"{responsible} (responsible) + {assistantCount} assistant(s), up to {maxRounds} round(s)",
+        Engineer = responsible, TeamPhase = "start", EngineerId = null,
+    };
+
+    public static AgentEvent TeamRoundStart(int round, string traceId) => new() { Kind = "team_round", TeamRound = round, TraceId = traceId };
+
+    public static AgentEvent TeamText(int round, string phase, Guid engineerId, string engineer, string text, string traceId) => new()
+    {
+        Kind = "team_text", TeamRound = round, TeamPhase = phase, EngineerId = engineerId, Engineer = engineer, Text = text, TraceId = traceId,
+    };
+
+    /// <summary>团队轮次文本增量（流式：同 round+phase+engineerId 的 team_text 段持续追加）</summary>
+    public static AgentEvent TeamDelta(int round, string phase, Guid engineerId, string engineer, string text, string traceId) => new()
+    {
+        Kind = "team_delta", TeamRound = round, TeamPhase = phase, EngineerId = engineerId, Engineer = engineer, Text = text, TraceId = traceId,
+    };
+
+    /// <summary>团队轮次思考增量（流式：该工程师的推理过程，位于 team_text 开段之前/期间）</summary>
+    public static AgentEvent TeamThinkDelta(int round, string phase, Guid engineerId, string engineer, string text, string traceId) => new()
+    {
+        Kind = "team_think_delta", TeamRound = round, TeamPhase = phase, EngineerId = engineerId, Engineer = engineer, Text = text, TraceId = traceId,
+    };
+
+    /// <summary>团队工程师工具调用开始（前端归位到对应段渲染工具卡；与普通聊天 tool_start 同字段 + 团队归属）</summary>
+    public static AgentEvent TeamToolStart(int round, string phase, Guid engineerId, string engineer,
+        string server, string tool, string? args, string traceId, int toolCallId) => new()
+    {
+        Kind = "team_tool_start", TeamRound = round, TeamPhase = phase, EngineerId = engineerId, Engineer = engineer,
+        ServerName = server, ToolName = tool, ArgumentsJson = args, TraceId = traceId, ToolCallId = toolCallId,
+        ApprovalStatus = null,
+    };
+
+    /// <summary>团队工程师工具调用结果（成功/失败统一事件；前端更新对应工具卡状态）</summary>
+    public static AgentEvent TeamToolResult(int round, string phase, Guid engineerId, string engineer,
+        string server, string tool, bool success, string? preview, string? errorCode, int durationMs, string traceId, int toolCallId) => new()
+    {
+        Kind = "team_tool_result", TeamRound = round, TeamPhase = phase, EngineerId = engineerId, Engineer = engineer,
+        ServerName = server, ToolName = tool, Success = success, ResultPreview = preview,
+        ErrorCode = errorCode, DurationMs = durationMs, TraceId = traceId, ToolCallId = toolCallId,
+    };
+
+    public static AgentEvent TeamEnd(string finalText, decimal cost, string traceId) => new()
+    {
+        Kind = "team_end", Text = finalText, Cost = cost, TraceId = traceId,
     };
 }
 

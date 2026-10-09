@@ -33,6 +33,7 @@ public static class InfrastructureExtensions
         services.AddSingleton<IConfigStore>(sp => sp.GetRequiredService<NextChatsStore>());
         services.AddSingleton<IChatStore>(sp => sp.GetRequiredService<NextChatsStore>());
         services.AddSingleton<IAdminStore>(sp => sp.GetRequiredService<NextChatsStore>());
+        services.AddSingleton<ITeamStore>(sp => sp.GetRequiredService<NextChatsStore>());
 
         // ---------- HTTP ----------
         services.AddHttpClient();
@@ -54,6 +55,9 @@ public static class InfrastructureExtensions
         services.AddSingleton<IWorkspaceSandbox, WorkspaceSandbox>();
         services.AddSingleton<IAgentLoopEngine, AgentLoopEngine>();
         services.AddSingleton<IChatOrchestrator, ChatOrchestrator>();
+        // 团队协作编排（独立于普通聊天；配置 + 责任-建议-评估迭代）
+        services.AddSingleton<ITeamOrchestrator, TeamOrchestrator>();
+        services.AddSingleton<TeamToolExecutor>(); // 团队版统一工具执行器（MCP/技能/工作空间/内置，与普通聊天同口径）
 
         return services;
     }
@@ -228,6 +232,24 @@ public static class InfrastructureExtensions
                     CONSTRAINT "FK_AppToolRoleBindings_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE CASCADE
                 );
                 CREATE INDEX "IX_AppToolRoleBindings_RoleId" ON "AppToolRoleBindings" ("RoleId");
+                """);
+            // ---------- 团队协作（会话级工程师 + 配置） ----------
+            await AddColumnIfMissingAsync(conn, "ChatSessions", "TeamMode", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "ChatSessions", "TeamConfigJson", "TEXT");
+            await AddTableIfMissingAsync(conn, "TeamEngineers", """
+                CREATE TABLE "TeamEngineers" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_TeamEngineers" PRIMARY KEY,
+                    "SessionId" TEXT NOT NULL,
+                    "Name" TEXT NOT NULL,
+                    "Role" INTEGER NOT NULL,
+                    "ProviderId" TEXT NOT NULL,
+                    "ModelId" TEXT NOT NULL,
+                    "DisplayOrder" INTEGER NOT NULL,
+                    "Enabled" INTEGER NOT NULL,
+                    "CreatedAt" TEXT NOT NULL,
+                    "UpdatedAt" TEXT NOT NULL
+                );
+                CREATE INDEX "IX_TeamEngineers_SessionId" ON "TeamEngineers" ("SessionId");
                 """);
             // ---------- 工作空间编码会话（注册表 + 角色绑定带级别） ----------
             await AddTableIfMissingAsync(conn, "Workspaces", """

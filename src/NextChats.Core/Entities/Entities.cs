@@ -443,9 +443,47 @@ public class ChatSession
     /// <summary>绑定的工作空间（编码会话用）；null = 普通聊天（行为与以往完全一致）</summary>
     public Guid? WorkspaceId { get; set; }
 
+    /// <summary>团队协作模式：该会话按「责任工程师执行 → 协助工程师建议（并行/隔离）→ 责任评估迭代」执行</summary>
+    public bool TeamMode { get; set; }
+
+    /// <summary>团队配置 JSON：{"maxRounds":2,"parallel":true,"stopOnConsensus":true,"maxParallel":4}</summary>
+    public string? TeamConfigJson { get; set; }
+
     public AppUser? User { get; set; }
 
     public List<ChatMessage> Messages { get; set; } = [];
+}
+
+/// <summary>团队工程师角色：Responsible=责任工程师（执行/评估/最终交付），Assistant=协助工程师（建议）</summary>
+public enum TeamEngineerRole
+{
+    Responsible = 1,
+    Assistant = 2,
+}
+
+/// <summary>团队协作：会话内工程师（唯一名称 + 绑定 LLM），TeamMode 会话专属</summary>
+public class TeamEngineer
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid SessionId { get; set; }
+
+    /// <summary>工程师名称（会话内唯一）</summary>
+    [Required, MaxLength(64)] public string Name { get; set; } = "";
+
+    public TeamEngineerRole Role { get; set; } = TeamEngineerRole.Assistant;
+
+    public Guid ProviderId { get; set; }
+
+    public Guid ModelId { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public bool Enabled { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 /// <summary>工作空间（服务端本地目录；编码会话绑定后注入 ws_* 工具，按角色绑定的级别强制权限）</summary>
