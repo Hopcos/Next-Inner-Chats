@@ -17,7 +17,7 @@ web/tsconfig.tsbuildinfo
 npm-debug.log*
 
 # Runtime & data
-data/
+/data/
 AppData/
 *.db
 *.db-shm
