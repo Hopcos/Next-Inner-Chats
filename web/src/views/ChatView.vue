@@ -46,6 +46,15 @@ const wsLevelLabel = (level: number) =>
         ? t('chat.workspaceWrite')
         : t('chat.workspaceReadOnly')
 
+/** 顶部工作空间触发器文案：绑定后必须展示工作空间名称（自绘控件，不依赖 el-select 内部 label 解析） */
+const boundWorkspaceLabel = computed(() => {
+  const id = currentWorkspaceId.value
+  if (!id) return t('chat.workspaceNone')
+  const w = kernel.session.state.workspaces.find((x) => x.id === id)
+  if (!w) return t('chat.workspaceNone')
+  return `${w.name} · ${wsLevelLabel(w.level)}`
+})
+
 async function onWorkspaceChange(id: string | null | undefined) {
   const cur = kernel.session.current
   if (!cur) return
@@ -223,19 +232,34 @@ function openToolsHub() {
           <template v-else>
             <h2 class="session-title" @dblclick="startRename">{{ current?.title ?? t('common.appName') }}</h2>
           </template>
-          <!-- 工作空间选择（编码会话；仅当用户角色被授予 ≥1 个工作空间时显示） -->
-          <el-select
-            v-if="kernel.session.state.workspaces.length > 0"
-            :model-value="currentWorkspaceId"
-            size="small"
-            class="ws-picker"
-            :placeholder="t('chat.workspaceNone')"
-            clearable
-            @change="onWorkspaceChange"
-          >
-            <el-option :value="null" :label="t('chat.workspaceNone')" />
-            <el-option v-for="w in kernel.session.state.workspaces" :key="w.id" :value="w.id" :label="`${w.name} · ${wsLevelLabel(w.level)}`" />
-          </el-select>
+          <!-- 工作空间选择（编码会话；仅当用户角色被授予 ≥1 个工作空间时显示）。
+               自绘 dropdown 触发器：绑定后触发器恒以正常文字展示“工作空间名 · 级别”，
+               不依赖 el-select 的 label 解析/占位样式，保证“绑定后名称必可见”。 -->
+          <div v-if="kernel.session.state.workspaces.length > 0" class="ws-picker">
+            <el-dropdown trigger="click" @command="(v: string | null) => onWorkspaceChange(v)">
+              <button class="ws-picker-btn" :class="{ bound: !!currentWorkspaceId }" type="button" :aria-label="t('chat.workspaceSelect')">
+                <svg class="ws-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2.5" y="7" width="19" height="12" rx="2" />
+                  <path d="M8.5 7V5.5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2V7" />
+                  <path d="M2.5 12h19" />
+                </svg>
+                <span class="ws-label">{{ boundWorkspaceLabel }}</span>
+                <svg class="ws-caret" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu class="ws-menu">
+                  <el-dropdown-item :command="null" :class="{ 'is-active': !currentWorkspaceId }">
+                    <span class="ws-menu-item"><span class="ws-none-dot" />{{ t('chat.workspaceNone') }}</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-for="w in kernel.session.state.workspaces" :key="w.id" :command="w.id" :class="{ 'is-active': w.id === currentWorkspaceId }">
+                    <span class="ws-menu-item">📁 {{ w.name }} · {{ wsLevelLabel(w.level) }}</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
 
         <div class="actions">
@@ -385,8 +409,73 @@ function openToolsHub() {
 
 .ws-picker {
   margin-left: 10px;
-  max-width: 220px;
   flex-shrink: 1;
+  max-width: 260px;
+  min-width: 0;
+}
+
+/* 顶部工作空间触发器按钮：绑定后以主题色高亮，名称恒可见（防 el-select 占位样式导致的“名称不展示”） */
+.ws-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 260px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--nc-border);
+  background: var(--nc-surface);
+  color: var(--nc-text-dim);
+  cursor: pointer;
+  font-size: 12.5px;
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.ws-picker-btn:hover {
+  border-color: var(--nc-primary);
+  color: var(--nc-primary);
+}
+
+.ws-picker-btn.bound {
+  color: var(--nc-primary);
+  border-color: color-mix(in srgb, var(--nc-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--nc-primary) 10%, transparent);
+}
+
+.ws-icon,
+.ws-caret {
+  flex-shrink: 0;
+}
+
+.ws-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.ws-none-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0.6;
+  margin-right: 6px;
+}
+
+.ws-menu-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+:deep(.ws-menu .el-dropdown-menu__item.is-active) {
+  color: var(--nc-primary);
+  font-weight: 600;
 }
 
 /* 右侧操作区：永不收缩（头像最右永远完整可见可点），并提升层级防被任何覆盖层遮挡 */

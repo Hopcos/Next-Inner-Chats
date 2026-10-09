@@ -16,6 +16,7 @@ export default {
     create: '新建',
     edit: '编辑',
     close: '关闭',
+    clear: '清除',
     refresh: '刷新',
     logout: '退出登录',
     admin: '管理后台',

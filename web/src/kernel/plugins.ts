@@ -557,6 +557,8 @@ export class ChatService extends Service {
   private controllers = new Map<string, AbortController>()
   private historyLoaded = new Set<string>()
   private olderLoading = new Set<string>()
+  /** 会话话题懒加载去重（并发请求共享同一 Promise；失败不缓存，允许重试） */
+  private topicPromises = new Map<string, Promise<{ id: string; title: string }[]>>()
 
   /** 记录/解除某会话的流式状态：streaming 与事件按集合派生，多会话并发互不覆盖 */
   private markStreaming(sid: string, on: boolean) {
@@ -608,7 +610,26 @@ export class ChatService extends Service {
   }
 
   /**
-   * 向上翻页：加载当前已加载窗口之前的一个窗口（前插）。
+   * 会话话题索引懒加载（按会话缓存于 state.topics；与 loadHistory 共用同一份数据）。
+   * 侧栏会话搜索“按话题问题模糊匹配”时用：仅对候选会话逐个拉取一次，并做并发去重。
+   */
+  async loadTopics(sessionId: string): Promise<{ id: string; title: string }[]> {
+    const cached = this.state.topics[sessionId]
+    if (cached) return cached
+    const inflight = this.topicPromises.get(sessionId)
+    if (inflight) return inflight
+    const p = http
+      .get<{ id: string; title: string }[]>(`/api/chat/sessions/${sessionId}/topics`)
+      .then((topics) => {
+        this.state.topics[sessionId] = topics
+        return topics
+      })
+      .finally(() => this.topicPromises.delete(sessionId))
+    this.topicPromises.set(sessionId, p)
+    return p
+  }
+
+  /** 向上翻页：加载当前已加载窗口之前的一个窗口（前插）。
    * 返回是否加载了更多且仍有更早数据（false 表示已到最早或加载中/失败）。
    */
   async loadOlder(sessionId: string): Promise<boolean> {
@@ -796,6 +817,7 @@ export class ChatService extends Service {
     delete this.state.topics[sessionId]
     delete this.state.moreBefore[sessionId]
     this.historyLoaded.delete(sessionId)
+    this.topicPromises.delete(sessionId)
   }
 
   async send(

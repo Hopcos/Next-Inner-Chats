@@ -16,6 +16,7 @@ export default {
     create: 'Create',
     edit: 'Edit',
     close: 'Close',
+    clear: 'Clear',
     refresh: 'Refresh',
     logout: 'Sign Out',
     admin: 'Admin',

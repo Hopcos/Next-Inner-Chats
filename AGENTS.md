@@ -9,20 +9,24 @@
 
 ## 2. 部署协议
 
-### 6500（生产，IIS/w3wp），目标目录 `E:\mcp-tools\next-chats`
+### 6500（生产，IIS/w3wp），目标目录 `D:\ai-tools\next-chats`（本机实际路径；旧文档中的 `E:\mcp-tools\next-chats` 已废弃，本机无 E 盘）
 1. 写 `app_offline.htm` 到站点根目录 → sleep 4s
-2. 逐个解锁拷贝三 DLL（`NextChats.Api.dll` / `NextChats.Core.dll` / `NextChats.Infrastructure.dll`，源自 `src\NextChats.Api\bin\Release\net10.0\`）：打开文件句柄 `FileShare.None` 轮询，解锁超时 90s
+2. 逐个解锁拷贝三 DLL（`NextChats.Api.dll` / `NextChats.Core.dll` / `NextChats.Infrastructure.dll`，源自 `src\NextChats.Api\bin\Release\net10.0\`）：打开文件句柄 `FileShare.None` 轮询，解锁超时 90s（**前端-only 改动时跳过本步**）
 3. 删除 `wwwroot\assets` 整目录，用 `web\dist\*` 整目录替换 wwwroot
-4. 删 `app_offline.htm` → sleep 12s → probe `http://localhost:6500/api/auth/providers` 必须 200
+4. 删 `app_offline.htm` → sleep 12s → probe `http://localhost:6500/api/auth/providers` 必须 200，且 `http://localhost:6500/` 返回的 index.html 哈希与 `web\dist\index.html` 一致
 
-### 沙箱（测试环境），目标目录 `E:\temp\verify\next-chats-test`，端口 6510
-- 杀 dotnet（`CommandLine` 含 `*next-chats-test*`）→ 拷三 DLL → **静默启动**（不弹控制台窗口）：
+> 注意：本 checkout 的 `src\NextChats.Infrastructure` 缺少 `Data\NextChatsStore.cs` / `NextChatsDbContext.cs`（未纳入 git），后端无法从本目录重新编译；需要变更后端时只能改动前端，或先补齐缺失源文件。
+
+### 沙箱（测试环境），目标目录 `D:\ai-tools\next-chats-test`，端口 6510
+- 初始化：从生产目录 `Copy-Item` 全量拷贝（含 `data\nextchats.db` 与 wwwroot），再按需覆盖 `wwwroot`（新前端构建）
+- 杀 dotnet（`CommandLine` 含 `*next-chats-test*`）→ （后端变更时）拷三 DLL → **静默启动**（不弹控制台窗口）：
   ```powershell
   Remove-Item "$dst\start-out.log","$dst\start-err.log" -ErrorAction SilentlyContinue
   Start-Process dotnet -ArgumentList 'NextChats.Api.dll','--urls','http://localhost:6510' -WorkingDirectory $dst -WindowStyle Hidden -RedirectStandardOutput "$dst\start-out.log" -RedirectStandardError "$dst\start-err.log"
   ```
   → sleep 14s → probe 200（失败时查看 `start-err.log`）
 - **用户偏好（2026-09）：沙箱必须静默启动（`-WindowStyle Hidden` + 输出重定向到日志），禁止弹出控制台窗口**
+- 沙箱数据：UI 验证可向沙箱 DB（node:sqlite 直写 `data\nextchats.db`）注入测试用户/会话；测试凭据示例 uitest/uitest123（PBKDF2-SHA256, 210000 轮，salt 16B，格式见 `SecurityService.cs`）
 
 ### 数据库迁移
 - 本项目用 `EnsureCreated + EnsureCompatibleSchemaAsync` 轻量补列（`AddColumnIfMissingAsync`）。新增实体字段时：
