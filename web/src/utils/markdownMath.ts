@@ -92,11 +92,16 @@ export function installMarkdownMath(md: InstanceType<typeof MarkdownIt>): void {
     // 以反斜杠结尾（如 \ 与闭合并行）→ 多半是普通用法，跳过
     if (content.endsWith('\\')) return false
 
-    if (silent) return true
+    // 关键：silent 模式（markdown-it 在链接标号扫描 parseLinkLabel → skipToken、
+    // 以及嵌套前瞻时以 silent 调用行内规则）也必须推进 state.pos；
+    // 否则命中 $...$ 却原地返回 true，markdown-it 会抛
+    // “inline rule didn't increment state.pos”，导致消息渲染崩溃。
+    if (!silent) {
+      const token = state.push('katex_inline', 'katex', 0)
+      token.content = content
+      token.markup = '$'
+    }
     state.pos = close + 1
-    const token = state.push('katex_inline', 'katex', 0)
-    token.content = content
-    token.markup = '$'
     return true
   })
 
