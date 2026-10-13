@@ -80,6 +80,8 @@ export default {
       source: 'Markdown 源码',
       preview: '预览',
       placeholder: '在此输入 Markdown…',
+      downloadPng: '下载 PNG',
+      empty: '预览为空，请先输入 Markdown',
     },
     random: {
       name: '随机生成器',

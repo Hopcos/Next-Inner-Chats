@@ -5,8 +5,11 @@ import { toBlob } from 'html-to-image'
  * - pixelRatio 2 保证清晰度
  * - 背景色取元素自身计算色，透明则退回主题表面色，保证三种主题下都可读
  * - skipFonts：不嵌入字体文件，规避跨域字体导致的 canvas 污染/失败
+ * - options.width/height：显式输出尺寸。滚动容器（内容溢出）默认只渲染可视区域，
+ *   需配合把容器临时展开（overflow visible + height=scrollHeight）并传全量尺寸，
+ *   才能导出**完整内容**而非仅当前窗口。
  */
-export async function captureElementToPng(el: HTMLElement): Promise<Blob | null> {
+export async function captureElementToPng(el: HTMLElement, options: { width?: number; height?: number } = {}): Promise<Blob | null> {
   try {
     const style = getComputedStyle(el)
     let bg = style.backgroundColor || ''
@@ -18,6 +21,8 @@ export async function captureElementToPng(el: HTMLElement): Promise<Blob | null>
       backgroundColor: bg,
       cacheBust: true,
       skipFonts: true,
+      width: options.width,
+      height: options.height,
     })
   } catch (err) {
     console.warn('[capture] failed to render element to image', err)

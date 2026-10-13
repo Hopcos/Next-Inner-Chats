@@ -80,6 +80,8 @@ export default {
       source: 'Markdown Source',
       preview: 'Preview',
       placeholder: 'Enter Markdown here…',
+      downloadPng: 'Download PNG',
+      empty: 'Preview is empty. Enter Markdown first',
     },
     random: {
       name: 'Random Generator',
