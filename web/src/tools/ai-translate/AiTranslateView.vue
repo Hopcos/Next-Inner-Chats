@@ -105,8 +105,8 @@ async function run() {
           modelId: modelId.value,
           systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
           prompt: userPrompt,
-          // 输出上限对准 5 万字原文/译文（中文字 ≈ 2 token，5 万字 ≈ 100k token），留足余量
-          maxTokens: 128000,
+          // 输出上限：OpenAI 兼容端点 max_tokens 上限 65536，传更大值会被上游 400 拒绝（后端亦会 clamp）
+          maxTokens: 65536,
         },
         (ev) => {
           if (ev.kind === 'text_delta') target.value += String(ev.text ?? '')
@@ -120,7 +120,7 @@ async function run() {
         modelId: modelId.value,
         systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
         prompt: userPrompt,
-        maxTokens: 128000,
+        maxTokens: 65536,
       })
       target.value = res?.text ?? ''
     }

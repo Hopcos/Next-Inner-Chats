@@ -19,8 +19,12 @@ public sealed class ToolLlmController(IConfigStore config, ILlmRouter router) : 
 {
     private const int MaxPromptChars = 50000;
     private const int MaxSystemChars = 4000;
-    /// <summary>输出上限：原文长度 5 万字符（≈7.5 万 token），译文同量级，按 1 字 ≈ 2 token 上浮留足余量</summary>
-    private const int MaxOutputTokens = 200000;
+    /// <summary>
+    /// 输出上限（max_tokens）。OpenAI 兼容端点（Azure OpenAI / llm-cs 等网关）对 max_tokens 的
+    /// 支持范围为 1~65536，传更大的值（如 128000）会被上游以 400 拒绝。
+    /// 这里 clamp 到 65536，确保任何工具页传入的超大值都不会再触发上游 400（超出部分由上游硬限制截断）。
+    /// </summary>
+    private const int MaxOutputTokens = 65536;
 
     private static readonly JsonSerializerOptions SseJson = new()
     {
