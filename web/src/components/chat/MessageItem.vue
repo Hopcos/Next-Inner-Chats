@@ -58,6 +58,10 @@ watch(
 )
 /** 图片全屏查看器图源（与消息图片顺序一致） */
 const previewSrcList = computed(() => [...loadedSrcs.value])
+/** 与图源一一对应的"可复制"链接（原始持久化 url 或 data: URI），供查看器复制回退使用 */
+const previewLinks = computed(() =>
+  (props.message.images ?? []).map((x) => x.url || `data:${x.mimeType || 'image/png'};base64,${x.base64 ?? ''}`),
+)
 /** 全屏查看器当前图片索引（-1 = 关闭） */
 const viewerIndex = ref(-1)
 function openViewer(i: number) {
@@ -671,7 +675,7 @@ function prettyArgs(raw?: string): string {
           @click="openViewer(i)"
         />
       </div>
-      <ImageViewer :visible="viewerIndex >= 0" :srcs="previewSrcList" :index="Math.max(0, viewerIndex)" @close="viewerIndex = -1" />
+      <ImageViewer :visible="viewerIndex >= 0" :srcs="previewSrcList" :links="previewLinks" :index="Math.max(0, viewerIndex)" @close="viewerIndex = -1" />
 
       <!-- 团队协作轮次面板（责任方案 → 协助建议 → 评估 → 最终结果；流式中实时增长） -->
       <TeamPanel v-if="isAssistant && isTeamMessage" :rounds="message.teamRounds ?? []" :running="streamingNow" />
