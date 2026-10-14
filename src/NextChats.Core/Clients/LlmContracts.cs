@@ -12,6 +12,9 @@ public enum LlmFinishReason
     Error,
 }
 
+/// <summary>多模态图片附件（OpenAI 兼容 content 数组：data URI）。仅 user 消息使用，模型视觉时作为 image_url content 下发。</summary>
+public sealed record LlmImage(string MimeType, string Base64);
+
 /// <summary>发送给 LLM 的消息</summary>
 public sealed record LlmChatMessage(string Role, string? Content)
 {
@@ -23,9 +26,13 @@ public sealed record LlmChatMessage(string Role, string? Content)
     /// <summary>assistant 消息的思考内容（DeepSeek 官方协议：携带 tools 的对话轮必须回传 reasoning_content，否则 400）</summary>
     public string? Reasoning { get; init; }
 
+    /// <summary>多模态图片附件（仅 user 消息；模型视觉时作为 image_url content 直接下发，不走 MCP）</summary>
+    public IReadOnlyList<LlmImage>? Images { get; init; }
+
     public static LlmChatMessage System(string content) => new("system", content);
 
-    public static LlmChatMessage User(string content) => new("user", content);
+    public static LlmChatMessage User(string content, IReadOnlyList<LlmImage>? images = null)
+        => new("user", content) { Images = images };
 
     public static LlmChatMessage Assistant(string? content, IReadOnlyList<LlmToolCall>? toolCalls = null, string? reasoning = null)
         => new("assistant", content) { ToolCalls = toolCalls, Reasoning = reasoning };

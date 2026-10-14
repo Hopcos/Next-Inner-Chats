@@ -439,7 +439,27 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         var arr = new JsonArray();
         foreach (var m in messages)
         {
-            var o = new JsonObject { ["role"] = m.Role, ["content"] = m.Content ?? "" };
+            var o = new JsonObject { ["role"] = m.Role };
+            // 多模态：带图片的 user 消息用 content 数组（text + image_url data URI），否则纯文本字符串
+            if (m.Images is { Count: > 0 })
+            {
+                var parts = new JsonArray();
+                if (!string.IsNullOrEmpty(m.Content)) parts.Add(new JsonObject { ["type"] = "text", ["text"] = m.Content });
+                foreach (var img in m.Images)
+                {
+                    var mime = string.IsNullOrWhiteSpace(img.MimeType) ? "image/png" : img.MimeType;
+                    parts.Add(new JsonObject
+                    {
+                        ["type"] = "image_url",
+                        ["image_url"] = new JsonObject { ["url"] = $"data:{mime};base64,{img.Base64}" },
+                    });
+                }
+                o["content"] = parts;
+            }
+            else
+            {
+                o["content"] = m.Content ?? "";
+            }
             if (m.ToolCallId is not null) o["tool_call_id"] = m.ToolCallId;
             // DeepSeek 官方协议：携带 tools 的对话轮，assistant 的 reasoning_content 必须回传（否则 400）
             if (includeReasoning && m.Role == "assistant" && !string.IsNullOrEmpty(m.Reasoning))

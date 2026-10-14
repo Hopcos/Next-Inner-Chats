@@ -345,63 +345,75 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             }
         }
 
-        // ---------- MCP 视觉：多张逐个识别为文本（工具参数名 image_source = 标准 base64） ----------
+        // ---------- 图片：所选模型支持视觉 → 多模态直接发给 LLM；否则走 MCP 视觉识别为文本 ----------
         var visionLines = new List<string>();
         int ocrMs = 0;
+        var useVisionModel = false;
         if (request.Images is { Count: > 0 })
         {
-            var ocrSw = System.Diagnostics.Stopwatch.StartNew();
-            foreach (var server in servers.Where(s => s.IsVision))
+            // 判断用户所选模型是否支持视觉（决定走 LLM 多模态还是 MCP 视觉）
+            var effModelId = request.ModelId ?? preferredModelId;
+            if (effModelId.HasValue && effModelId.Value != Guid.Empty)
             {
-                // 视觉工具选择：精确名优先（describe_image / vision / recognize_image / read_image_text），
-                // 再按命名约定兜底，但必须排除批量/元数据/切换类工具
-                // （batch_describe_images 参数为 wrapperArguments 批量结构、compare_images 多图、get_image_info 只读元数据、switch_vision_backend 切换后端），
-                // 否则会向单张 image_source 校验失败的工具传参。
-                var allTools = _mcp.GetEnabledTools(server).ToList();
-                var visionTool =
-                    allTools.FirstOrDefault(t => t.Name is "vision" or "recognize_image") ??
-                    allTools.FirstOrDefault(t => t.Name.Equals("describe_image", StringComparison.OrdinalIgnoreCase)) ??
-                    allTools.FirstOrDefault(t => t.Name.Equals("read_image_text", StringComparison.OrdinalIgnoreCase)) ??
-                    allTools.FirstOrDefault(t =>
-                        t.Name.Contains("image", StringComparison.OrdinalIgnoreCase)
-                        && !t.Name.StartsWith("batch_", StringComparison.OrdinalIgnoreCase)
-                        && !t.Name.StartsWith("compare_", StringComparison.OrdinalIgnoreCase)
-                        && !t.Name.StartsWith("switch_", StringComparison.OrdinalIgnoreCase)
-                        && !t.Name.StartsWith("get_", StringComparison.OrdinalIgnoreCase)
-                        && !t.Name.StartsWith("list_", StringComparison.OrdinalIgnoreCase));
-                if (visionTool is null) continue;
-                for (var i = 0; i < request.Images.Count; i++)
+                var visionModel = await _admin.GetModelAsync(effModelId.Value, ct);
+                useVisionModel = visionModel?.IsVision == true;
+            }
+            if (!useVisionModel)
+            {
+                // 模型无视觉：走 MCP 视觉工具逐个识别为文本（工具参数名 image_source = 标准 base64）
+                var ocrSw = System.Diagnostics.Stopwatch.StartNew();
+                foreach (var server in servers.Where(s => s.IsVision))
                 {
-                    var img = request.Images[i];
-                    var args = JsonSerializer.Serialize(new { image_source = img.Base64 });
-                    try
+                    // 视觉工具选择：精确名优先（describe_image / vision / recognize_image / read_image_text），
+                    // 再按命名约定兜底，但必须排除批量/元数据/切换类工具
+                    // （batch_describe_images 参数为 wrapperArguments 批量结构、compare_images 多图、get_image_info 只读元数据、switch_vision_backend 切换后端），
+                    // 否则会向单张 image_source 校验失败的工具传参。
+                    var allTools = _mcp.GetEnabledTools(server).ToList();
+                    var visionTool =
+                        allTools.FirstOrDefault(t => t.Name is "vision" or "recognize_image") ??
+                        allTools.FirstOrDefault(t => t.Name.Equals("describe_image", StringComparison.OrdinalIgnoreCase)) ??
+                        allTools.FirstOrDefault(t => t.Name.Equals("read_image_text", StringComparison.OrdinalIgnoreCase)) ??
+                        allTools.FirstOrDefault(t =>
+                            t.Name.Contains("image", StringComparison.OrdinalIgnoreCase)
+                            && !t.Name.StartsWith("batch_", StringComparison.OrdinalIgnoreCase)
+                            && !t.Name.StartsWith("compare_", StringComparison.OrdinalIgnoreCase)
+                            && !t.Name.StartsWith("switch_", StringComparison.OrdinalIgnoreCase)
+                            && !t.Name.StartsWith("get_", StringComparison.OrdinalIgnoreCase)
+                            && !t.Name.StartsWith("list_", StringComparison.OrdinalIgnoreCase));
+                    if (visionTool is null) continue;
+                    for (var i = 0; i < request.Images.Count; i++)
                     {
-                        var r = await _mcp.CallToolAsync(server, visionTool.Name, args, trace + $"_img{i}", lang, ct);
-                        if (!r.Success)
+                        var img = request.Images[i];
+                        var args = JsonSerializer.Serialize(new { image_source = img.Base64 });
+                        try
                         {
-                            _logger.LogWarning("MCP 视觉识别失败 trace={Trace} server={Server} tool={Tool} error={Error}",
-                                trace, server.Name, visionTool.Name, r.ErrorMessage);
+                            var r = await _mcp.CallToolAsync(server, visionTool.Name, args, trace + $"_img{i}", lang, ct);
+                            if (!r.Success)
+                            {
+                                _logger.LogWarning("MCP 视觉识别失败 trace={Trace} server={Server} tool={Tool} error={Error}",
+                                    trace, server.Name, visionTool.Name, r.ErrorMessage);
+                            }
+                            visionLines.Add(r.Success
+                                ? $"[image {i + 1}] {truncate(r.ResultText, 2000)}"
+                                : $"[image {i + 1}] {Texts.Get("IMAGE_RECOGNITION_FAILED", lang)}");
                         }
-                        visionLines.Add(r.Success
-                            ? $"[image {i + 1}] {truncate(r.ResultText, 2000)}"
-                            : $"[image {i + 1}] {Texts.Get("IMAGE_RECOGNITION_FAILED", lang)}");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "MCP 视觉识别失败 trace={Trace} server={Server}", trace, server.Name);
-                        visionLines.Add($"[image {i + 1}] {Texts.Get("IMAGE_RECOGNITION_FAILED", lang)}");
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "MCP 视觉识别失败 trace={Trace} server={Server}", trace, server.Name);
+                            visionLines.Add($"[image {i + 1}] {Texts.Get("IMAGE_RECOGNITION_FAILED", lang)}");
+                        }
                     }
                 }
+                ocrSw.Stop();
+                ocrMs = (int)ocrSw.ElapsedMilliseconds;
             }
-            ocrSw.Stop();
-            ocrMs = (int)ocrSw.ElapsedMilliseconds;
         }
         if (visionLines.Count > 0)
         {
             // 视觉识别结果为文本上下文，前端以 context 事件展示（多张逐个识别）
             yield return AgentEvent.ContextEvent("vision", string.Join("\n", visionLines), trace);
         }
-        else if (request.Images is { Count: > 0 })
+        else if (request.Images is { Count: > 0 } && !useVisionModel)
         {
             // 有图片但未产生任何识别结果：当前绑定集合中没有可用视觉工具（或全部 fallback），明确提示
             yield return AgentEvent.ContextEvent("vision", Texts.Get("IMAGE_NO_VISION_TOOL", lang), trace);
@@ -488,7 +500,10 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         {
             initialMessages.Add(LlmChatMessage.Assistant(string.Join("\n", visionLines)));
         }
-        initialMessages.Add(LlmChatMessage.User(userInput));
+        // 所选模型支持视觉：图片作为多模态 image_url 直接下发（不走 MCP 识别）；否则仅文本
+        initialMessages.Add(useVisionModel
+            ? LlmChatMessage.User(userInput, request.Images!.Select(i => new LlmImage(i.MimeType ?? "image/png", i.Base64)).ToList())
+            : LlmChatMessage.User(userInput));
 
         // ---------- 推理循环（ReAct） ----------
         var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);

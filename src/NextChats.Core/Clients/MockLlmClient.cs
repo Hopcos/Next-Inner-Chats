@@ -97,6 +97,14 @@ public sealed class MockLlmClient : ILlmClient
         var hasToolContext = request.Messages.Count(m => m.Role == "tool") > 0
                              || request.Messages.Any(m => m.ToolCallId is not null);
 
+        // 多模态探针（仅演示 provider）：user 消息携带图片（Images 非空）→ 返回可见文本，
+        // 用于验证“所选模型视觉时，图片作为 image_url 多模态内容直接下发给 LLM”（而非走 MCP 视觉）。
+        var lastUserMsg = request.Messages.LastOrDefault(m => m.Role == "user");
+        if (lastUserMsg?.Images is { Count: > 0 } imgs)
+        {
+            return ($"I can see {imgs.Count} image(s) in your message (multimodal).", "", []);
+        }
+
         // 故障注入（仅演示 provider）：模型名 ToolLoop = 每步都调 http_fetch、从不输出正文，
         // 用于验证团队工具循环“上限耗尽 → 无工具收尾强制正文”的兜底（真实深度推理模型偶发同样行为）
         if (Model == "ToolLoop")
