@@ -59,6 +59,10 @@ function openEdit(row: McpServerDto) {
 }
 
 async function save() {
+  if (!headersJsonValid()) {
+    kernel.notify.error(t('admin.mcp.headersInvalid'))
+    return
+  }
   const body = {
     ...form,
     headersJson: form.headersJson || undefined,
@@ -129,7 +133,20 @@ async function toggleServer(row: McpServerDto, enabled: boolean) {
   await load()
 }
 
-/** dialog 内“获取”：新建模式先落库再拉取；成功后自动回填 instructions（服务器未提供则保留原值） */
+/** 请求头 JSON 合法：空白视为未填；否则必须是 JSON 对象 */
+function headersJsonValid(): boolean {
+  const v = form.headersJson.trim()
+  if (!v) return true
+  try {
+    const o = JSON.parse(v)
+    return o !== null && typeof o === 'object' && !Array.isArray(o)
+  } catch {
+    return false
+  }
+}
+
+/** dialog 内“获取”：先按表单内容落库（新建 POST / 编辑 PUT），再连接拉取目录。
+ *  之前编辑模式直接用旧配置连接，弹窗中新填的请求头/端点根本没入库，导致带不进请求（401）。 */
 const dialogFetching = ref(false)
 
 async function fetchInDialog() {
@@ -137,17 +154,26 @@ async function fetchInDialog() {
     kernel.notify.warning(t('admin.mcp.fetchNeedBase'))
     return
   }
+  if (!headersJsonValid()) {
+    kernel.notify.error(t('admin.mcp.headersInvalid'))
+    return
+  }
   dialogFetching.value = true
   try {
     let id = editingId.value
-    if (!id) {
-      const created = await http.post<{ id?: string } | string>('/api/admin/mcp-servers', {
-        ...form,
-        headersJson: form.headersJson || undefined,
-        endpoint: form.endpoint || undefined,
-        stdioCommand: form.stdioCommand || undefined,
-        stdioArgsJson: form.stdioArgsJson || undefined,
-      })
+    const body = {
+      name: form.name, transport: form.transport,
+      endpoint: form.endpoint || undefined,
+      headersJson: form.headersJson || undefined,
+      stdioCommand: form.stdioCommand || undefined,
+      stdioArgsJson: form.stdioArgsJson || undefined,
+      instructions: form.instructions || undefined,
+      enabled: form.enabled, isVision: form.isVision, timeoutSeconds: form.timeoutSeconds,
+    }
+    if (id) {
+      await http.put(`/api/admin/mcp-servers/${id}`, body)
+    } else {
+      const created = await http.post<{ id?: string } | string>('/api/admin/mcp-servers', body)
       id = typeof created === 'string' ? created : (created as { id: string }).id
       editingId.value = id
     }

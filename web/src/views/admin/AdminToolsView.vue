@@ -119,6 +119,16 @@ async function onSave() {
     kernel.notify.warning(t('admin.tools.fieldsRequired'))
     return
   }
+  const hdr = form.headersJson.trim()
+  if (hdr) {
+    try {
+      const o = JSON.parse(hdr)
+      if (o === null || typeof o !== 'object' || Array.isArray(o)) throw new Error('not-object')
+    } catch {
+      kernel.notify.error(t('admin.tools.headersInvalid'))
+      return
+    }
+  }
   saving.value = true
   try {
     const body = {
@@ -128,7 +138,7 @@ async function onSave() {
       description: form.description.trim() || null,
       baseUrl: form.baseUrl.trim() || null,
       // 授权头：编辑时留空 = 后端保持原值；创建时留空 = 不配置
-      headersJson: form.headersJson.trim() || undefined,
+      headersJson: hdr || undefined,
       enabled: form.enabled,
       roleIds: form.roleIds,
     }

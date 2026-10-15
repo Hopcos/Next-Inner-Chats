@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
@@ -56,6 +57,7 @@ public sealed class AdminMcpController(IAdminStore store, IMcpDriver driver, ISe
     public async Task<IActionResult> Create([FromBody] McpInput input)
     {
         if (HasInvalidEncoding(input)) return BadRequest(Err("INVALID_ENCODING"));
+        if (HeaderJsonInvalid(input.HeadersJson)) return BadRequest(Err("MCP_HEADERS_INVALID"));
         var server = new McpServer
         {
             Name = input.Name,
@@ -79,6 +81,7 @@ public sealed class AdminMcpController(IAdminStore store, IMcpDriver driver, ISe
     public async Task<IActionResult> Update(Guid id, [FromBody] McpInput input)
     {
         if (HasInvalidEncoding(input)) return BadRequest(Err("INVALID_ENCODING"));
+        if (HeaderJsonInvalid(input.HeadersJson)) return BadRequest(Err("MCP_HEADERS_INVALID"));
         var row = await store.GetMcpServerAsync(id);
         if (row is null) return NotFound(Err("MCP_SERVER_NOT_FOUND"));
         row.Name = input.Name;
@@ -151,9 +154,13 @@ public sealed class AdminMcpController(IAdminStore store, IMcpDriver driver, ISe
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "MCP 元数据获取失败 server={Server}", server.Name);
-            server.LastError = Texts.Get("MCP_FETCH_FAILED", Lang);
+            // 仅透出脱敏提示（HTTP 状态码 / timeout），不暴露 URL 与响应内容
+            var message = Texts.Get("MCP_CONNECT_FAILED", Lang);
+            var hint = ConnectHint(ex);
+            if (hint is not null) message += $" ({hint})";
+            server.LastError = $"{Texts.Get("MCP_FETCH_FAILED", Lang)} {hint ?? string.Empty}".Trim();
             await store.UpdateMcpServerAsync(server);
-            return BadRequest(Err("MCP_CONNECT_FAILED"));
+            return BadRequest(new { code = "MCP_CONNECT_FAILED", message });
         }
     }
 
@@ -186,6 +193,28 @@ public sealed class AdminMcpController(IAdminStore store, IMcpDriver driver, ISe
         server.HeadersJson = security.EncryptSecret(headersJson);
         server.IsHeadersEncrypted = true;
     }
+
+    /// <summary>授权头 JSON 非法（空 / 空白视为未填，合法）。切入点是 JsonNode.Parse 能否解析为对象</summary>
+    private static bool HeaderJsonInvalid(string? headersJson)
+    {
+        if (string.IsNullOrWhiteSpace(headersJson)) return false;
+        try
+        {
+            return JsonNode.Parse(headersJson) is not JsonObject;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>连接失败时仅提供脱敏提示（HTTP 状态码 / timeout），不暴露 URL 与响应内容</summary>
+    private static string? ConnectHint(Exception ex) => ex switch
+    {
+        HttpRequestException { StatusCode: { } s } => $"HTTP {(int)s}",
+        TimeoutException or OperationCanceledException => "timeout",
+        _ => null,
+    };
 
     private static object ItemDto(McpCatalogItem i) => new
     {

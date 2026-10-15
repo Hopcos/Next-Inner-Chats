@@ -30,6 +30,7 @@ public sealed class AdminToolController(IAdminStore store, IAuditLogger audit, I
     {
         var error = await ValidateAsync(input, currentId: null);
         if (error is not null) return BadRequest(Err(error));
+        if (HeaderJsonInvalid(input.HeadersJson)) return BadRequest(Err("TOOL_HEADERS_INVALID"));
         var (headersJson, headersEncrypted) = EncryptHeaders(input.HeadersJson) ?? ((string?)null, false);
         var saved = await store.SaveToolAsync(
             Guid.Empty, input.ToolKey.Trim(), input.Name.Trim(), (input.Icon ?? "puzzle").Trim(),
@@ -47,6 +48,7 @@ public sealed class AdminToolController(IAdminStore store, IAuditLogger audit, I
     {
         var error = await ValidateAsync(input, currentId: id);
         if (error is not null) return BadRequest(Err(error));
+        if (HeaderJsonInvalid(input.HeadersJson)) return BadRequest(Err("TOOL_HEADERS_INVALID"));
 
         // 编辑时授权头留空 = 保持不变（复用已加密值）；填写则整体重新加密替换
         var existing = await store.GetToolByKeyAsync(input.ToolKey.Trim(), HttpContext.RequestAborted);
@@ -85,6 +87,20 @@ public sealed class AdminToolController(IAdminStore store, IAuditLogger audit, I
     {
         if (string.IsNullOrWhiteSpace(headersJson)) return null;
         return (security.EncryptSecret(headersJson), true);
+    }
+
+    /// <summary>授权头 JSON 非法（空 / 空白视为未填，合法）。与 MCP 同口径：JsonNode.Parse 能否解析为对象</summary>
+    private static bool HeaderJsonInvalid(string? headersJson)
+    {
+        if (string.IsNullOrWhiteSpace(headersJson)) return false;
+        try
+        {
+            return System.Text.Json.Nodes.JsonNode.Parse(headersJson) is not System.Text.Json.Nodes.JsonObject;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return true;
+        }
     }
 
     /// <summary>必填校验 + 唯一标识查重（排除自身）</summary>
