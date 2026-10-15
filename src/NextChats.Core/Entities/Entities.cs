@@ -178,6 +178,12 @@ public class AppTool
     /// <summary>工具需要的外部 API 基础地址（如 Kafka Explorer 的 kafka-mcp REST 端点，http://host:port/），管理端可配置</summary>
     [MaxLength(512)] public string? BaseUrl { get; set; }
 
+    /// <summary>外部 API 请求头（JSON 对象，如 { "Authorization": "Bearer xxx" }；存储时整体 AES-GCM 加密，代理转发时解密）</summary>
+    [MaxLength(4096)] public string? HeadersJson { get; set; }
+
+    /// <summary>HeadersJson 是否已整体加密（AES-GCM 落库，使用时解密）</summary>
+    public bool IsHeadersEncrypted { get; set; }
+
     public bool Enabled { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

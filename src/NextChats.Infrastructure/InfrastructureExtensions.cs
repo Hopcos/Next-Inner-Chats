@@ -92,6 +92,9 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "McpServers", "Instructions", "TEXT");
             // AppTools 外部 API 端点（管理端为工具配置，如 Kafka Explorer 的 kafka-mcp REST 地址）
             await AddColumnIfMissingAsync(conn, "AppTools", "BaseUrl", "TEXT");
+            // AppTools 外部 API 请求头（JSON 对象，整体 AES-GCM 加密落库；代理转发时解密附加）
+            await AddColumnIfMissingAsync(conn, "AppTools", "HeadersJson", "TEXT");
+            await AddColumnIfMissingAsync(conn, "AppTools", "IsHeadersEncrypted", "INTEGER NOT NULL DEFAULT 0");
             // ChatSessions 置顶（聊天气泡内会话置顶区域）
             await AddColumnIfMissingAsync(conn, "ChatSessions", "IsPinned", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatSessions", "PinnedAt", "TEXT");

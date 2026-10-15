@@ -27,6 +27,8 @@ interface AdminToolDto {
   icon: string
   description?: string | null
   baseUrl?: string | null
+  /** 授权头脱敏摘要（如 {"authorization":"B***jU"}；未配置为 null） */
+  headersMasked?: string | null
   enabled: boolean
   createdAt: string
   updatedAt: string
@@ -56,6 +58,7 @@ const emptyForm = () => ({
   name: '',
   description: '',
   baseUrl: '',
+  headersJson: '',
   enabled: true,
   roleIds: [] as string[],
 })
@@ -93,6 +96,8 @@ function openEdit(row: AdminToolDto) {
     name: row.name,
     description: row.description ?? '',
     baseUrl: row.baseUrl ?? '',
+    // 授权头不回显明文（加密存储 + 脱敏展示）：留空 = 保持不变，重新填写 = 整体替换
+    headersJson: '',
     enabled: row.enabled,
     roleIds: [...row.roleIds],
   })
@@ -122,6 +127,8 @@ async function onSave() {
       icon: form.icon,
       description: form.description.trim() || null,
       baseUrl: form.baseUrl.trim() || null,
+      // 授权头：编辑时留空 = 后端保持原值；创建时留空 = 不配置
+      headersJson: form.headersJson.trim() || undefined,
       enabled: form.enabled,
       roleIds: form.roleIds,
     }
@@ -173,6 +180,11 @@ async function onDelete(row: AdminToolDto) {
       <el-table-column prop="name" :label="t('admin.tools.name')" width="150" />
       <el-table-column prop="description" :label="t('admin.tools.description')" min-width="200" show-overflow-tooltip />
       <el-table-column prop="baseUrl" :label="t('admin.tools.endpoint')" min-width="180" show-overflow-tooltip />
+      <el-table-column :label="t('admin.tools.headers')" min-width="170" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span class="nc-mono nc-dim">{{ row.headersMasked || t('common.placeholderDash') }}</span>
+        </template>
+      </el-table-column>
       <el-table-column :label="t('admin.tools.roles')" width="200">
         <template #default="{ row }">
           <el-tag v-for="rn in row.roleNames" :key="rn" size="small" class="role-tag">{{ rn }}</el-tag>
@@ -234,6 +246,17 @@ async function onDelete(row: AdminToolDto) {
         <el-form-item :label="t('admin.tools.endpoint')">
           <el-input v-model="form.baseUrl" maxlength="512" :placeholder="`https://host:port/`" clearable />
           <div class="field-tip">{{ t('admin.tools.endpointTip') }}</div>
+        </el-form-item>
+
+        <el-form-item :label="t('admin.tools.headers')">
+          <el-input
+            v-model="form.headersJson"
+            type="textarea"
+            :rows="3"
+            placeholder='{"Authorization":"Bearer xxxxx"}'
+            class="nc-mono"
+          />
+          <div class="field-tip">{{ t('admin.tools.headersTip') }}</div>
         </el-form-item>
 
         <el-form-item :label="t('admin.tools.roles')">

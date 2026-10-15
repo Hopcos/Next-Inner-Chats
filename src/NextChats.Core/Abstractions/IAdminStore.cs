@@ -128,8 +128,8 @@ public interface IAdminStore
     /// <summary>按唯一标识取工具（管理端查重）</summary>
     Task<AppTool?> GetToolByKeyAsync(string toolKey, CancellationToken ct = default);
 
-    /// <summary>新建（id=Guid.Empty）或整体更新工具（角色绑定全量替换）</summary>
-    Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, bool enabled, Guid[] roleIds, CancellationToken ct = default);
+    /// <summary>新建（id=Guid.Empty）或整体更新工具（角色绑定全量替换）；headersJson 传入已加密后的值（null/空 = 不设）</summary>
+    Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, string? headersJson, bool headersEncrypted, bool enabled, Guid[] roleIds, CancellationToken ct = default);
 
     Task DeleteToolAsync(Guid id, CancellationToken ct = default);
 

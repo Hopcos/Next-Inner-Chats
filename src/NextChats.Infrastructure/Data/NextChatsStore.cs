@@ -1180,7 +1180,7 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
             .FirstOrDefaultAsync(t => t.ToolKey == toolKey, ct);
     }
 
-    public async Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, bool enabled, Guid[] roleIds, CancellationToken ct = default)
+    public async Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, string? headersJson, bool headersEncrypted, bool enabled, Guid[] roleIds, CancellationToken ct = default)
     {
         await using var db = await _db.CreateDbContextAsync(ct);
         AppTool tool;
@@ -1204,6 +1204,8 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         tool.Icon = icon;
         tool.Description = description;
         tool.BaseUrl = baseUrl;
+        tool.HeadersJson = headersJson;
+        tool.IsHeadersEncrypted = headersEncrypted;
         tool.Enabled = enabled;
         tool.UpdatedAt = DateTimeOffset.UtcNow;
 
