@@ -173,7 +173,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     // 仅“首块未产出”前重试（进入 ReadChunksAsync 后不再重试）。
                     // 网关 500/429 多为瞬时（上游排队/过载，通常几秒内自愈），长退避让流“扛过”故障自动恢复，
                     // 而不是等待提示后直接失败——用户“重新问就好了”的场景即源于此。
-                    var retryable = code == 408 || code == 429 || code >= 500;
+                    // 业务性不可用不重试：distributor/new-api 的 model_not_found / “无可用渠道”在渠道修复前必然再次失败，
+                    // 退避重试只会让用户在“正在等待模型响应”里空等 ~31s，随后才容错切换——直接抛错立即触发容错。
+                    var retryable = (code == 408 || code == 429 || code >= 500) && !IsModelUnavailableError(errBody);
                     if (attempts < 6 && retryable && !ct.IsCancellationRequested)
                     {
                         var delayMs = 1000 * (1 << (attempts - 1));
@@ -564,6 +566,22 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         }
         catch (JsonException) { /* 非 JSON */ }
         return body[..Math.Min(300, body.Length)];
+    }
+
+    /// <summary>判定上游业务性不可用（重试无意义）：
+    /// distributor/new-api 的 model_not_found / “无可用渠道 / no available channel” 表示渠道配置缺失或已停用，
+    /// 在渠道修复前必然再次失败；部分网关对未加载模型也报 model_not_ready。此类错误直接抛错，
+    /// 交由上层立即执行 LLM 容错切换（同供应商其它模型或其它健康供应商），而不是退避重试空等。</summary>
+    private static bool IsModelUnavailableError(string errBody)
+    {
+        if (string.IsNullOrWhiteSpace(errBody)) return false;
+        var lower = errBody.ToLowerInvariant();
+        return lower.Contains("model_not_found", StringComparison.Ordinal)
+            || lower.Contains("model not found", StringComparison.Ordinal)
+            || lower.Contains("model_not_ready", StringComparison.Ordinal)
+            || lower.Contains("无可用渠道", StringComparison.Ordinal)
+            || lower.Contains("no available channel", StringComparison.Ordinal)
+            || lower.Contains("channel_not_found", StringComparison.Ordinal);
     }
 }
 
