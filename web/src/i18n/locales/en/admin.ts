@@ -39,6 +39,7 @@ export default {
       models: 'Models ({count})',
       fetchModels: 'Fetch Models',
       modelsFetched: 'Fetched & imported {added} model(s)',
+      modelsRenamed: 'Aligned case of {count} model name(s) to upstream',
       fetchModelsFailed: 'Fetch models failed',
       addModel: 'Add Model',
       editModel: 'Edit Model',

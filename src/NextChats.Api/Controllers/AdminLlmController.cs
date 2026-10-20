@@ -158,12 +158,26 @@ public sealed class AdminLlmController(
             }
         }
 
-        var existing = new HashSet<string>(provider.Models.Select(m => m.Name), StringComparer.OrdinalIgnoreCase);
+        var existing = new HashSet<string>(provider.Models.Select(m => m.Name), StringComparer.Ordinal);
         var added = new List<string>();
+        var renamed = new List<object>(); // { old, name }：上游模型名大小写与原库不一致时原地对齐（严格区分大小写）
         var nextPriority = provider.Models.Count == 0 ? 1 : provider.Models.Max(m => m.Priority) + 1;
-        foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var name in names.Distinct(StringComparer.Ordinal))
         {
-            if (existing.Contains(name)) continue;
+            var exact = provider.Models.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.Ordinal));
+            if (exact is not null) continue;
+            // 大小写不一致的存量行：以上游精确名为准原地更新（new-api 渠道按模型名严格区分大小写，
+            // 名称对不上渠道就会 503「无可用渠道」；OrdinalIgnoreCase 去重会让错误大小写永远得不到纠正）。
+            var stale = provider.Models.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (stale is not null)
+            {
+                var oldName = stale.Name;
+                stale.Name = name;
+                stale.UpdatedAt = DateTimeOffset.UtcNow;
+                await store.UpdateModelAsync(stale);
+                renamed.Add(new { old = oldName, name });
+                continue;
+            }
             existing.Add(name);
             await store.AddModelAsync(new LlmModel
             {
@@ -177,11 +191,12 @@ public sealed class AdminLlmController(
         }
         await config.InvalidateConfigCacheAsync();
         await audit.RecordAsync(NextChats.Core.Domain.AuditCategory.Config, "LLM_MODEL.FETCH", $"trc_{Guid.NewGuid():N}"[..24], UserId, provider.Name,
-            detail: new { added });
+            detail: new { added, renamed });
         var fresh = await store.GetProviderAsync(providerId);
         return Ok(new
         {
             added,
+            renamed,
             models = fresh?.Models.OrderBy(m => m.Priority).Select(ModelDto) ?? [],
         });
     }

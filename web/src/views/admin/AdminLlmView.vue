@@ -106,8 +106,12 @@ async function fetchModels() {
       editingId.value = id
       form.apiKey = ''
     }
-    const res = await http.post<{ added: string[] }>(`/api/admin/llm-providers/${editingId.value}/fetch-models`, {})
-    kernel.notify.success(t('admin.llm.modelsFetched', { added: res.added.length }))
+    const res = await http.post<{ added: string[]; renamed: { old: string; name: string }[] }>(`/api/admin/llm-providers/${editingId.value}/fetch-models`, {})
+    const renamed = res.renamed ?? []
+    const msg = renamed.length > 0
+      ? t('admin.llm.modelsFetched', { added: res.added.length }) + '；' + t('admin.llm.modelsRenamed', { count: renamed.length })
+      : t('admin.llm.modelsFetched', { added: res.added.length })
+    kernel.notify.success(msg)
     await load()
   } catch (e) {
     kernel.notify.error((e as { message?: string }).message ?? t('admin.llm.fetchModelsFailed'), (e as { code?: string }).code)

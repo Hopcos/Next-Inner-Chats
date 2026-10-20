@@ -39,6 +39,7 @@ export default {
       models: '模型（{count}）',
       fetchModels: '获取模型',
       modelsFetched: '已获取并自动带出 {added} 个模型',
+      modelsRenamed: '已按上游名称对齐 {count} 个模型的大小写',
       fetchModelsFailed: '获取模型失败',
       addModel: '添加模型',
       editModel: '编辑模型',
