@@ -44,6 +44,7 @@ public static class Texts
         ["INTERRUPTED"] = ("Stopped", "已中断"),
         ["AGENT_MAX_STEPS"] = ("⚠ Reached the maximum of {0} tool rounds, so the answer may be incomplete. Try splitting the question into smaller steps.", "⚠ 已达最大工具轮次（{0}），回答可能不完整。建议把问题拆分成更小的步骤后重试。"),
         ["LLM_ERROR"] = ("Model call failed. Please retry or switch the model.", "模型调用出现异常，请稍后重试或更换模型"),
+        ["LLM_EMPTY_RESPONSE"] = ("The model finished without returning any content (only usage was counted; no text / thinking / tool calls). The upstream may have suppressed the reply or its tool call failed. Please retry or switch the model.", "模型未返回任何内容（仅统计了用量，无正文/思考/工具调用）。上游可能拦截了回复或工具调用失败，请重试或更换模型"),
         ["LLM_ERROR_HTTP"] = ("Model service temporarily unavailable (HTTP {0}). Already retried automatically; please try again later or switch the model.", "模型服务暂时不可用（HTTP {0}），已自动重试仍失败，请稍后重试或更换模型"),
         ["LLM_UNAVAILABLE"] = ("No LLM provider is available. Please check provider configuration.", "暂无可用 LLM 供应商，请联系管理员配置并启用"),
         ["LLM_FALLBACK"] = ("Requested provider is unavailable (disabled / unhealthy / call failed). Falling back to {0} / {1}.", "所选供应商不可用（禁用 / 不健康 / 调用失败），已自动切换到 {0} / {1}。"),

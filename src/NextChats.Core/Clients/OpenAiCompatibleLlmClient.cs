@@ -320,7 +320,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         sw.Stop();
         usage ??= EstimateUsage(request, textSb.ToString(), reasoningSb.ToString());
 
-        if (finish == "tool_calls" && toolAggregators.Count > 0)
+        if (toolAggregators.Count > 0)
         {
             foreach (var (idx, (name, argsSb)) in toolAggregators.OrderBy(kv => kv.Key))
             {
@@ -335,7 +335,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             }
         }
 
-        yield return new LlmChunk.Done(usage, finish == "tool_calls" ? LlmFinishReason.ToolCalls : LlmFinishReason.Stop,
+        // 兼容网关收尾语义差异：部分网关在工具调用块之后仍以 finish_reason="stop"（而非 "tool_calls"）收尾
+        // （例如 gemini gateway：上游 Gemini 工具调用后 finishReason=STOP，映射为 stop）。
+        // 只要本流确实聚合到工具调用，就把完成语义规范为 ToolCalls，否则工具轮会被整轮丢弃。
+        var hasToolCalls = toolAggregators.Count > 0;
+        yield return new LlmChunk.Done(usage,
+            hasToolCalls ? LlmFinishReason.ToolCalls : finish == "tool_calls" ? LlmFinishReason.ToolCalls : LlmFinishReason.Stop,
             _model, textSb.ToString(), reasoningSb.ToString());
     }
 

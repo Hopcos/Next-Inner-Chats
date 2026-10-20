@@ -708,6 +708,19 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                                 PlannerOutputTokens = donePlannerOut,
                             }, doneCost, doneTtftMs, doneTotalMs, trace, model, doneOcrMs);
                         }
+                        // 空响应守卫：整条流没有任何正文/思考/工具调用（上游返回仅 usage 的空流，
+                        // 例如 CodeAssist 上游 MALFORMED_FUNCTION_CALL、安全拦截、网关映射丢失等），
+                        // 却以"完成"收尾 —— 不能静默展示 tokens 摘要让用户误以为已作答，转为明确失败。
+                        if (assistantStatus == MessageStatus.Complete
+                            && finalText.Length == 0
+                            && finalReasoning.Length == 0
+                            && toolTrace.Count == 0)
+                        {
+                            failureCode = "LLM_EMPTY_RESPONSE";
+                            failureMessage = Texts.Get("LLM_EMPTY_RESPONSE", lang);
+                            assistantStatus = MessageStatus.Failed;
+                            outEv = AgentEvent.Error(failureCode, failureMessage, "");
+                        }
                         break;
                     default:
                         outEv = ev;
