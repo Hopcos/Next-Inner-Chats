@@ -104,8 +104,11 @@ const usageStats = computed(() => {
     { label: t('chat.tokenOutput'), value: String(u.completionTokens) },
   ]
   if (u.cacheTokens > 0) rows.push({ label: t('chat.tokenCacheHit'), value: String(u.cacheTokens) })
-  if (reasoning != null) rows.push({ label: t('chat.tokenReasoning'), value: String(reasoning) })
-  rows.push({ label: t('chat.tokenGenerated'), value: String(generated) })
+  if (reasoning != null) {
+    rows.push({ label: t('chat.tokenReasoning'), value: String(reasoning) })
+    // 生成 Tokens = 输出 − 推理：仅在思考模式下有区分意义（非思考时输出=生成，不重复展示）
+    rows.push({ label: t('chat.tokenGenerated'), value: String(generated) })
+  }
   if (speed != null) rows.push({ label: t('chat.tokenSpeed'), value: `${speed} tok/s` })
   if (u.ttftMs > 0) rows.push({ label: t('chat.tokenTtft'), value: `${u.ttftMs} ms` })
   if (u.totalMs > 0) rows.push({ label: t('chat.tokenTotal'), value: `${u.totalMs} ms` })
