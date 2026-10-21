@@ -88,6 +88,10 @@ function toolCountLabel(m: { endpoint?: string | null; items: { kind: string }[]
             <div class="radio-title">{{ t('chat.notSpecified') }}</div>
             <div class="radio-desc nc-dim">{{ t('chat.defaultPrompt') }}</div>
           </el-radio>
+          <el-radio value="00000000-0000-0000-0000-000000000000" class="radio-card">
+            <div class="radio-title">{{ t('chat.noPrompt') }}</div>
+            <div class="radio-desc nc-dim">{{ t('chat.noPromptDesc') }}</div>
+          </el-radio>
         </el-radio-group>
 
         <h4 class="sec">{{ t('chat.secProvider') }}</h4>

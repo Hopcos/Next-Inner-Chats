@@ -146,6 +146,8 @@ export default {
     secSkill: 'SKILL（多选，懒加载元工具）',
     notSpecified: '不指定',
     defaultPrompt: '使用系统默认提示',
+    noPrompt: '不使用提示词',
+    noPromptDesc: '完全不注入任何系统提示词（仅保留会话历史与工具定义）',
     autoRoute: '自动路由',
     toolCount: '{n} 个工具 · {endpoint}',
     noMcpBound: '当前角色未绑定任何 MCP',

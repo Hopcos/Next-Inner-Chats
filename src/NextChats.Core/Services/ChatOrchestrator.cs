@@ -28,6 +28,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private const string SettingMcpServers = "chat.mcpServers";
     private const string SettingSkills = "chat.skills";
 
+    /// <summary>「不使用提示词」哨兵：promptId 为 Guid.Empty 时完全不注入任何系统提示词（不加载模板、不回退默认）</summary>
+    public const string NoPromptId = "00000000-0000-0000-0000-000000000000";
+
     private static readonly decimal PricePer1KInput = 0.0005m;   // 默认 $0.5/M（可通过 provider.ExtraJson 覆盖）
     private static readonly decimal PricePer1KOutput = 0.0015m;
 
@@ -425,13 +428,16 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         }
 
         // ---------- 构建 Prompt（模板渲染） ----------
+        // 用户可选「不使用提示词」（promptId = Guid.Empty 哨兵）：不加载任何系统提示词模板，也不回退到默认模板，
+        // system 块保持为空 → system 消息整体省略，仅保留会话历史与工具定义。
+        var noPrompt = request.PromptId is { } promptIdVal && promptIdVal == Guid.Empty;
         var selectedPrompts = new List<Prompt>();
-        if (request.PromptId is { } pid && rolePromptIds.Contains(pid))
+        if (!noPrompt && request.PromptId is { } pid && rolePromptIds.Contains(pid))
         {
             var p = await _config.GetPromptAsync(pid, ct);
             if (p is { Enabled: true }) selectedPrompts.Add(p);
         }
-        if (selectedPrompts.Count == 0)
+        if (!noPrompt && selectedPrompts.Count == 0)
         {
             var defaults = (await _config.GetEnabledPromptsAsync(ct)).Where(p => rolePromptIds.Contains(p.Id)).Take(2).ToList();
             selectedPrompts.AddRange(defaults);
@@ -462,7 +468,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 _logger.LogWarning(ex, "Prompt 渲染失败 trace={Trace} prompt={Prompt}", trace, p.Name);
             }
         }
-        if (systemBlocks.Count == 0)
+        if (!noPrompt && systemBlocks.Count == 0)
         {
             systemBlocks.Add(Texts.Get("DEFAULT_SYSTEM", lang));
         }
@@ -499,7 +505,12 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 : LlmChatMessage.Assistant(m.Content!, reasoning: m.Reasoning)) // 思考链随历史回传（携带 tools 时官方要求，否则 400）
             .ToList();
 
-        var initialMessages = new List<LlmChatMessage> { LlmChatMessage.System(systemPrompt) };
+        // 不使用提示词时 systemBlocks 为空 → 不发 system 消息（部分上游会拒绝空 system 内容）
+        var initialMessages = new List<LlmChatMessage>();
+        if (systemBlocks.Count > 0)
+        {
+            initialMessages.Add(LlmChatMessage.System(systemPrompt));
+        }
         initialMessages.AddRange(llmHistory);
         if (visionLines.Count > 0)
         {

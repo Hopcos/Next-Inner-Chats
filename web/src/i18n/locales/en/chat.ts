@@ -147,6 +147,8 @@ export default {
     secSkill: 'SKILL (multi-select, lazy meta-tools)',
     notSpecified: 'Not specified',
     defaultPrompt: 'Use the system default prompt.',
+    noPrompt: 'No prompt',
+    noPromptDesc: 'Inject no system prompt at all (only conversation history and tool definitions remain).',
     autoRoute: 'Auto route',
     toolCount: '{n} tools · {endpoint}',
     noMcpBound: 'No MCP bound to your role.',
