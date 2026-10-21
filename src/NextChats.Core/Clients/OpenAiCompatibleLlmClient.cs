@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using NextChats.Core.Abstractions;
 using NextChats.Core.Domain;
@@ -71,6 +72,21 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             if (!resp.IsSuccessStatusCode)
             {
                 var code = (int)resp.StatusCode;
+                // 上游 400：max_tokens 超过该模型输出上限（各模型上限不一：llm-cs 网关 OpenAI 通道普遍 65536，
+                // Anthropic 系如 claude-haiku-4-5 为 64000）。解析上限后降级 MaxTokens 重发一次，
+                // 避免此类参数错误每次调用都直接失败。
+                if (code == 400 && request.MaxTokens is > 0)
+                {
+                    var cap = ParseMaxTokensCap(body);
+                    if (cap > 0 && request.MaxTokens > cap)
+                    {
+                        _logger.LogWarning("LLM 上游 max_tokens 超限（{Provider}/{Model}），降级 {Old}→{New} 重发：{Body}",
+                            _provider.Name, _model, request.MaxTokens, cap, MaskBody(body));
+                        request = request with { MaxTokens = cap };
+                        completeCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _provider.TimeoutSeconds)));
+                        continue;
+                    }
+                }
                 // 上游瞬时故障（5xx / 408 / 429）自动重试：总尝试 4 次（初试 + 3 次重试），指数退避 500/1000/2000ms
                 var retryable = code == 408 || code == 429 || code >= 500;
                 if (attempt < 4 && retryable && !ct.IsCancellationRequested)
@@ -169,6 +185,20 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     var errBody = await resp.Content.ReadAsStringAsync(ct);
                     var code = (int)resp.StatusCode;
                     var msg = $"HTTP {code}: {MaskBody(errBody)}";
+                    // 上游 400：max_tokens 超过该模型输出上限（各模型上限不一：llm-cs 网关 OpenAI 通道普遍 65536，
+                    // Anthropic 系如 claude-haiku-4-5 为 64000）。解析上限后降级 MaxTokens 重发一次，
+                    // 避免此类参数错误每次调用都直接失败。
+                    if (code == 400 && request.MaxTokens is > 0)
+                    {
+                        var cap = ParseMaxTokensCap(errBody);
+                        if (cap > 0 && request.MaxTokens > cap)
+                        {
+                            _logger.LogWarning("LLM 上游 max_tokens 超限（{Provider}/{Model}），降级 {Old}→{New} 重发：{Body}",
+                                _provider.Name, _model, request.MaxTokens, cap, MaskBody(errBody));
+                            request = request with { MaxTokens = cap };
+                            continue;
+                        }
+                    }
                     // 上游瞬时故障（5xx / 408 / 429）自动重试：总尝试 6 次（初试 + 5 次重试），指数退避 1/2/4/8/16s（约 31s 窗口）。
                     // 仅“首块未产出”前重试（进入 ReadChunksAsync 后不再重试）。
                     // 网关 500/429 多为瞬时（上游排队/过载，通常几秒内自愈），长退避让流“扛过”故障自动恢复，
@@ -566,6 +596,19 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         }
         catch (JsonException) { /* 非 JSON */ }
         return body[..Math.Min(300, body.Length)];
+    }
+
+    /// <summary>从上游 400 错误体中解析模型 max_tokens 输出上限：
+    /// 优先精确形态 "max_tokens: 65536 > 64000"（Anthropic 直连/兼容网关），
+    /// 其次 "maximum allowed … N" / "maximum is N" 等人类可读形态。解析不到返回 0。</summary>
+    private static int ParseMaxTokensCap(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return 0;
+        var m = Regex.Match(body, @"max_tokens[:\s]*\d+\s*>\s*(\d+)", RegexOptions.IgnoreCase);
+        if (!m.Success) m = Regex.Match(body, @"maximum\s+allowed\b[^\d]{0,80}(\d{4,6})", RegexOptions.IgnoreCase);
+        if (!m.Success) m = Regex.Match(body, @"maximum\s+(?:is|of)\s*(\d{4,6})", RegexOptions.IgnoreCase);
+        if (m.Success && int.TryParse(m.Groups[1].Value, out var cap) && cap >= 1024) return cap;
+        return 0;
     }
 
     /// <summary>判定上游业务性不可用（重试无意义）：

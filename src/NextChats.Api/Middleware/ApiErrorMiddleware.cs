@@ -25,6 +25,10 @@ public sealed class ApiErrorMiddleware(RequestDelegate next)
                 KeyNotFoundException => "NOT_FOUND",
                 InvalidOperationException => "BAD_REQUEST",
                 NextChats.Core.Services.LlmUnavailableException => "LLM_UNAVAILABLE",
+                // 上游 LLM 网关错误（4xx/5xx）业务上不是本服务故障：归 502 语义，不污染 500 监控
+                NextChats.Core.Clients.LlmHttpException => "LLM_ERROR",
+                // 网络层失败（连接拒绝/重置等）同样归因上游可达性，而非本服务内部错误
+                System.Net.Http.HttpRequestException => "LLM_ERROR",
                 _ => "INTERNAL_ERROR",
             };
 
@@ -41,6 +45,7 @@ public sealed class ApiErrorMiddleware(RequestDelegate next)
                 "FORBIDDEN" => 403,
                 "NOT_FOUND" => 404,
                 "LLM_UNAVAILABLE" => 503,
+                "LLM_ERROR" => 502,
                 _ => 500,
             };
             context.Response.ContentType = "application/json; charset=utf-8";

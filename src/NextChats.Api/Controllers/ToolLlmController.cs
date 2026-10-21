@@ -21,10 +21,11 @@ public sealed class ToolLlmController(IConfigStore config, ILlmRouter router) : 
     private const int MaxSystemChars = 4000;
     /// <summary>
     /// 输出上限（max_tokens）。OpenAI 兼容端点（Azure OpenAI / llm-cs 等网关）对 max_tokens 的
-    /// 支持范围为 1~65536，传更大的值（如 128000）会被上游以 400 拒绝。
-    /// 这里 clamp 到 65536，确保任何工具页传入的超大值都不会再触发上游 400（超出部分由上游硬限制截断）。
+    /// 支持范围为 1~65536，但 Anthropic 系模型上限为 64000（如 claude-haiku-4-5-20251001），
+    /// 传 65536 会被上游以 400 拒绝。这里 clamp 到 64000（所有主流模型的安全交集）；
+    /// 客户端另有兜底：若个别模型上限更低，OpenAiCompatibleLlmClient 会解析上游 400 后自动降级重发。
     /// </summary>
-    private const int MaxOutputTokens = 65536;
+    private const int MaxOutputTokens = 64000;
 
     private static readonly JsonSerializerOptions SseJson = new()
     {
@@ -52,7 +53,9 @@ public sealed class ToolLlmController(IConfigStore config, ILlmRouter router) : 
         if (model is null) return NotFound(Err("MODEL_NOT_AVAILABLE"));
         if (restricted && !modelIds.Contains(model.Id)) return StatusCode(StatusCodes.Status403Forbidden, Err("MODEL_NOT_AUTHORIZED"));
 
-        var client = await router.SelectClientAsync(null, req.ModelId, Lang, ct, restricted ? modelIds.ToArray() : null);
+        // 显式按模型所属供应商路由（不能依赖自动选供应商：preferredModelId 只在选中供应商内部命中，
+        // 若用户选中的模型不属于优先级最高的供应商，会静默打到别的供应商/模型）
+        var client = await router.SelectClientAsync(model.ProviderId, req.ModelId, Lang, ct, restricted ? modelIds.ToArray() : null);
         var messages = new List<LlmChatMessage>();
         if (!string.IsNullOrWhiteSpace(req.SystemPrompt)) messages.Add(LlmChatMessage.System(req.SystemPrompt));
         messages.Add(LlmChatMessage.User(req.Prompt));
@@ -64,8 +67,16 @@ public sealed class ToolLlmController(IConfigStore config, ILlmRouter router) : 
             MaxTokens = Math.Clamp(req.MaxTokens ?? 2048, 1, MaxOutputTokens),
             // ThinkingEnabled 默认 false：工具调用固定非思考模式，不占用思考 token
         };
-        var result = await client.CompleteAsync(request, ct);
-        return Ok(new { text = result.Message.Content ?? "" });
+        try
+        {
+            var result = await client.CompleteAsync(request, ct);
+            return Ok(new { text = result.Message.Content ?? "" });
+        }
+        catch (LlmHttpException ex)
+        {
+            // 上游 4xx/5xx：转成可读错误而非未处理 500（完整堆栈仍由中间件日志记录）
+            return BadRequest(Err("LLM_ERROR", ex.Message));
+        }
     }
 
     /// <summary>
@@ -115,7 +126,7 @@ public sealed class ToolLlmController(IConfigStore config, ILlmRouter router) : 
         }
 
         var client = await router.SelectClientAsync(
-            null, req.ModelId, Lang, HttpContext.RequestAborted, restricted ? modelIds.ToArray() : null);
+            model.ProviderId, req.ModelId, Lang, HttpContext.RequestAborted, restricted ? modelIds.ToArray() : null);
 
         var messages = new List<LlmChatMessage>();
         if (!string.IsNullOrWhiteSpace(req.SystemPrompt)) messages.Add(LlmChatMessage.System(req.SystemPrompt));

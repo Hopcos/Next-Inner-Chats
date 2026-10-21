@@ -70,6 +70,20 @@ watch(
 const source = ref('')
 const target = ref('')
 const busy = ref(false)
+// 等待反馈：完整模式全程静默等待最易被感知为"卡住"，与聊天一致地显示已等待秒数
+const elapsed = ref(0)
+let elapsedTimer: ReturnType<typeof setInterval> | null = null
+function startElapsed() {
+  elapsed.value = 0
+  if (elapsedTimer) clearInterval(elapsedTimer)
+  elapsedTimer = setInterval(() => { elapsed.value++ }, 1000)
+}
+function stopElapsed() {
+  if (elapsedTimer) {
+    clearInterval(elapsedTimer)
+    elapsedTimer = null
+  }
+}
 let abort: AbortController | null = null
 
 const en2zh = computed(() => direction.value === 'en2zh')
@@ -94,8 +108,11 @@ async function run() {
 
   busy.value = true
   target.value = ''
+  elapsed.value = 0
+  startElapsed()
   abort = new AbortController()
   let streamErr: { code?: string; message?: string } | null = null
+  let gotDelta = false
   try {
     if (streamMode.value) {
       // 流式打字机模式（透传上游 text_delta；已知上游网关偶发首增量缺字，个别情况会缺开头几个字）
@@ -105,12 +122,15 @@ async function run() {
           modelId: modelId.value,
           systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
           prompt: userPrompt,
-          // 输出上限：OpenAI 兼容端点 max_tokens 上限 65536，传更大值会被上游 400 拒绝（后端亦会 clamp）
-          maxTokens: 65536,
+          // 输出上限：Anthropic 系模型 max_tokens 上限 64000（传 65536 会被上游 400 拒绝；后端会 clamp 并自动降级）
+          maxTokens: 64000,
         },
         (ev) => {
-          if (ev.kind === 'text_delta') target.value += String(ev.text ?? '')
-          else if (ev.kind === 'error') streamErr = { code: String(ev.code ?? ''), message: String(ev.message ?? '') }
+          if (ev.kind === 'text_delta') {
+            if (!gotDelta) stopElapsed() // 首字已出：停止"等待"计数（打字机在动，无需再加等待提示）
+            gotDelta = true
+            target.value += String(ev.text ?? '')
+          } else if (ev.kind === 'error') streamErr = { code: String(ev.code ?? ''), message: String(ev.message ?? '') }
         },
         abort.signal,
       )
@@ -120,7 +140,7 @@ async function run() {
         modelId: modelId.value,
         systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
         prompt: userPrompt,
-        maxTokens: 65536,
+        maxTokens: 64000,
       })
       target.value = res?.text ?? ''
     }
@@ -133,6 +153,7 @@ async function run() {
       kernel.notify.error(err.message ?? t('tools.translate.failed'), err.code as string)
     }
   } finally {
+    stopElapsed()
     busy.value = false
     abort = null
   }
@@ -291,6 +312,7 @@ onBeforeUnmount(stopSpeak)
           <el-button type="primary" class="tr-go" :loading="busy" size="large" @click="run">
             {{ busy ? t('tools.translate.stop') : t('tools.translate.translateBtn') }}
           </el-button>
+          <span v-if="busy && elapsed > 0" class="tr-wait">{{ t('tools.translate.waiting', { s: elapsed }) }}</span>
         </div>
 
         <section class="tr-pane">
@@ -623,6 +645,14 @@ onBeforeUnmount(stopSpeak)
   border-radius: 12px !important;
   padding: 20px 18px !important;
   font-weight: 700;
+}
+
+.tr-wait {
+  max-width: 14em;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--nc-text-dim, #8a94a6);
+  margin-left: 10px;
 }
 
 .tr-foot-note {
