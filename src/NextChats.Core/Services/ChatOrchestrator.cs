@@ -283,21 +283,26 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             HttpFetchSchemaJson, IsSkill: false));
 
         // ---------- 内置工具：mcp_prompt / mcp_resources / mcp_read_resource（MCP Prompt 与 Resource 按需取用） ----------
-        unifiedTools.Add(new UnifiedTool(
-            BuiltinToolServer, McpPromptToolName,
-            "Retrieve a prompt template from an MCP server, rendered into role/text content. " +
-            "Use when an MCP server exposes reusable prompts (see the admin catalog) and you need their template/instructions to act on them.",
-            McpPromptSchemaJson, IsSkill: false));
-        unifiedTools.Add(new UnifiedTool(
-            BuiltinToolServer, McpResourcesToolName,
-            "List resources (static resources and templates) exposed by the bound MCP servers, with their URIs. " +
-            "Call this first to discover what can be read, then use mcp_read_resource to fetch content.",
-            McpResourcesSchemaJson, IsSkill: false));
-        unifiedTools.Add(new UnifiedTool(
-            BuiltinToolServer, McpReadResourceToolName,
-            "Read an MCP resource by URI and return its text content (size-limited). " +
-            "Use a URI obtained from mcp_resources. Binary/image resources return a placeholder.",
-            McpReadResourceSchemaJson, IsSkill: false));
+        // 仅在本次会话实际绑定 ≥1 个 MCP 服务器时注入：未绑定任何服务器时这三个元工具调用必败（servers 为空），
+        // 注入只会白白占用输入 tokens（实测 ~350 tokens/请求）。
+        if (servers.Count > 0)
+        {
+            unifiedTools.Add(new UnifiedTool(
+                BuiltinToolServer, McpPromptToolName,
+                "Retrieve a prompt template from an MCP server, rendered into role/text content. " +
+                "Use when an MCP server exposes reusable prompts (see the admin catalog) and you need their template/instructions to act on them.",
+                McpPromptSchemaJson, IsSkill: false));
+            unifiedTools.Add(new UnifiedTool(
+                BuiltinToolServer, McpResourcesToolName,
+                "List resources (static resources and templates) exposed by the bound MCP servers, with their URIs. " +
+                "Call this first to discover what can be read, then use mcp_read_resource to fetch content.",
+                McpResourcesSchemaJson, IsSkill: false));
+            unifiedTools.Add(new UnifiedTool(
+                BuiltinToolServer, McpReadResourceToolName,
+                "Read an MCP resource by URI and return its text content (size-limited). " +
+                "Use a URI obtained from mcp_resources. Binary/image resources return a placeholder.",
+                McpReadResourceSchemaJson, IsSkill: false));
+        }
 
         // ---------- 内置工具：delegate_task（主-从委派：并行 Sub-Agent；由用户设置开关控制，默认关闭） ----------
         if (delegationEnabled)
