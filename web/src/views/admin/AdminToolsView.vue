@@ -80,7 +80,10 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadFetchHosts()
+})
 
 function openCreate() {
   editingId.value = null
@@ -166,6 +169,40 @@ async function onDelete(row: AdminToolDto) {
     await load()
   } catch (e) {
     kernel.notify.error((e as { message?: string }).message ?? t('admin.tools.deleteFailed'), (e as { code?: string }).code)
+  }
+}
+
+/** ---- 内置工具：http_fetch 域名白名单（后台系统设置，保存即生效） ---- */
+const fetchHostsInput = ref('')
+const fetchHostsSaving = ref(false)
+const fetchHostsLoaded = ref(false)
+const fetchHostsActive = ref<string[]>([])
+
+async function loadFetchHosts() {
+  try {
+    const r = await http.get<{ allowHosts: string[] }>('/api/admin/tools/http-fetch-allow-hosts')
+    fetchHostsActive.value = r.allowHosts
+    fetchHostsInput.value = r.allowHosts.join('\n')
+    fetchHostsLoaded.value = true
+  } catch (e) {
+    kernel.notify.error((e as { message?: string }).message ?? t('admin.tools.fetchHostsLoadFailed'), (e as { code?: string }).code)
+  }
+}
+
+async function saveFetchHosts() {
+  const hosts = fetchHostsInput.value
+    .split(/\r?\n|,|\s+/)
+    .map((h) => h.trim())
+    .filter(Boolean)
+  fetchHostsSaving.value = true
+  try {
+    await http.put('/api/admin/tools/http-fetch-allow-hosts', { allowHosts: hosts })
+    fetchHostsActive.value = hosts
+    kernel.notify.success(t('admin.tools.fetchHostsSaved'))
+  } catch (e) {
+    kernel.notify.error((e as { message?: string }).message ?? t('admin.tools.fetchHostsSaveFailed'), (e as { code?: string }).code)
+  } finally {
+    fetchHostsSaving.value = false
   }
 }
 </script>
@@ -286,6 +323,33 @@ async function onDelete(row: AdminToolDto) {
         <el-button type="primary" :loading="saving" :disabled="ro" @click="onSave">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 内置工具：http_fetch 域名白名单 -->
+    <el-card class="fetch-card" shadow="never">
+      <template #header>
+        <div class="fetch-head">
+          <span>{{ t('admin.tools.fetchHostsTitle') }}</span>
+          <span class="nc-dim">{{ t('admin.tools.fetchHostsTag') }}</span>
+        </div>
+      </template>
+      <p class="tip">{{ t('admin.tools.fetchHostsTip') }}</p>
+      <el-input
+        v-model="fetchHostsInput"
+        type="textarea"
+        :rows="4"
+        class="nc-mono"
+        :placeholder="t('admin.tools.fetchHostsPlaceholder')"
+        :disabled="ro"
+      />
+      <div class="fetch-actions">
+        <el-button type="primary" size="small" :loading="fetchHostsSaving" :disabled="ro" @click="saveFetchHosts">
+          {{ t('common.save') }}
+        </el-button>
+        <span v-if="fetchHostsLoaded" class="nc-dim fetch-current">
+          {{ t('admin.tools.fetchHostsCurrent', { n: fetchHostsActive.length }) }}：{{ fetchHostsActive.join(', ') || '—' }}
+        </span>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -304,6 +368,29 @@ async function onDelete(row: AdminToolDto) {
 
 .tbl {
   width: 100%;
+}
+
+.fetch-card {
+  margin-top: 18px;
+  border: 1px solid var(--nc-border, rgba(128, 128, 128, 0.25));
+}
+
+.fetch-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fetch-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.fetch-current {
+  font-size: 12.5px;
+  word-break: break-all;
 }
 
 .cell-ico {

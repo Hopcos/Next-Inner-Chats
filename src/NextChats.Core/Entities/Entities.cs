@@ -694,6 +694,16 @@ public class UserSetting
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>系统/后台全局设置（key-value；如内置工具 http_fetch 域名白名单）。管理端可配置，运行时即时生效。</summary>
+public class SystemSetting
+{
+    [Key, MaxLength(64)] public string Key { get; set; } = null!;
+
+    public string? Value { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 /// <summary>用户收藏的对话（按用户隔离；一对提问+回答；支持重命名、删除、去重）</summary>
 public class UserFavorite
 {

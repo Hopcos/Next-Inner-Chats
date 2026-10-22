@@ -19,6 +19,7 @@ public sealed class NextChatsDbContext(DbContextOptions<NextChatsDbContext> opti
     public DbSet<ToolApproval> ToolApprovals => Set<ToolApproval>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<TokenUsageRecord> TokenUsageRecords => Set<TokenUsageRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<UserFavorite> UserFavorites => Set<UserFavorite>();
@@ -180,6 +181,11 @@ public sealed class NextChatsDbContext(DbContextOptions<NextChatsDbContext> opti
         b.Entity<UserSetting>(e =>
         {
             e.HasIndex(x => new { x.UserId, x.Key }).IsUnique();
+        });
+
+        b.Entity<SystemSetting>(e =>
+        {
+            e.HasKey(x => x.Key);
         });
 
         b.Entity<TokenUsageRecord>(e =>

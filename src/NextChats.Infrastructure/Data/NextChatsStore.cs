@@ -304,6 +304,33 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         await _cache.RemoveAsync($"settings:{userId}", ct);
     }
 
+    public async Task<string?> GetSystemSettingAsync(string key, CancellationToken ct = default)
+    {
+        return await _cache.GetOrAddAsync($"sysset:{key}", async token =>
+        {
+            await using var db = await _db.CreateDbContextAsync(token);
+            return (await db.SystemSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == key, token))?.Value;
+        }, TimeSpan.FromSeconds(30), ct);
+    }
+
+    public async Task SetSystemSettingAsync(string key, string? value, CancellationToken ct = default)
+    {
+        await using var db = await _db.CreateDbContextAsync(ct);
+        var row = await db.SystemSettings.FirstOrDefaultAsync(s => s.Key == key, ct);
+        if (row is null)
+        {
+            if (value is null) return; // 从未配置：不建空行
+            db.SystemSettings.Add(new SystemSetting { Key = key, Value = value });
+        }
+        else
+        {
+            row.Value = value;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+        await _cache.RemoveAsync($"sysset:{key}", ct);
+    }
+
     public Task InvalidateConfigCacheAsync(CancellationToken ct = default)
     {
         // 配置变更低频 → 全量缓存失效（Redis 版本可精确删除前缀）

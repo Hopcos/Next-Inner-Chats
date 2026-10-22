@@ -138,6 +138,7 @@ public static class Texts
         ["WS_ACCESS_DENIED"] = ("Access denied while reading the workspace directory.", "读取工作空间目录时被拒绝访问。"),
         ["HTTP_FETCH_BAD_URL"] = ("http_fetch: invalid or unsupported URL (http/https required)", "http_fetch：URL 无效或不支持（仅允许 http/https）"),
         ["HTTP_FETCH_DENIED"] = ("http_fetch: host '{0}' is not in the allowed list (github.com / raw.githubusercontent.com by default). Try an allowed host or ask the user to add it to configuration.", "http_fetch：域名 {0} 不在白名单（默认仅 github.com / raw.githubusercontent.com），请使用允许的域名，或联系管理员在配置中放行"),
+        ["HTTP_FETCH_ALLOW_EMPTY"] = ("http_fetch allowlist cannot be empty", "http_fetch 域名白名单不能为空"),
         ["HTTP_FETCH_HTTP"] = ("http_fetch: the server responded HTTP {0}", "http_fetch：服务器返回 HTTP {0}"),
         ["HTTP_FETCH_TOO_LARGE"] = ("http_fetch: response too large (over ~{0} MB), try a smaller/raw endpoint", "http_fetch：响应体过大（超过约 {0} MB），请尝试更小或 raw 格式的地址"),
         ["HTTP_FETCH_NETWORK"] = ("http_fetch: network error while fetching the URL", "http_fetch：抓取该地址时发生网络错误"),

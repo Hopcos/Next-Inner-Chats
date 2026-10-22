@@ -3,6 +3,13 @@ using NextChats.Core.Entities;
 
 namespace NextChats.Core.Abstractions;
 
+/// <summary>系统/后台全局设置键（管理端可配，运行时生效）</summary>
+public static class SystemSettingKeys
+{
+    /// <summary>内置 http_fetch 允许访问的域名白名单（JSON 字符串数组；未配置时回退 appsettings BuiltinTools:HttpFetchAllowHosts 默认）</summary>
+    public const string HttpFetchAllowHosts = "agent.httpFetchAllowHosts";
+}
+
 /// <summary>
 /// 配置/权限读取存储（引擎只依赖接口；实现位于 Infrastructure，带缓存）。
 /// 有效交集规则：角色绑定 ∩ 用户启用 ∩ Server 级启用 ∩ 项级启用。
@@ -72,6 +79,11 @@ public interface IConfigStore
     Task<IDictionary<string, string>> GetUserSettingsAsync(Guid userId, CancellationToken ct = default);
 
     Task SetUserSettingAsync(Guid userId, string key, string valueJson, CancellationToken ct = default);
+
+    // ---------- 系统/后台设置（全局 key-value；管理端可写，引擎运行时读取） ----------
+    Task<string?> GetSystemSettingAsync(string key, CancellationToken ct = default);
+
+    Task SetSystemSettingAsync(string key, string? value, CancellationToken ct = default);
 
     /// <summary>配置变更后的缓存失效通知（由管理端调用）</summary>
     Task InvalidateConfigCacheAsync(CancellationToken ct = default);

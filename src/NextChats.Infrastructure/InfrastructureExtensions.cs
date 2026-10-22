@@ -138,6 +138,14 @@ public static class InfrastructureExtensions
                 CREATE UNIQUE INDEX "IX_UserFavorites_UserId_CreatedAt" ON "UserFavorites" ("UserId", "CreatedAt");
                 CREATE INDEX "IX_UserFavorites_UserId_QuestionMessageId" ON "UserFavorites" ("UserId", "QuestionMessageId") WHERE "QuestionMessageId" IS NOT NULL;
                 """);
+            // 系统/后台全局设置（key-value JSON；如内置工具 http_fetch 域名白名单，管理端可配）——老库建表；全新库由 EnsureCreated 直接建
+            await AddTableIfMissingAsync(conn, "SystemSettings", """
+                CREATE TABLE "SystemSettings" (
+                    "Key" TEXT NOT NULL CONSTRAINT "PK_SystemSettings" PRIMARY KEY,
+                    "Value" TEXT,
+                    "UpdatedAt" TEXT NOT NULL
+                );
+                """);
             // 角色 ↔ LLM 模型 多对多（RoleModelBindings）
             // 注意：连接表列名由 EF 按导航属性生成 —— AppRole.Models ↔ LlmModel.Roles → "ModelsId"/"RolesId"
             await FixJoinTableColumnsAsync(conn, "RoleModelBindings", "ModelsId");

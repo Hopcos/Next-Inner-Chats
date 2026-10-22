@@ -277,12 +277,13 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         }
         var skillByName = enabledSkills.ToDictionary(s => s.MetaToolName, StringComparer.OrdinalIgnoreCase);
 
-        // ---------- 内置工具：http_fetch（白名单域名 GET 抓取） ----------
+        // ---------- 内置工具：http_fetch（后台可配白名单域名 GET 抓取） ----------
+        var fetchHosts = await GetHttpFetchAllowHostsAsync(ct);
         unifiedTools.Add(new UnifiedTool(
             BuiltinToolServer, HttpFetchToolName,
             "Fetch a web page or raw text file over HTTP(S) GET and return its text content (size-limited). " +
             "Use it to read web pages, README.md, raw files such as https://raw.githubusercontent.com/owner/repo/main/README.md. " +
-            "Only allowlisted hosts are reachable (github.com / raw.githubusercontent.com by default).",
+            $"Only allowlisted hosts are reachable ({string.Join(", ", fetchHosts)}).",
             HttpFetchSchemaJson, IsSkill: false));
 
         // ---------- 内置工具：mcp_prompt / mcp_resources / mcp_read_resource（MCP Prompt 与 Resource 按需取用） ----------
@@ -1309,7 +1310,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         {
             return new McpToolResult(false, "", Texts.Get("HTTP_FETCH_BAD_URL", lang), "HTTP_FETCH_BAD_URL", 0, 1);
         }
-        if (!HostAllowed(uri.Host, opts))
+        var hosts = await GetHttpFetchAllowHostsAsync(ct);
+        if (!HostAllowed(uri.Host, hosts))
         {
             _logger.LogWarning("http_fetch 域名不在白名单 trace={Trace} host={Host}", traceId, uri.Host);
             return new McpToolResult(false, "", Texts.Get("HTTP_FETCH_DENIED", lang, uri.Host), "HTTP_FETCH_DENIED", 0, 1);
@@ -1328,7 +1330,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 resp.Dispose();
                 if (loc is null) break;
                 var next = new Uri(uri, loc);
-                if (!HostAllowed(next.Host, opts))
+                if (!HostAllowed(next.Host, hosts))
                 {
                     return new McpToolResult(false, "", Texts.Get("HTTP_FETCH_DENIED", lang, next.Host), "HTTP_FETCH_DENIED", 0, 1);
                 }
@@ -1374,10 +1376,27 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         }
     }
 
-    /// <summary>白名单校验：host 精确等于白名单项，或以 . 前缀作为子域</summary>
-    private static bool HostAllowed(string host, BuiltinToolOptions opts)
+    /// <summary>http_fetch 白名单：后台系统设置（SystemSettingKeys.HttpFetchAllowHosts）优先，未配置回退 appsettings 默认</summary>
+    private async Task<string[]> GetHttpFetchAllowHostsAsync(CancellationToken ct)
     {
-        foreach (var item in opts.HttpFetchAllowHosts)
+        var raw = await _config.GetSystemSettingAsync(SystemSettingKeys.HttpFetchAllowHosts, ct);
+        if (string.IsNullOrWhiteSpace(raw)) return _builtinOptions.Value.HttpFetchAllowHosts;
+        try
+        {
+            var list = System.Text.Json.JsonSerializer.Deserialize<string[]>(raw);
+            if (list is { Length: > 0 }) return list;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // 设置值损坏 → 回退 appsettings 默认
+        }
+        return _builtinOptions.Value.HttpFetchAllowHosts;
+    }
+
+    /// <summary>白名单校验：host 精确等于白名单项，或以 . 前缀作为子域</summary>
+    private static bool HostAllowed(string host, string[] allowedHosts)
+    {
+        foreach (var item in allowedHosts)
         {
             var allow = item.Trim().TrimStart('*', '.').Trim().ToLowerInvariant();
             if (string.IsNullOrEmpty(allow)) continue;
