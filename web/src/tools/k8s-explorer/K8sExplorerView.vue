@@ -316,41 +316,42 @@ onMounted(async () => {
       <div v-else-if="!cfgOk" class="k8s-empty">{{ t('tools.k8s.noEndpoint') }}</div>
       <div v-else-if="!environment && !loading" class="k8s-empty">{{ t('tools.k8s.pickEnv') }}</div>
 
-      <div v-if="filteredPods.length" class="k8s-table-wrap k8s-scroll">
-        <table class="k8s-table">
-          <thead>
-            <tr>
-              <th class="k8s-th name">{{ t('tools.k8s.colName') }}</th>
-              <th class="k8s-th">{{ t('tools.k8s.colReady') }}</th>
-              <th class="k8s-th">{{ t('tools.k8s.colStatus') }}</th>
-              <th class="k8s-th num">{{ t('tools.k8s.colRestarts') }}</th>
-              <th class="k8s-th">{{ t('tools.k8s.colAge') }}</th>
-              <th class="k8s-th">{{ t('tools.k8s.colIp') }}</th>
-              <th class="k8s-th">{{ t('tools.k8s.colNode') }}</th>
-              <th class="k8s-th num">{{ t('tools.k8s.colCpu') }}</th>
-              <th class="k8s-th num">{{ t('tools.k8s.colMemory') }}</th>
-              <th class="k8s-th img">{{ t('tools.k8s.colImage') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in filteredPods" :key="p.name" class="k8s-tr" :title="t('tools.k8s.browseFiles')" @click="openFileBrowser(p)">
-              <td class="k8s-td name">
-                <button type="button" class="k8s-cell" :title="t('tools.k8s.browseFiles')">{{ p.name }}</button>
-              </td>
-              <td class="k8s-td">{{ p.ready ?? '-' }}</td>
-              <td class="k8s-td">
-                <el-tag size="small" :type="statusType(p.status)">{{ p.status }}</el-tag>
-              </td>
-              <td class="k8s-td num">{{ p.restarts ?? 0 }}</td>
-              <td class="k8s-td">{{ p.age ?? '-' }}</td>
-              <td class="k8s-td">{{ p.ip ?? '-' }}</td>
-              <td class="k8s-td node" :title="p.node ?? ''">{{ p.node ?? '-' }}</td>
-              <td class="k8s-td num">{{ p.cpuCurrent || p.cpuLimit ? cpuText(p.cpuCurrent, p.cpuLimit) : '-' }}</td>
-              <td class="k8s-td num">{{ p.memoryCurrent || p.memoryLimit ? cpuText(p.memoryCurrent, p.memoryLimit) : '-' }}</td>
-              <td class="k8s-td img" :title="p.imageUrl ?? ''">{{ p.imageUrl ?? '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-if="filteredPods.length" class="k8s-table-fill">
+        <el-table
+          :data="filteredPods"
+          size="small"
+          border
+          class="k8s-table"
+          height="100%"
+          @row-click="(row: PodDetails) => openFileBrowser(row)"
+        >
+          <el-table-column :label="t('tools.k8s.colName')" prop="name" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <button type="button" class="k8s-cell" :title="t('tools.k8s.browseFiles')" @click.stop="openFileBrowser(row)">{{ row.name }}</button>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.k8s.colReady')" prop="ready" min-width="70" />
+          <el-table-column :label="t('tools.k8s.colStatus')" prop="status" min-width="110">
+            <template #default="{ row }">
+              <el-tag size="small" :type="statusType(row.status)">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.k8s.colRestarts')" prop="restarts" align="right" min-width="80" />
+          <el-table-column :label="t('tools.k8s.colAge')" prop="age" min-width="90" />
+          <el-table-column :label="t('tools.k8s.colIp')" prop="ip" min-width="130" show-overflow-tooltip />
+          <el-table-column :label="t('tools.k8s.colNode')" prop="node" min-width="130" show-overflow-tooltip />
+          <el-table-column :label="t('tools.k8s.colCpu')" align="right" min-width="100">
+            <template #default="{ row }">
+              {{ row.cpuCurrent || row.cpuLimit ? cpuText(row.cpuCurrent, row.cpuLimit) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.k8s.colMemory')" align="right" min-width="100">
+            <template #default="{ row }">
+              {{ row.memoryCurrent || row.memoryLimit ? cpuText(row.memoryCurrent, row.memoryLimit) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.k8s.colImage')" prop="imageUrl" min-width="340" show-overflow-tooltip class-name="k8s-col-img" />
+        </el-table>
       </div>
     </div>
 
@@ -471,6 +472,30 @@ onMounted(async () => {
   padding: 10px 12px 12px;
 }
 
+/* Pod 结果表格：flex 撑满剩余高度，表格内部滚动 + 固定表头；border 开启列宽拖动 */
+.k8s-table-fill {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.k8s-table.el-table {
+  flex: 1;
+  min-height: 0;
+}
+
+.k8s-table.el-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+/* 名称/镜像单元格：列宽可拖，内容超长省略 */
+.k8s-table.el-table :deep(.k8s-col-img .cell),
+.k8s-table.el-table :deep(.cell) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .k8s-meta {
   display: flex;
   flex-wrap: wrap;
@@ -565,7 +590,7 @@ onMounted(async () => {
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  max-width: 340px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

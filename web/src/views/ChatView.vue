@@ -103,15 +103,16 @@ onUnmounted(() => {
   window.clearTimeout(fallbackTimer)
 })
 
-async function onNewSession() {
-  await kernel.session.create()
-}
-
 async function openSettings() {
   drawerOpen.value = true
   // 先拉取服务端记忆，再刷新目录：避免“孤儿校准”基于过期本地值误清用户选择
   await kernel.settings.pullFromServer().catch(() => {})
   void kernel.catalog.load().catch(() => {})
+}
+
+/** 顶部标题左侧「新建会话」图标按钮：创建新会话并进入 */
+async function onNewSession() {
+  await kernel.session.create().catch(() => {})
 }
 
 function startRename() {
@@ -230,6 +231,15 @@ function openToolsHub() {
     <main class="chat-main">
       <header class="topbar">
         <div class="title-area">
+          <el-tooltip :content="t('chat.newSession')" placement="bottom">
+            <button class="new-session-btn" type="button" :aria-label="t('chat.newSession')" @click="onNewSession">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+                <path d="M12 9v6" />
+                <path d="M9 12h6" />
+              </svg>
+            </button>
+          </el-tooltip>
           <template v-if="editingTitle">
             <el-input v-model="titleDraft" size="small" style="width: 280px" @keyup.enter="commitRename" @blur="commitRename" />
           </template>
@@ -271,16 +281,6 @@ function openToolsHub() {
 
         <div class="actions">
           <div class="icon-actions">
-            <el-tooltip :content="t('chat.newSession')" placement="bottom">
-              <button class="toolbar-entry" :aria-label="t('chat.newSession')" @click="onNewSession">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
-                  <path d="M12 9v6" />
-                  <path d="M9 12h6" />
-                </svg>
-              </button>
-            </el-tooltip>
-
             <el-tooltip :content="t('chat.favorites')" placement="bottom">
               <button class="toolbar-entry" :aria-label="t('chat.favorites')" @click="router.push('/favorites')">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -424,6 +424,29 @@ function openToolsHub() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 顶部「新建会话」图标按钮：主题色突出、与当前皮肤协调，仅 icon 无文字 */
+.new-session-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 10px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--nc-primary) 45%, transparent);
+  background: color-mix(in srgb, var(--nc-primary) 12%, transparent);
+  color: var(--nc-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.new-session-btn:hover {
+  background: color-mix(in srgb, var(--nc-primary) 22%, transparent);
+}
+.new-session-btn:active {
+  transform: scale(0.94);
 }
 
 /* 团队模式徽标（紧贴会话标题） */
