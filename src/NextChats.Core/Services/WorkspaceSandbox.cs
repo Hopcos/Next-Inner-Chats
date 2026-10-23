@@ -15,7 +15,8 @@ namespace NextChats.Core.Services;
 /// <summary>
 /// 工作空间编码沙箱实现：
 ///  - L1 应用层路径沙箱：GetFullPath 规范化 + 工作空间根前缀校验 + 真实路径（GetFinalPathNameByHandle，
-///    防 Windows junction/符号链接逃逸）二次校验；所有 ws_* 文件工具一律以工作空间根为界（含 FullAccess）。
+///    防 Windows junction/符号链接逃逸）二次校验。ReadOnly/WorkspaceWrite 级别以工作空间根为界；
+///    完全/自主访问（≥ FullAccess）解锁任意绝对路径，允许对整个系统读写执行（与 FullAccess 文档语义一致）。
 ///  - L2 进程隔离：命令子进程挂 Job Object（KILL_ON_JOB_CLOSE + 活动进程数上限），超时即整树终止，
 ///    句柄释放自动清场 —— 安全刷新无孤儿进程。
 ///  - 权限强制：每个工具声明最小级别（ReadOnly/WorkspaceWrite）；级别不足直接 Denied（不依赖模型自律）。
@@ -77,6 +78,14 @@ public sealed class WorkspaceSandbox : IWorkspaceSandbox
             }
         }
 
+        // 完全/自主访问（CanFull，级别 ≥ FullAccess）：解锁任意绝对路径，允许对整个系统读写执行。
+        // 相对路径仍相对工作空间根解析；绝对路径不再以工作空间根为界（FullAccess 文档语义即「任意路径读写」）。
+        // 其余级别保持根目录边界 + 真实路径防逃逸校验。
+        if (ctx.CanFull)
+        {
+            return target;
+        }
+
         if (!IsInside(root, target)) throw new WsPathEscapedException(relPath ?? "");
 
         // L2/P2：真实路径防逃逸 —— junction/符号链接指向根外时 GetFullPath 校验无效，必须对真实路径再校验
@@ -89,7 +98,7 @@ public sealed class WorkspaceSandbox : IWorkspaceSandbox
     public async Task<(string Stdout, string Stderr, int ExitCode, bool Killed)> RunProcessAsync(
         WsContext ctx, string command, string? args, string? cwd, int timeoutMs, CancellationToken ct = default)
     {
-        var workingDir = cwd is null ? ctx.Root : ResolveInside(ctx, cwd); // cwd 必须工作空间内（FullAccess 也限制在根内 cwd）
+        var workingDir = cwd is null ? ctx.Root : ResolveInside(ctx, cwd); // cwd 相对工作空间根解析；CanFull 级别允许任意绝对路径
         var psi = new ProcessStartInfo
         {
             FileName = command,
@@ -600,21 +609,25 @@ public static class WorkspaceToolCatalog
     /// <summary>按级别生成注入目录：全量注入（只读也用写工具名——执行时按级别强制拒绝并记审计）；ws_write/ws_delete/ws_exec 等写操作再由策略引擎启发式触发审批。</summary>
     public static IReadOnlyList<UnifiedTool> ForLevel(WorkspaceAccessLevel level, string wsName)
     {
-        _ = level; // 注入不做级别裁剪：门控统一在 Execute 层（拒绝时返回明确错误 + 审计），保证工具对模型可见、行为可解释
+        // 注入不做级别裁剪：门控统一在 Execute 层（拒绝时返回明确错误 + 审计），保证工具对模型可见、行为可解释。
+        // FullAccess/Autonomous 解锁任意绝对路径（对整个系统读写执行），描述中提示模型可传绝对系统路径。
+        var sysNote = level >= WorkspaceAccessLevel.FullAccess
+            ? " At FullAccess/Autonomous the path may be an absolute system path (whole-machine read/write/exec)."
+            : "";
         var tools = new List<UnifiedTool>(ReadTools.Length + WriteTools.Length)
         {
             T(WsInfo, $"Overview of the current workspace \"{wsName}\": root path, permission level, file counts and git HEAD.", """{"type":"object"}"""),
-            T(WsList, "List files and directories inside the workspace (relative to its root). Returns name, size and modified time.", """{"type":"object","properties":{"path":{"type":"string","description":"relative path inside the workspace; omit for root"}},"additionalProperties":false}"""),
-            T(WsBrowse, "Browse one directory inside the workspace like a file explorer: entries with name/type/size (non-recursive).", """{"type":"object","properties":{"path":{"type":"string","description":"relative path inside the workspace; omit for root"}},"additionalProperties":false}"""),
-            T(WsStat, "Metadata of one file/dir inside the workspace (size, modified time, entries).", """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}"""),
-            T(WsRead, $"Read a text file inside the workspace (UTF-8, capped at {200 * 1024} bytes).", """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}"""),
-            T(WsGrep, "Case-insensitive regex search inside the workspace; returns file:line matches (up to 500).", """{"type":"object","properties":{"pattern":{"type":"string"},"path":{"type":"string","description":"optional subdirectory to limit search"}},"required":["pattern"],"additionalProperties":false}"""),
-            T(WsDiff, "git diff --stat inside the workspace (requires a git repository).", """{"type":"object","properties":{"path":{"type":"string","description":"optional path filter"}},"additionalProperties":false}"""),
-            T(WsWrite, "Create/overwrite a text file inside the workspace (UTF-8). Parent dirs are created. Requires write level or above (enforced at execution).", """{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","description":"full file content (not JSON-escaped inner quotes)"}},"required":["path","content"],"additionalProperties":false}"""),
-            T(WsEdit, "Replace the first occurrence of oldText with newText inside one workspace file. Requires write level or above (enforced at execution).", """{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"}},"required":["path","oldText","newText"],"additionalProperties":false}"""),
-            T(WsMkdir, "Create a directory inside the workspace (recursively). Requires write level or above (enforced at execution).", """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}"""),
-            T(WsDelete, "Delete a file or empty directory inside the workspace (recursive=true for non-empty dirs). Triggers approval. Requires write level or above (enforced at execution).", """{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"}},"required":["path"],"additionalProperties":false}"""),
-            T(WsExec, "Run a command with working directory inside the workspace (job-object isolated, output capped, timeout). Triggers approval. FullAccess allows unrestricted commands; write level applies a system-command blacklist.", """{"type":"object","properties":{"command":{"type":"string","description":"executable name or full path (e.g. git, dotnet, node)"},"args":{"type":"string","description":"single string of arguments"},"cwd":{"type":"string","description":"relative cwd inside workspace"},"timeoutMs":{"type":"integer","description":"max 300000, default 60000"}},"required":["command"],"additionalProperties":false}"""),
+            T(WsList, "List files and directories (relative to the workspace root). Returns name, size and modified time." + sysNote, """{"type":"object","properties":{"path":{"type":"string","description":"relative path inside the workspace; omit for root"}},"additionalProperties":false}"""),
+            T(WsBrowse, "Browse one directory like a file explorer: entries with name/type/size (non-recursive)." + sysNote, """{"type":"object","properties":{"path":{"type":"string","description":"relative path inside the workspace; omit for root"}},"additionalProperties":false}"""),
+            T(WsStat, "Metadata of one file/dir (size, modified time, entries)." + sysNote, """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}"""),
+            T(WsRead, $"Read a text file (UTF-8, capped at {200 * 1024} bytes)." + sysNote, """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}"""),
+            T(WsGrep, "Case-insensitive regex search; returns file:line matches (up to 500)." + sysNote, """{"type":"object","properties":{"pattern":{"type":"string"},"path":{"type":"string","description":"optional subdirectory to limit search"}},"required":["pattern"],"additionalProperties":false}"""),
+            T(WsDiff, "git diff --stat (requires a git repository)." + sysNote, """{"type":"object","properties":{"path":{"type":"string","description":"optional path filter"}},"additionalProperties":false}"""),
+            T(WsWrite, "Create/overwrite a text file (UTF-8). Parent dirs are created. Requires write level or above (enforced at execution)." + sysNote, """{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string","description":"full file content (not JSON-escaped inner quotes)"}},"required":["path","content"],"additionalProperties":false}"""),
+            T(WsEdit, "Replace the first occurrence of oldText with newText in one file. Requires write level or above (enforced at execution)." + sysNote, """{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"}},"required":["path","oldText","newText"],"additionalProperties":false}"""),
+            T(WsMkdir, "Create a directory (recursively). Requires write level or above (enforced at execution)." + sysNote, """{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}"""),
+            T(WsDelete, "Delete a file or empty directory (recursive=true for non-empty dirs). Triggers approval. Requires write level or above (enforced at execution)." + sysNote, """{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"}},"required":["path"],"additionalProperties":false}"""),
+            T(WsExec, "Run a command (job-object isolated, output capped, timeout). Triggers approval. FullAccess allows unrestricted commands and absolute cwd; write level applies a system-command blacklist." + sysNote, """{"type":"object","properties":{"command":{"type":"string","description":"executable name or full path (e.g. git, dotnet, node)"},"args":{"type":"string","description":"single string of arguments"},"cwd":{"type":"string","description":"relative cwd inside workspace; absolute allowed at FullAccess/Autonomous"},"timeoutMs":{"type":"integer","description":"max 300000, default 60000"}},"required":["command"],"additionalProperties":false}"""),
         };
         return tools;
     }
