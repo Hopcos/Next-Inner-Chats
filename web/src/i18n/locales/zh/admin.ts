@@ -210,7 +210,7 @@ export default {
       name: '显示名称',
       description: '描述',
       endpoint: 'API Endpoint',
-      endpointTip: '工具需要的外部 API 基础地址（如 Kafka Explorer 的 kafka-mcp 端点 http://10.14.6.49:6523/、K8S Explorer 的 k8s-mcp 端点 http://10.14.6.49:6527/）；不需要外部接口的工具可留空。',
+      endpointTip: '工具需要的外部 API 基础地址（如 Kafka Explorer 的 kafka-mcp 端点 http://10.14.6.49:6523/、K8S Explorer 的 k8s-mcp 端点 http://10.14.6.49:6527/、Kafka Producer 的 kafka-producer 端点 http://localhost:8080/）；不需要外部接口的工具可留空。',
       headers: '授权头 (JSON)',
       headersInvalid: '授权头格式不正确：需为 JSON 对象（键值对形式，示例见输入框占位符），请修正后再试',
       headersTip: '转发给外部 API 的请求头，JSON 对象格式（示例见输入框占位符，如 Authorization: Bearer xxx）。含敏感值时整体加密存储、列表仅显示脱敏摘要；编辑时留空表示保持不变。',

@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NextChats.Core.Abstractions;
+using NextChats.Core.Domain;
 using NextChats.Core.Entities;
 
 namespace NextChats.Api.Controllers;
@@ -11,16 +12,54 @@ namespace NextChats.Api.Controllers;
 /// <summary>
 /// 工具外部 API 代理路由：前端经同源 /api/ext/tool/{{toolKey}}/{{**path}} 调用外部服务，
 /// 后端按管理端为该工具配置的 AppTool.BaseUrl 转发，并附加管理端配置的授权头（HeadersJson，
-/// AES-GCM 加密落库，转发时解密；如 K8S Explorer 的 "Authorization: Bearer &lt;token&gt;"）（GET only，原样回传 JSON）。
+/// AES-GCM 加密落库，转发时解密；如 K8S Explorer 的 "Authorization: Bearer &lt;token&gt;"）（原样回传 JSON）。
+/// 默认只读 GET；POST 仅对 <see cref="PostAllowList"/> 登记的工具+路径开放（如 Kafka Producer 的发送消息），并写审计。
 /// 解决三个问题：1) 浏览器跨域直连外部端点（无 CORS）被拦；2) 内网端点地址不出库、不出网；
 /// 3) 外部 API 的敏感授权头只存在于后端，不暴露给浏览器。
 /// 权限：登录用户 + 该工具对其角色可见（与 /api/me/tools 同口径）。
 /// </summary>
 [Route("api/ext/tool/{toolKey}")]
-public sealed class ToolEndpointProxyController(IAdminStore store, IHttpClientFactory httpClientFactory, ISecurityService security) : ApiControllerBase
+public sealed class ToolEndpointProxyController(IAdminStore store, IHttpClientFactory httpClientFactory, ISecurityService security, IAuditLogger audit) : ApiControllerBase
 {
+    /// <summary>
+    /// 允许经代理发起 POST 的写操作白名单：toolKey → 路径正则。
+    /// 代理默认只读（GET）；写操作必须在此显式登记，防止代理被滥用为任意 POST 通道。
+    /// kafka-producer：仅 POST /api/topics/{topic}/messages（produce_message，向 Kafka 追加一条消息）。
+    /// </summary>
+    private static readonly Dictionary<string, System.Text.RegularExpressions.Regex> PostAllowList = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["kafka-producer"] = new(@"^api/topics/[^/]+/messages$", System.Text.RegularExpressions.RegexOptions.Compiled),
+    };
+
     [HttpGet("{**path}")]
-    public async Task<IActionResult> Get(string toolKey, string path, CancellationToken ct)
+    public Task<IActionResult> Get(string toolKey, string path, CancellationToken ct)
+        => ForwardAsync(toolKey, HttpMethod.Get, ct);
+
+    /// <summary>受限 POST 转发（仅白名单工具/路径；请求体原样转发，并写审计）</summary>
+    [HttpPost("{**path}")]
+    public async Task<IActionResult> Post(string toolKey, string path, CancellationToken ct)
+    {
+        var routePath = (HttpContext.Request.RouteValues["path"]?.ToString() ?? string.Empty).Trim('/');
+        if (!PostAllowList.TryGetValue(toolKey, out var allowed) || !allowed.IsMatch(routePath))
+        {
+            return StatusCode(StatusCodes.Status405MethodNotAllowed, Err("TOOL_ENDPOINT_METHOD_NOT_ALLOWED"));
+        }
+
+        using var reader = new StreamReader(HttpContext.Request.Body, Encoding.UTF8);
+        var body = await reader.ReadToEndAsync(ct);
+        var result = await ForwardAsync(toolKey, HttpMethod.Post, ct, body);
+
+        // 写操作留痕：只记录目标与结果状态，不记录消息体（可能含业务敏感数据）
+        var status = (result as ContentResult)?.StatusCode ?? (result as ObjectResult)?.StatusCode ?? 0;
+        await audit.RecordAsync(AuditCategory.Tool, "TOOL.EXT_POST", $"trc_{Guid.NewGuid():N}"[..24], UserId,
+            target: $"{toolKey}/{routePath}",
+            detail: new { toolKey, path = routePath, query = HttpContext.Request.QueryString.ToUriComponent(), status, bodyBytes = Encoding.UTF8.GetByteCount(body) },
+            ip: HttpContext.Connection.RemoteIpAddress?.ToString(),
+            ct: CancellationToken.None);
+        return result;
+    }
+
+    private async Task<IActionResult> ForwardAsync(string toolKey, HttpMethod method, CancellationToken ct, string? requestBody = null)
     {
         var tool = await store.GetToolByKeyAsync(toolKey, ct);
         if (tool is null || string.IsNullOrWhiteSpace(tool.BaseUrl))
@@ -54,10 +93,14 @@ public sealed class ToolEndpointProxyController(IAdminStore store, IHttpClientFa
         HttpResponseMessage upstream;
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, target);
+            using var req = new HttpRequestMessage(method, target);
             foreach (var kv in headers)
             {
                 req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+            }
+            if (requestBody is not null)
+            {
+                req.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
             }
             upstream = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         }

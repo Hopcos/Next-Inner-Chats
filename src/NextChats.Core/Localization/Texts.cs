@@ -87,6 +87,7 @@ public static class Texts
         ["USER_NOT_FOUND"] = ("User not found", "用户不存在"),
         ["TOOL_ENDPOINT_NOT_CONFIGURED"] = ("This tool has no API Endpoint configured — set it in Admin → Tools", "该工具未配置 API Endpoint：请在管理后台 → 工具 中填写该工具的外部接口地址"),
         ["TOOL_ENDPOINT_INVALID"] = ("The configured API Endpoint is not a valid http(s) address", "配置的 API Endpoint 不是合法的 http(s) 地址"),
+        ["TOOL_ENDPOINT_METHOD_NOT_ALLOWED"] = ("This request is not allowed through the tool proxy", "该请求不允许通过工具代理发起"),
         ["TOOL_ENDPOINT_UNREACHABLE"] = ("The configured API Endpoint is unreachable", "配置的 API Endpoint 无法访问"),
         ["ROLE_NOT_FOUND"] = ("Role not found", "角色不存在"),
         ["APPROVAL_NOT_FOUND"] = ("Approval record not found", "审批记录不存在"),

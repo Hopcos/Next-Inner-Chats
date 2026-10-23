@@ -210,7 +210,7 @@ export default {
       name: 'Display Name',
       description: 'Description',
       endpoint: 'API Endpoint',
-      endpointTip: 'External API base URL the tool needs (e.g. the kafka-mcp endpoint http://10.14.6.49:6523/ for Kafka Explorer, the k8s-mcp endpoint http://10.14.6.49:6527/ for K8S Explorer); leave empty when not needed.',
+      endpointTip: 'External API base URL the tool needs (e.g. the kafka-mcp endpoint http://10.14.6.49:6523/ for Kafka Explorer, the k8s-mcp endpoint http://10.14.6.49:6527/ for K8S Explorer, the kafka-producer endpoint http://localhost:8080/ for Kafka Producer); leave empty when not needed.',
       headers: 'Auth Headers (JSON)',
       headersInvalid: 'Invalid auth headers: must be a JSON object (key-value pairs, see the input placeholder for an example). Fix it and retry.',
       headersTip: 'Request headers forwarded to the external API, JSON object format (see the input placeholder for an example, e.g. Authorization: Bearer xxx). Sensitive values are encrypted at rest and shown masked in the list; leave empty when editing to keep the current value.',
