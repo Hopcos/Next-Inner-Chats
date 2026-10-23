@@ -20,6 +20,10 @@ import { highlightJson } from './jsonHighlight'
 const { t } = useI18n()
 const TOOL_KEY = 'kafka-producer'
 
+/** Key / Value 文本框随内容自动增高，达到上限后出现内部滚动条；页面整体可滚动，不挤压下方发送记录 */
+const KEY_MAX_ROWS = 12
+const DATA_MAX_ROWS = 28
+
 /** 列表 cell 默认截断长度（完整内容在弹窗中查看） */
 const TRUNCATE_LEN = 120
 function truncate(text: string): string {
@@ -179,29 +183,101 @@ async function loadPartitions() {
 const schemas = ref<SchemaItem[]>([])
 const schemaLoading = ref(false)
 const schemaErr = ref('')
+/** 见过的 schema 缓存（id → 条目）：搜索结果被替换后，已选项仍能显示 "#id · subject"，而不是裸数字 */
+const schemaSeen = new Map<number, SchemaItem>()
+/** 请求序号：丢弃过期响应（用户连续输入搜索词时，只采用最后一次） */
+let schemaSeq = 0
 
-/** 同名主题的 key/value 主体：<topic>-key / <topic>-value（部分环境主体形如 -ce.xxx，需人工选择） */
+async function fetchSchemas(keyword: string): Promise<SchemaItem[]> {
+  const r = await getEnv<{ schemas: SchemaItem[] }>(
+    `/api/schemas?environment=${encodeURIComponent(environment.value)}&keyword=${encodeURIComponent(keyword)}`,
+  )
+  const list = r.data?.schemas ?? []
+  for (const s of list) schemaSeen.set(s.schemaId, s)
+  return list
+}
+
+/** 下拉当前输入的搜索词（纯数字时提供“直接使用该 ID”的选项） */
+const schemaQuery = ref('')
+
+/** 下拉选项：当前结果 + 已选项（保持可见）+ 输入的纯数字 ID（Registry 里查不到时也允许直接使用），按 schemaId 去重 */
+const schemaOptions = computed<SchemaItem[]>(() => {
+  const map = new Map<number, SchemaItem>()
+  for (const s of schemas.value) if (!map.has(s.schemaId)) map.set(s.schemaId, s)
+  const extra: number[] = []
+  for (const id of [keySchemaId.value, dataSchemaId.value]) if (id != null) extra.push(id)
+  const q = schemaQuery.value.trim()
+  if (/^\d+$/.test(q) && Number(q) > 0) extra.push(Number(q))
+  for (const id of extra) {
+    if (!map.has(id)) map.set(id, schemaSeen.get(id) ?? { subject: '', version: 0, schemaId: id })
+  }
+  return [...map.values()]
+})
+function schemaLabel(s: SchemaItem): string {
+  if (!s.subject) return `#${s.schemaId}`
+  return `#${s.schemaId} · ${s.subject}${s.version ? ` (v${s.version})` : ''}`
+}
+
+/** 下拉值转 schemaId：非正整数视为未选择 */
+function toId(v: unknown): number | null {
+  if (v === '' || v == null) return null
+  const n = Number(v)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/** 按当前主题检索 Schema Registry，并自动带出 <topic>-key / <topic>-value 的 schemaId（部分环境主体形如 -ce.xxx，需人工选择） */
 async function loadSchemas() {
   schemas.value = []
   schemaErr.value = ''
   if (format.value !== 'avro' || !cfgOk.value || !environment.value || !topic.value || avroDisabled.value) return
+  const seq = ++schemaSeq
   schemaLoading.value = true
   try {
-    const r = await getEnv<{ schemas: SchemaItem[] }>(
-      `/api/schemas?environment=${encodeURIComponent(environment.value)}&keyword=${encodeURIComponent(topic.value)}`,
-    )
-    schemas.value = r.data?.schemas ?? []
+    const list = await fetchSchemas(topic.value)
+    if (seq !== schemaSeq) return
+    schemas.value = list
     const tp = topic.value.toLowerCase()
-    const keyItem = schemas.value.find((s) => s.subject.toLowerCase() === `${tp}-key`)
-    const valItem = schemas.value.find((s) => s.subject.toLowerCase() === `${tp}-value`)
+    const keyItem = list.find((s) => s.subject.toLowerCase() === `${tp}-key`)
+    const valItem = list.find((s) => s.subject.toLowerCase() === `${tp}-value`)
     if (keyItem) keySchemaId.value = keyItem.schemaId
     if (valItem) dataSchemaId.value = valItem.schemaId
-    if (!schemas.value.length) schemaErr.value = t('tools.kafkaProducer.schemaNone')
+    if (!list.length) schemaErr.value = t('tools.kafkaProducer.schemaNone')
   } catch (e) {
-    schemaErr.value = (e as { message?: string }).message ?? t('tools.kafkaProducer.metaLoadFailed')
+    if (seq === schemaSeq) schemaErr.value = (e as { message?: string }).message ?? t('tools.kafkaProducer.metaLoadFailed')
   } finally {
-    schemaLoading.value = false
+    if (seq === schemaSeq) schemaLoading.value = false
   }
+}
+
+/** 下拉里输入搜索词：防抖后按关键词查 Schema Registry；清空则回到按主题检索的结果 */
+let schemaTimer: ReturnType<typeof setTimeout> | undefined
+function onSchemaSearch(query: string) {
+  if (schemaTimer) clearTimeout(schemaTimer)
+  schemaQuery.value = query
+  schemaTimer = setTimeout(async () => {
+    const q = query.trim()
+    if (!cfgOk.value || !environment.value || avroDisabled.value) return
+    if (!q) {
+      const keepKey = keySchemaId.value
+      const keepData = dataSchemaId.value
+      await loadSchemas()
+      // 回到默认列表时不能覆盖用户已手选的值
+      if (keepKey != null) keySchemaId.value = keepKey
+      if (keepData != null) dataSchemaId.value = keepData
+      return
+    }
+    const seq = ++schemaSeq
+    schemaLoading.value = true
+    schemaErr.value = ''
+    try {
+      const list = await fetchSchemas(q)
+      if (seq === schemaSeq) schemas.value = list
+    } catch (e) {
+      if (seq === schemaSeq) schemaErr.value = (e as { message?: string }).message ?? t('tools.kafkaProducer.metaLoadFailed')
+    } finally {
+      if (seq === schemaSeq) schemaLoading.value = false
+    }
+  }, 300)
 }
 
 // 字段预览弹窗（get_schema）
@@ -506,14 +582,48 @@ onMounted(async () => {
           <label class="kp-field">
             <span class="kp-label">{{ t('tools.kafkaProducer.keySchemaId') }} *</span>
             <div class="kp-inline">
-              <el-input-number v-model="keySchemaId" size="small" class="kp-ctrl" :min="1" :controls="false" placeholder="-" />
+              <el-select
+                :model-value="keySchemaId"
+                size="small"
+                class="kp-ctrl kp-schema-sel"
+                filterable
+                remote
+                remote-show-suffix
+                default-first-option
+                clearable
+                :remote-method="onSchemaSearch"
+                :loading="schemaLoading"
+                :placeholder="t('tools.kafkaProducer.schemaPh')"
+                popper-class="kp-schema-popper"
+                @update:model-value="(v: unknown) => (keySchemaId = toId(v))"
+                @visible-change="(open: boolean) => open && !schemas.length && loadSchemas()"
+              >
+                <el-option v-for="s in schemaOptions" :key="s.schemaId" :label="schemaLabel(s)" :value="s.schemaId" />
+              </el-select>
               <el-button size="small" text :disabled="keySchemaId == null" @click="viewSchema(keySchemaId)">{{ t('tools.kafkaProducer.fields') }}</el-button>
             </div>
           </label>
           <label class="kp-field">
             <span class="kp-label">{{ t('tools.kafkaProducer.dataSchemaId') }} *</span>
             <div class="kp-inline">
-              <el-input-number v-model="dataSchemaId" size="small" class="kp-ctrl" :min="1" :controls="false" placeholder="-" />
+              <el-select
+                :model-value="dataSchemaId"
+                size="small"
+                class="kp-ctrl kp-schema-sel"
+                filterable
+                remote
+                remote-show-suffix
+                default-first-option
+                clearable
+                :remote-method="onSchemaSearch"
+                :loading="schemaLoading"
+                :placeholder="t('tools.kafkaProducer.schemaPh')"
+                popper-class="kp-schema-popper"
+                @update:model-value="(v: unknown) => (dataSchemaId = toId(v))"
+                @visible-change="(open: boolean) => open && !schemas.length && loadSchemas()"
+              >
+                <el-option v-for="s in schemaOptions" :key="s.schemaId" :label="schemaLabel(s)" :value="s.schemaId" />
+              </el-select>
               <el-button size="small" text :disabled="dataSchemaId == null" @click="viewSchema(dataSchemaId)">{{ t('tools.kafkaProducer.fields') }}</el-button>
             </div>
           </label>
@@ -556,7 +666,14 @@ onMounted(async () => {
           <el-button size="small" text :disabled="!keyText || !!keyJsonErr" @click="prettify('key')">{{ t('tools.kafkaProducer.format_') }}</el-button>
           <el-button size="small" text :disabled="!keyText || !!keyJsonErr" @click="minify('key')">{{ t('tools.kafkaProducer.minify') }}</el-button>
         </div>
-        <el-input v-model="keyText" type="textarea" :rows="3" resize="vertical" class="kp-text" :placeholder="t('tools.kafkaProducer.keyPh')" />
+        <el-input
+          v-model="keyText"
+          type="textarea"
+          :autosize="{ minRows: 2, maxRows: KEY_MAX_ROWS }"
+          resize="none"
+          class="kp-text"
+          :placeholder="t('tools.kafkaProducer.keyPh')"
+        />
       </div>
 
       <div class="kp-editor kp-editor-grow">
@@ -567,7 +684,14 @@ onMounted(async () => {
           <el-button size="small" text :disabled="!dataText || !!dataJsonErr" @click="prettify('data')">{{ t('tools.kafkaProducer.format_') }}</el-button>
           <el-button size="small" text :disabled="!dataText || !!dataJsonErr" @click="minify('data')">{{ t('tools.kafkaProducer.minify') }}</el-button>
         </div>
-        <el-input v-model="dataText" type="textarea" :rows="8" resize="vertical" class="kp-text" :placeholder="t('tools.kafkaProducer.valuePh')" />
+        <el-input
+          v-model="dataText"
+          type="textarea"
+          :autosize="{ minRows: 6, maxRows: DATA_MAX_ROWS }"
+          resize="none"
+          class="kp-text"
+          :placeholder="t('tools.kafkaProducer.valuePh')"
+        />
       </div>
     </div>
 
@@ -580,52 +704,51 @@ onMounted(async () => {
 
       <div v-if="!records.length" class="kp-empty">{{ t('tools.kafkaProducer.historyEmpty') }}</div>
 
-      <div v-else class="kp-scroll">
-        <table class="kp-table">
-          <thead>
-            <tr>
-              <th class="kp-th ts">{{ t('tools.kafkaProducer.colTime') }}</th>
-              <th class="kp-th">{{ t('tools.kafkaProducer.colTarget') }}</th>
-              <th class="kp-th">{{ t('tools.kafkaProducer.colResult') }}</th>
-              <th class="kp-th num">{{ t('tools.kafkaProducer.colPartition') }}</th>
-              <th class="kp-th num">{{ t('tools.kafkaProducer.colOffset') }}</th>
-              <th class="kp-th">{{ t('tools.kafkaProducer.colKey') }}</th>
-              <th class="kp-th">{{ t('tools.kafkaProducer.colValue') }}</th>
-              <th class="kp-th" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(rec, i) in records" :key="i" class="kp-tr">
-              <td class="kp-td ts">{{ rec.at }}</td>
-              <td class="kp-td">
-                <div class="kp-target">{{ rec.environment }} / {{ rec.topic }}</div>
-                <div class="kp-sub">{{ rec.format }}<template v-if="rec.ms != null"> · {{ rec.ms }} ms</template></div>
-              </td>
-              <td class="kp-td">
-                <el-tag size="small" :type="rec.ok ? 'success' : 'danger'">{{ rec.ok ? t('tools.kafkaProducer.ok') : t('tools.kafkaProducer.fail') }}</el-tag>
-                <div v-if="!rec.ok" class="kp-fail-msg">{{ rec.message }}</div>
-              </td>
-              <td class="kp-td num">{{ rec.partition ?? '-' }}</td>
-              <td class="kp-td num">{{ rec.offset ?? '-' }}</td>
-              <td class="kp-td kv">
-                <button type="button" class="kp-cell" :title="t('tools.kafkaProducer.viewJson')" @click="openDetail('key', rec)">
-                  {{ rec.key ? truncate(rec.key) : '∅' }}
-                </button>
-              </td>
-              <td class="kp-td kv">
-                <button type="button" class="kp-cell" :title="t('tools.kafkaProducer.viewJson')" @click="openDetail('value', rec)">
-                  {{ truncate(rec.value) }}
-                </button>
-              </td>
-              <td class="kp-td">
-                <el-button size="small" text @click="reuse(rec)">{{ t('tools.kafkaProducer.reuse') }}</el-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else class="kp-table-fill">
+        <el-table :data="records" size="small" border class="kp-rtable" height="100%">
+          <el-table-column :label="t('tools.kafkaProducer.colTime')" width="160" show-overflow-tooltip>
+            <template #default="{ row }"><span class="kp-ts">{{ row.at }}</span></template>
+          </el-table-column>
+          <el-table-column :label="t('tools.kafkaProducer.colTarget')" min-width="200">
+            <template #default="{ row }">
+              <div class="kp-target">{{ row.environment }} / {{ row.topic }}</div>
+              <div class="kp-sub">{{ row.format }}<template v-if="row.ms != null"> · {{ row.ms }} ms</template></div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.kafkaProducer.colResult')" min-width="150">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.ok ? 'success' : 'danger'">{{ row.ok ? t('tools.kafkaProducer.ok') : t('tools.kafkaProducer.fail') }}</el-tag>
+              <div v-if="!row.ok" class="kp-fail-msg">{{ row.message }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.kafkaProducer.colPartition')" width="90" align="right">
+            <template #default="{ row }">{{ row.partition ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column :label="t('tools.kafkaProducer.colOffset')" width="100" align="right">
+            <template #default="{ row }">{{ row.offset ?? '-' }}</template>
+          </el-table-column>
+          <el-table-column :label="t('tools.kafkaProducer.colKey')" min-width="180">
+            <template #default="{ row }">
+              <button type="button" class="kp-cell" :title="t('tools.kafkaProducer.viewJson')" @click="openDetail('key', row)">
+                {{ row.key ? truncate(row.key) : '∅' }}
+              </button>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('tools.kafkaProducer.colValue')" min-width="320">
+            <template #default="{ row }">
+              <button type="button" class="kp-cell" :title="t('tools.kafkaProducer.viewJson')" @click="openDetail('value', row)">
+                {{ truncate(row.value) }}
+              </button>
+            </template>
+          </el-table-column>
+          <el-table-column width="80" :resizable="false">
+            <template #default="{ row }">
+              <el-button size="small" text @click="reuse(row)">{{ t('tools.kafkaProducer.reuse') }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
     </div>
-
     <!-- 弹窗：key/value JSON 格式化展示 -->
     <el-dialog v-model="dialog" :title="dialogTitle" width="720px" append-to-body destroy-on-close class="kp-dlg">
       <div class="kp-dlg-body">
@@ -680,7 +803,8 @@ onMounted(async () => {
   flex-direction: column;
   gap: 14px;
   padding: 18px 22px 20px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .kp-card {
@@ -726,6 +850,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+/* Schema ID 下拉：与主题下拉同款（可输入搜索），宽度容纳 "#id · subject" */
+.kp-schema-sel {
+  width: 260px;
 }
 
 .kp-actions {
@@ -799,8 +928,8 @@ onMounted(async () => {
 }
 
 .kp-list {
-  flex: 1;
-  min-height: 140px;
+  flex: 1 0 300px;
+  min-height: 300px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -823,10 +952,31 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.kp-scroll {
+/* 发送记录：el-table border 模式，表头分隔线可拖动调整列宽 */
+.kp-table-fill {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+}
+
+.kp-rtable {
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.kp-rtable :deep(th.el-table__cell) {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kp-rtable :deep(.cell) {
+  word-break: break-all;
+}
+
+.kp-ts {
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
 }
 
 .kp-table {
@@ -896,7 +1046,6 @@ onMounted(async () => {
 
 .kp-fail-msg {
   margin-top: 3px;
-  max-width: 320px;
   font-size: 11.5px;
   color: #b91c1c;
   word-break: break-word;

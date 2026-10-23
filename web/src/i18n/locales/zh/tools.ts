@@ -170,6 +170,7 @@ export default {
       keySchemaId: 'Key Schema ID',
       dataSchemaId: 'Value Schema ID',
       fields: '字段',
+      schemaPh: '搜索或输入 Schema ID',
       key: 'Key',
       value: 'Value',
       keyPh: '消息 Key（可留空；json 格式按文本原样发送，avro 须为 JSON）',

@@ -170,6 +170,7 @@ export default {
       keySchemaId: 'Key schema ID',
       dataSchemaId: 'Value schema ID',
       fields: 'Fields',
+      schemaPh: 'Search or enter a schema ID',
       key: 'Key',
       value: 'Value',
       keyPh: 'Message key (optional; sent verbatim for json, must be JSON for avro)',
