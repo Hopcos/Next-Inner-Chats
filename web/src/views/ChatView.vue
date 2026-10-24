@@ -221,6 +221,7 @@ const themeOptions = [
   { value: 'aurora', labelKey: 'chat.themeAurora' },
   { value: 'dawn', labelKey: 'chat.themeDawn' },
   { value: 'midnight', labelKey: 'chat.themeMidnight' },
+  { value: 'cyber', labelKey: 'chat.themeCyber' },
 ]
 
 /** 沉浸式工具栏：以独立新标签页进入工具主页（与聊天页隔离，互不干扰状态） */
@@ -644,7 +645,7 @@ function openToolsHub() {
 
 .nc-appearance-pop .ap-themes {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -705,6 +706,13 @@ function openToolsHub() {
 .nc-appearance-pop .ap-theme.midnight .ap-swatch { background: #0b0b0d; }
 .nc-appearance-pop .ap-theme.midnight .ap-swatch i { background: #141417; border-right: 1px solid rgba(255, 255, 255, 0.08); }
 .nc-appearance-pop .ap-theme.midnight .ap-swatch b { background: #a78bfa; }
+.nc-appearance-pop .ap-theme.cyber .ap-swatch {
+  background:
+    linear-gradient(rgba(255, 43, 214, 0.55) 1px, transparent 1px) 0 18px / 100% 5px,
+    linear-gradient(to bottom, #07040f 50%, #1a0630);
+}
+.nc-appearance-pop .ap-theme.cyber .ap-swatch i { background: rgba(12, 7, 26, 0.9); border-right: 1px solid #00f0ff; box-shadow: 1px 0 6px rgba(0, 240, 255, 0.6); }
+.nc-appearance-pop .ap-theme.cyber .ap-swatch b { background: linear-gradient(135deg, #00f0ff, #ff2bd6); border-radius: 2px; box-shadow: 0 0 8px #ff2bd6; }
 
 .nc-appearance-pop .ap-seg {
   display: grid;

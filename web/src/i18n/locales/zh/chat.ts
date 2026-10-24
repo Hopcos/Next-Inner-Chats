@@ -7,6 +7,7 @@ export default {
     themeAurora: '极光',
     themeDawn: '破晓',
     themeMidnight: '午夜',
+    themeCyber: '赛博朋克',
     langLabel: '语言',
     appearance: '外观',
     theme: '主题',

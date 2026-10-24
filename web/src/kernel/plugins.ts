@@ -180,27 +180,45 @@ export class NotifyService extends Service {
 
 // ---------------------------------------------------------------- 主题（换肤）
 
-export type ThemeName = 'aurora' | 'dawn' | 'midnight'
+export type ThemeName = 'aurora' | 'dawn' | 'midnight' | 'cyber'
+
+const THEMES: readonly ThemeName[] = ['aurora', 'dawn', 'midnight', 'cyber']
+
+/** 默认主题：未主动选择过主题的用户使用 */
+export const DEFAULT_THEME: ThemeName = 'cyber'
+
+const THEME_KEY = 'nextchats.theme'
+/** 标记“用户主动选择过主题”（旧版启动时会把默认值 aurora 自动写入 THEME_KEY，需借此区分） */
+const THEME_EXPLICIT_KEY = 'nextchats.theme.explicit'
 
 export class ThemeService extends Service {
-  state = reactive({ theme: 'aurora' as ThemeName })
+  state = reactive({ theme: DEFAULT_THEME as ThemeName })
 
   constructor(ctx: Context) {
     super(ctx, 'theme')
-    const saved = localStorage.getItem('nextchats.theme') as ThemeName | null
-    if (saved === 'aurora' || saved === 'dawn' || saved === 'midnight') this.state.theme = saved
+    const saved = localStorage.getItem(THEME_KEY) as ThemeName | null
+    const explicit = localStorage.getItem(THEME_EXPLICIT_KEY) === '1'
+    // 一次性迁移：旧版无论是否手选都会落盘 'aurora'（当时的默认值），无显式标记时视为“未选择”，
+    // 让其跟随新默认；破晓 / 午夜 / 赛博只可能是手动选择，予以保留
+    if (saved && THEMES.includes(saved) && (explicit || saved !== 'aurora')) {
+      this.state.theme = saved
+    } else if (saved) {
+      localStorage.removeItem(THEME_KEY)
+    }
     this.apply()
   }
 
   apply() {
     document.documentElement.dataset.theme = this.state.theme
-    document.documentElement.classList.toggle('dark', this.state.theme === 'midnight')
-    localStorage.setItem('nextchats.theme', this.state.theme)
+    document.documentElement.classList.toggle('dark', this.state.theme === 'midnight' || this.state.theme === 'cyber')
     this.ctx.emit('theme:changed', this.state.theme)
   }
 
+  /** 用户主动换肤：持久化并打上显式标记（此后不再跟随默认主题变化） */
   set(theme: ThemeName) {
     this.state.theme = theme
+    localStorage.setItem(THEME_KEY, theme)
+    localStorage.setItem(THEME_EXPLICIT_KEY, '1')
     this.apply()
   }
 }

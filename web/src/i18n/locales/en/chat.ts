@@ -7,6 +7,7 @@ export default {
     themeAurora: 'Aurora',
     themeDawn: 'Dawn',
     themeMidnight: 'Midnight',
+    themeCyber: 'Cyberpunk',
     langLabel: 'Language',
     appearance: 'Appearance',
     theme: 'Theme',

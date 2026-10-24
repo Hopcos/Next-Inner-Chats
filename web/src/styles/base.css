@@ -93,6 +93,36 @@ html[data-theme='midnight'] {
   --nc-user-bubble: #232329;
 }
 
+/* 主题：赛博朋克 cyber——深紫黑夜城 + 霓虹青（主色）/ 洋红（强调），配合合成波 3D 城市背景 */
+html[data-theme='cyber'] {
+  --nc-bg: #07040f;
+  --nc-bg-elev: rgba(12, 7, 26, 0.82);
+  --nc-bg-glow: rgba(255, 43, 214, 0.16);
+  --nc-bg-glow2: rgba(0, 240, 255, 0.1);
+  --nc-surface: rgba(16, 10, 34, 0.86);
+  --nc-surface-solid: #120b26;
+  --nc-surface-2: rgba(0, 240, 255, 0.06);
+  --nc-surface-3: rgba(0, 240, 255, 0.12);
+  --nc-overlay: #140c2b;
+  --nc-border: rgba(0, 240, 255, 0.16);
+  --nc-border-strong: rgba(0, 240, 255, 0.32);
+  --nc-text: #e9f6ff;
+  --nc-text-dim: #a9b6d8;
+  --nc-text-faint: #8a8fb8;
+  --nc-primary: #00f0ff;
+  --nc-primary-contrast: #001519;
+  --nc-primary-soft: rgba(0, 240, 255, 0.13);
+  --nc-accent: #ff2bd6;
+  --nc-accent-soft: rgba(255, 43, 214, 0.14);
+  --nc-user-bubble: rgba(255, 43, 214, 0.12);
+  --nc-danger: #ff4d6d;
+  --nc-code-bg: rgba(5, 2, 14, 0.85);
+  --nc-shadow: 0 0 0 1px rgba(0, 240, 255, 0.08), 0 12px 40px -12px rgba(255, 43, 214, 0.35);
+  --nc-shadow-sm: 0 0 12px -4px rgba(0, 240, 255, 0.35);
+  --nc-radius: 6px;
+  --nc-font-display: 'Orbitron', 'Rajdhani', 'Bahnschrift', 'Segoe UI', var(--nc-font-mono), sans-serif;
+}
+
 /* ---- Element Plus 映射（仅聊天页 html.nc-chat；工具页等保持原样，避免硬编码白底面板失配） ---- */
 html.nc-chat {
   --el-color-primary: var(--nc-primary);
@@ -499,3 +529,362 @@ html[data-theme='dawn'] .hljs-selector-id { color: #953800; }
 html[data-theme='dawn'] .hljs-built_in,
 html[data-theme='dawn'] .hljs-property,
 html[data-theme='dawn'] .hljs-params { color: #0550ae; }
+/* =====================================================================
+   赛博朋克主题专属外观（仅 html[data-theme='cyber'] 生效，其它主题零影响）
+   ===================================================================== */
+
+/* 背景：地平线洋红辉光 + 霓虹青环境光 */
+html[data-theme='cyber'] body {
+  background:
+    radial-gradient(1100px 420px at 50% 108%, rgba(255, 43, 214, 0.22), transparent 70%),
+    radial-gradient(900px 500px at 85% -10%, rgba(0, 240, 255, 0.12), transparent 60%),
+    radial-gradient(700px 400px at 0% 30%, rgba(124, 58, 237, 0.14), transparent 60%),
+    var(--nc-bg);
+}
+
+/* 扫描线 + 暗角（位于 3D 层之下的背景层，不遮挡任何内容） */
+html[data-theme='cyber'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* 3D 关闭时的 CSS 降级：透视霓虹网格地面（3D 开启时由 WebGL 城市接管） */
+html[data-theme='cyber']:not(.nc-3d) body::after {
+  content: '';
+  position: fixed;
+  left: -50%;
+  right: -50%;
+  bottom: -10%;
+  height: 55%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 43, 214, 0.45) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 43, 214, 0.45) 1px, transparent 1px);
+  background-size: 60px 60px;
+  transform: perspective(320px) rotateX(62deg);
+  transform-origin: center top;
+  mask-image: linear-gradient(to bottom, transparent, #000 35%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 35%);
+  animation: nc-cyber-grid 2.4s linear infinite;
+}
+
+@keyframes nc-cyber-grid {
+  to {
+    background-position: 0 60px;
+  }
+}
+
+/* 滚动条 / 选区 */
+html[data-theme='cyber'] ::selection {
+  background: rgba(255, 43, 214, 0.45);
+  color: #fff;
+}
+
+html[data-theme='cyber'] .nc-scroll:hover {
+  scrollbar-color: rgba(0, 240, 255, 0.45) transparent;
+}
+
+/* ---- 框架：玻璃化 + 霓虹分隔线 ---- */
+html[data-theme='cyber'] .sidebar {
+  backdrop-filter: blur(14px) saturate(140%);
+  border-right: 1px solid transparent;
+  border-image: linear-gradient(to bottom, rgba(0, 240, 255, 0.5), rgba(255, 43, 214, 0.5)) 1;
+}
+
+html[data-theme='cyber'] .topbar {
+  background: rgba(7, 4, 15, 0.62);
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.6) 25%, rgba(255, 43, 214, 0.6) 75%, transparent) 1;
+}
+
+/* 品牌：等宽科技字体 + 青→洋红渐变字 + 轻微霓虹闪烁 */
+html[data-theme='cyber'] .brand-name {
+  font-family: var(--nc-font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 14px;
+  background: linear-gradient(90deg, #00f0ff, #ff2bd6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.45));
+  animation: nc-cyber-flicker 6s infinite;
+}
+
+@keyframes nc-cyber-flicker {
+  0%, 92%, 96%, 100% { opacity: 1; }
+  93% { opacity: 0.45; }
+  95% { opacity: 0.8; }
+}
+
+/* 切角徽标 / 头像（HUD 风切角） */
+html[data-theme='cyber'] .logo,
+html[data-theme='cyber'] .avatar-mini,
+html[data-theme='cyber'] .hero-logo {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  background: linear-gradient(135deg, #00f0ff, #7c3aed 55%, #ff2bd6);
+  color: #fff;
+}
+
+html[data-theme='cyber'] .hero-logo {
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  box-shadow: none;
+  filter: drop-shadow(0 0 18px rgba(255, 43, 214, 0.55));
+}
+
+html[data-theme='cyber'] .avatar {
+  background: linear-gradient(135deg, #00f0ff, #ff2bd6);
+  color: #0a0414;
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.6), 0 0 14px rgba(255, 43, 214, 0.5);
+}
+
+/* 侧栏：新会话按钮 = 霓虹描边；选中项 = 洋红发光指示条 */
+html[data-theme='cyber'] .new-chat {
+  border-radius: 4px;
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.06);
+  box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.08);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12.5px;
+}
+
+html[data-theme='cyber'] .new-chat:hover {
+  border-color: #00f0ff;
+  background: rgba(0, 240, 255, 0.12);
+  box-shadow: 0 0 16px -2px rgba(0, 240, 255, 0.55), inset 0 0 12px rgba(0, 240, 255, 0.12);
+}
+
+html[data-theme='cyber'] .item,
+html[data-theme='cyber'] .search-input,
+html[data-theme='cyber'] .nc-icon-btn,
+html[data-theme='cyber'] .act,
+html[data-theme='cyber'] .tool-btn {
+  border-radius: 4px;
+}
+
+html[data-theme='cyber'] .item.active {
+  background: linear-gradient(90deg, rgba(255, 43, 214, 0.16), rgba(0, 240, 255, 0.05));
+}
+
+html[data-theme='cyber'] .item.active::before {
+  background: #ff2bd6;
+  box-shadow: 0 0 8px #ff2bd6, 0 0 16px rgba(255, 43, 214, 0.6);
+}
+
+html[data-theme='cyber'] .nc-icon-btn:hover,
+html[data-theme='cyber'] .nc-icon-btn.active {
+  color: #00f0ff;
+  filter: drop-shadow(0 0 4px rgba(0, 240, 255, 0.7));
+}
+
+html[data-theme='cyber'] .team-chip,
+html[data-theme='cyber'] .team-badge,
+html[data-theme='cyber'] .ws-picker-btn {
+  border-radius: 3px;
+}
+
+/* ---- 欢迎页：故障风（RGB 分离）标题 ---- */
+html[data-theme='cyber'] .hero {
+  font-family: var(--nc-font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #e9f6ff;
+  text-shadow: -2px 0 rgba(255, 43, 214, 0.85), 2px 0 rgba(0, 240, 255, 0.85), 0 0 24px rgba(0, 240, 255, 0.4);
+  animation: nc-cyber-glitch 4.5s infinite steps(1);
+}
+
+@keyframes nc-cyber-glitch {
+  0%, 88%, 100% {
+    transform: none;
+    text-shadow: -2px 0 rgba(255, 43, 214, 0.85), 2px 0 rgba(0, 240, 255, 0.85), 0 0 24px rgba(0, 240, 255, 0.4);
+  }
+  89% {
+    transform: translate(2px, -1px) skewX(-6deg);
+    text-shadow: -5px 0 #ff2bd6, 5px 0 #00f0ff;
+  }
+  91% {
+    transform: translate(-3px, 1px);
+    text-shadow: 4px 0 #ff2bd6, -4px 0 #00f0ff;
+  }
+  93% {
+    transform: none;
+    text-shadow: -1px 0 #ff2bd6, 1px 0 #00f0ff;
+  }
+}
+
+/* ---- 消息 ---- */
+html[data-theme='cyber'] .row.user .bubble {
+  background: linear-gradient(135deg, rgba(255, 43, 214, 0.16), rgba(124, 58, 237, 0.14));
+  border: 1px solid rgba(255, 43, 214, 0.4);
+  border-radius: 4px 14px 4px 14px;
+  box-shadow: 0 0 18px -6px rgba(255, 43, 214, 0.6);
+}
+
+html[data-theme='cyber'] .think-block,
+html[data-theme='cyber'] .round-think {
+  border-radius: 4px;
+  border-color: rgba(0, 240, 255, 0.22);
+  border-left: 2px solid #00f0ff;
+  background: rgba(0, 240, 255, 0.04);
+}
+
+html[data-theme='cyber'] .think-live {
+  background-image: linear-gradient(90deg, #00f0ff 0%, #ff2bd6 50%, #00f0ff 100%);
+}
+
+html[data-theme='cyber'] .md h1,
+html[data-theme='cyber'] .md h2,
+html[data-theme='cyber'] .md h3 {
+  color: #00f0ff;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+}
+
+html[data-theme='cyber'] .md strong {
+  color: #ffd1f5;
+}
+
+html[data-theme='cyber'] .md a {
+  color: #ff2bd6;
+  text-decoration-color: rgba(255, 43, 214, 0.5);
+}
+
+html[data-theme='cyber'] .md :not(pre) > code {
+  background: rgba(255, 43, 214, 0.12);
+  color: #ffb3ef;
+  border-radius: 3px;
+}
+
+html[data-theme='cyber'] .md blockquote {
+  border-left-color: #ff2bd6;
+}
+
+html[data-theme='cyber'] .md table {
+  border-radius: 4px;
+}
+
+html[data-theme='cyber'] .md th {
+  background: rgba(0, 240, 255, 0.08);
+  color: #00f0ff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+}
+
+html[data-theme='cyber'] .md .code-wrap,
+html[data-theme='cyber'] .md pre {
+  border-radius: 4px;
+  border-color: rgba(0, 240, 255, 0.22);
+  box-shadow: inset 0 0 24px rgba(0, 240, 255, 0.04);
+}
+
+html[data-theme='cyber'] .code-wrap .code-bar {
+  background: linear-gradient(90deg, rgba(255, 43, 214, 0.14), rgba(0, 240, 255, 0.06));
+  border-bottom-color: rgba(0, 240, 255, 0.2);
+}
+
+html[data-theme='cyber'] .code-wrap .code-lang {
+  color: #ff2bd6;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* 代码高亮：霓虹配色 */
+html[data-theme='cyber'] .hljs-keyword,
+html[data-theme='cyber'] .hljs-selector-tag,
+html[data-theme='cyber'] .hljs-literal,
+html[data-theme='cyber'] .hljs-type { color: #ff2bd6; }
+html[data-theme='cyber'] .hljs-string,
+html[data-theme='cyber'] .hljs-attr,
+html[data-theme='cyber'] .hljs-regexp,
+html[data-theme='cyber'] .hljs-addition { color: #b6ff3b; }
+html[data-theme='cyber'] .hljs-number,
+html[data-theme='cyber'] .hljs-symbol,
+html[data-theme='cyber'] .hljs-bullet,
+html[data-theme='cyber'] .hljs-link { color: #ffb020; }
+html[data-theme='cyber'] .hljs-title,
+html[data-theme='cyber'] .hljs-title.function_,
+html[data-theme='cyber'] .hljs-section,
+html[data-theme='cyber'] .hljs-built_in,
+html[data-theme='cyber'] .hljs-property,
+html[data-theme='cyber'] .hljs-params { color: #00f0ff; }
+
+/* ---- 输入区：HUD 四角括弧 + 霓虹描边 ---- */
+html[data-theme='cyber'] .input-bar {
+  border-radius: 4px;
+  border-color: rgba(0, 240, 255, 0.35);
+  background:
+    linear-gradient(#00f0ff, #00f0ff) top left / 14px 2px no-repeat,
+    linear-gradient(#00f0ff, #00f0ff) top left / 2px 14px no-repeat,
+    linear-gradient(#ff2bd6, #ff2bd6) bottom right / 14px 2px no-repeat,
+    linear-gradient(#ff2bd6, #ff2bd6) bottom right / 2px 14px no-repeat,
+    rgba(12, 7, 26, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+html[data-theme='cyber'] .input-bar.focused {
+  border-color: #00f0ff;
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.35), 0 0 28px -6px rgba(0, 240, 255, 0.6), 0 12px 40px -12px rgba(255, 43, 214, 0.45);
+}
+
+html[data-theme='cyber'] .input-bar-wrap {
+  background: linear-gradient(to bottom, transparent, rgba(7, 4, 15, 0.85) 28px);
+}
+
+html[data-theme='cyber'] .send-btn:not(:disabled):not(.stop) {
+  border-radius: 4px;
+  background: linear-gradient(135deg, #00f0ff, #ff2bd6);
+  color: #0a0414;
+  box-shadow: 0 0 16px -2px rgba(0, 240, 255, 0.7);
+}
+
+html[data-theme='cyber'] .send-btn:not(:disabled):not(.stop):hover {
+  box-shadow: 0 0 22px 0 rgba(255, 43, 214, 0.75);
+}
+
+html[data-theme='cyber'] .send-btn:disabled,
+html[data-theme='cyber'] .send-btn.stop {
+  border-radius: 4px;
+}
+
+html[data-theme='cyber'] .send-btn.stop {
+  background: #ff2bd6;
+  color: #0a0414;
+  box-shadow: 0 0 16px rgba(255, 43, 214, 0.7);
+}
+
+html[data-theme='cyber'] .think-chip {
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11.5px;
+}
+
+html[data-theme='cyber'] .thinking-row.on .think-chip {
+  box-shadow: 0 0 12px -3px rgba(0, 240, 255, 0.7);
+}
+
+/* 弹层（下拉 / 外观面板）也带霓虹边 */
+html.nc-chat[data-theme='cyber'] .el-popper.is-light,
+html.nc-chat[data-theme='cyber'] .el-dropdown__popper.el-popper {
+  border-color: rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 24px -8px rgba(0, 240, 255, 0.5), 0 16px 40px -12px rgba(255, 43, 214, 0.35);
+}
+
+/* 尊重系统“减少动态效果”：关闭闪烁 / 故障 / 网格滚动 */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme='cyber'] .brand-name,
+  html[data-theme='cyber'] .hero,
+  html[data-theme='cyber']:not(.nc-3d) body::after {
+    animation: none;
+  }
+}
