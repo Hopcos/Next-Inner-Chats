@@ -7,6 +7,7 @@ import type { ToolCard as ToolCardModel, UiMessage } from '@/kernel/plugins'
 import ToolCard from '@/components/chat/ToolCard.vue'
 import ImageViewer from '@/components/chat/ImageViewer.vue'
 import TeamPanel from '@/components/chat/TeamPanel.vue'
+import NcIcon from '@/components/ui/NcIcon.vue'
 import { kernel } from '@/kernel'
 import { copyText } from '@/utils/clipboard'
 import { tokenStore } from '@/api/http'
@@ -267,13 +268,13 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const label = lang || 'text'
   const body = highlightCode(tok.content, lang)
   const formatBtn = canFormat(lang)
-    ? `<button type="button" class="code-act" data-act="format" data-lang="${md.utils.escapeHtml(lang)}">🪄 <span>${t('chat.formatCode')}</span></button>`
+    ? `<button type="button" class="code-act" data-act="format" data-lang="${md.utils.escapeHtml(lang)}"><svg class="ca-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.6 4.6-2.2-2.2a1.2 1.2 0 0 0-1.7 0L2.4 17.7a1.2 1.2 0 0 0 0 1.7l2.2 2.2a1.2 1.2 0 0 0 1.7 0L21.6 6.3a1.2 1.2 0 0 0 0-1.7Z"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></svg><span>${t('chat.formatCode')}</span></button>`
     : ''
   return (
     `<div class="code-wrap">` +
     `<div class="code-bar"><span class="code-lang">${md.utils.escapeHtml(label)}</span>` +
     `<span class="code-actions">${formatBtn}` +
-    `<button type="button" class="code-act" data-act="copy" data-lang="${md.utils.escapeHtml(lang)}">📋 <span>${t('chat.copyCode')}</span></button></span></div>` +
+    `<button type="button" class="code-act" data-act="copy" data-lang="${md.utils.escapeHtml(lang)}"><svg class="ca-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2"/></svg><span>${t('chat.copyCode')}</span></button></span></div>` +
     `<pre><code class="language-${safeLang} hljs" data-lang="${md.utils.escapeHtml(lang)}">${body}</code></pre>` +
     `</div>\n`
   )
@@ -635,7 +636,7 @@ function prettyArgs(raw?: string): string {
     :key="message.id"
     :id="message.role === 'user' ? 'topic-' + message.id : undefined"
   >
-    <div v-if="isAssistant" class="avatar-mini">NC</div>
+    <div v-if="isAssistant" class="avatar-mini" aria-hidden="true"><NcIcon name="sparkles" :size="15" :stroke="2" /></div>
     <div class="body">
       <!-- 思考（可折叠）：浅灰背景与最终输出区分；折叠是收起动画，内容始终保留可展开。
            轮布局（roundBoundariesJson 存在）时思考按轮嵌入正文（每轮“思考→工具→输出”），此处整块思考不再渲染；
@@ -645,9 +646,9 @@ function prettyArgs(raw?: string): string {
         class="think-block"
       >
         <div class="think-head nc-dim" @click="thinkingOpen = !thinkingOpen">
-          <span :class="['caret', { open: thinkingOpen }]">▸</span>
-          <span v-if="showingThinking">
-            🧠 {{ t('chat.thinkInProgress') }}
+          <NcIcon :class="['caret', { open: thinkingOpen }]" name="chevron-right" :size="14" :stroke="2" />
+          <span v-if="showingThinking" class="think-live">
+            {{ t('chat.thinkInProgress') }}
             <template v-if="showWait"> · {{ waitSec }}s</template>
           </span>
           <span v-else-if="message.reasoning">{{ t('chat.thinkProcess', { len: message.reasoning.length }) }}</span>
@@ -662,7 +663,7 @@ function prettyArgs(raw?: string): string {
           <ToolCard v-for="tCard in message.tools" :key="tCard.key" :card="tCard" />
         </template>
         <div v-for="(note, i) in message.contextNotes" :key="'n' + i" class="context-note nc-dim">
-          ℹ️ {{ note }}
+          <NcIcon name="info" :size="13" /> {{ note }}
         </div>
       </div>
 
@@ -695,14 +696,14 @@ function prettyArgs(raw?: string): string {
           <div ref="contentRef" class="md-host round-host" @click="onContentClick" @mousedown="onMermaidPanStart" @wheel="onMermaidWheel">
             <div v-if="nonRoundNotes.length" class="context-notes">
               <div v-for="(note, i) in nonRoundNotes" :key="'n' + i" class="context-note nc-dim">
-                ℹ️ {{ note }}
+                <NcIcon name="info" :size="13" /> {{ note }}
               </div>
             </div>
             <div v-for="seg in roundSegs" :key="seg.key" class="round">
               <!-- 该轮思考（可折叠标题，默认折叠，点击展开；流式中最新一轮自动展开） -->
               <div v-if="seg.thinkText" class="round-think">
                 <div class="think-head nc-dim" @click="toggleRound(seg.idx)">
-                  <span :class="['caret', { open: roundOpen[seg.idx] }]">▸</span>
+                  <NcIcon :class="['caret', { open: roundOpen[seg.idx] }]" name="chevron-right" :size="14" :stroke="2" />
                   <span>{{ t('chat.thinkRound', { round: seg.idx + 1, len: seg.thinkText.length }) }}</span>
                 </div>
                 <div v-if="roundOpen[seg.idx]" class="think-body">{{ seg.thinkText }}</div>
@@ -748,8 +749,8 @@ function prettyArgs(raw?: string): string {
 
       <!-- 话题操作：收藏 / 复制 / 重新生成 / 删除（消息就绪后显示；收藏=提问+回答一起；提问框无 重新生成） -->
       <div v-if="actionReady" class="actions">
-        <button class="act nc-dim" :title="t('chat.favorite')" @click="emit('favorite', message)">⭐ {{ t('chat.favorite') }}</button>
-        <button class="act nc-dim" :title="t('chat.copy')" @click="copyContent">📋 {{ t('chat.copy') }}</button>
+        <button class="act" :title="t('chat.favorite')" :aria-label="t('chat.favorite')" @click="emit('favorite', message)"><NcIcon name="star" :size="15" /></button>
+        <button class="act" :title="t('chat.copy')" :aria-label="t('chat.copy')" @click="copyContent"><NcIcon name="copy" :size="15" /></button>
         <el-tooltip v-if="isAssistant && message.usage && usageStats" placement="top" :show-after="150" transition="false" popper-class="token-pop">
           <template #content>
             <div class="tp-title">{{ t('chat.tokenTitle') }}</div>
@@ -757,11 +758,11 @@ function prettyArgs(raw?: string): string {
               <span class="tp-label">{{ r.label }}</span><b class="tp-val">{{ r.value }}</b>
             </div>
           </template>
-          <button class="act nc-dim" :title="t('chat.tokenTitle')">{{ t('chat.tokenAction') }} ⚡</button>
+          <button class="act act-token" :title="t('chat.tokenTitle')"><NcIcon name="zap" :size="14" /><span>{{ t('chat.tokenAction') }}</span></button>
         </el-tooltip>
-        <button v-if="isAssistant" class="act nc-dim" :title="t('chat.download')" :disabled="downloading" @click="downloadImage">{{ downloading ? '⏳' : '⬇️' }} {{ t('chat.download') }}</button>
-        <button v-if="isAssistant" class="act nc-dim" :title="t('chat.regenerate')" @click="emit('regenerate', message.id)">🔄 {{ t('chat.regenerate') }}</button>
-        <button class="act nc-dim danger" :title="t('common.delete')" @click="emit('remove', message)">🗑 {{ t('common.delete') }}</button>
+        <button v-if="isAssistant" class="act" :title="t('chat.download')" :aria-label="t('chat.download')" :disabled="downloading" @click="downloadImage"><NcIcon :class="{ spin: downloading }" :name="downloading ? 'loader' : 'download'" :size="15" /></button>
+        <button v-if="isAssistant" class="act" :title="t('chat.regenerate')" :aria-label="t('chat.regenerate')" @click="emit('regenerate', message.id)"><NcIcon name="refresh" :size="15" /></button>
+        <button class="act danger" :title="t('common.delete')" :aria-label="t('common.delete')" @click="emit('remove', message)"><NcIcon name="trash" :size="15" /></button>
       </div>
     </div>
     <div v-if="!isAssistant && statusText[message.status]" class="status nc-dim">
@@ -772,14 +773,15 @@ function prettyArgs(raw?: string): string {
 
 <style scoped>
 .row {
-  /* 消息行宽度 = 剩余聊天区宽度的 80%（MessageList 注入 --nc-msg-w），随窗口动态缩放 */
+  /* 消息行宽度 = 剩余聊天区宽度的 80%（MessageList 注入 --nc-msg-w），随窗口动态缩放；
+     另设阅读舒适上限（约 860px），超宽屏不再无限拉长行长 */
   width: var(--nc-msg-w, 80%);
-  /* 整个消息列（回答/思考/提问框）在页面中水平居中；行内依然所有框右对齐 */
+  max-width: var(--nc-msg-max, 860px);
   margin-left: auto;
   margin-right: auto;
   display: flex;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 12px;
+  margin-bottom: 18px;
   align-items: flex-start;
 }
 
@@ -790,15 +792,14 @@ function prettyArgs(raw?: string): string {
 .avatar-mini {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 9px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, var(--nc-primary), #a78bfa);
-  color: #04121f;
-  font-size: 10px;
-  font-weight: 800;
+  background: linear-gradient(135deg, var(--nc-primary), color-mix(in srgb, var(--nc-primary) 55%, #6366f1));
+  color: var(--nc-primary-contrast);
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-top: 2px;
 }
 
 /* 回答行的头像不占布局宽度：回答框（思考框）宽度 = 行宽 = 容器宽 */
@@ -809,39 +810,63 @@ function prettyArgs(raw?: string): string {
 .row.assistant .avatar-mini {
   position: absolute;
   right: 100%;
-  margin-right: 8px;
+  margin-right: 12px;
+}
+
+/* 消息列过窄时（左侧留白放不下外置头像）隐藏回答头像，避免被侧栏边缘裁切 */
+@container msglist (max-width: 560px) {
+  .row.assistant .avatar-mini {
+    display: none;
+  }
 }
 
 .body {
-  /* 回答框/思考框：占满消息行（行宽 = 固定列宽），宽度与容器一致 */
   width: 100%;
   min-width: 120px;
-  /* 行距随 .md 容器（1.15）；plain-text 打字机阶段继承此值 */
-  line-height: 1.15;
+  line-height: 1.6;
 }
 
+/* 提问：宽度自适应内容（短问题小气泡、右对齐），最长不超过回答宽度的 ~75% */
 .row.user .body {
-  /* 提问框宽度 = 回答框宽度的 2/3；row-reverse 使其右缘与回答框右缘对齐 */
-  width: calc(var(--nc-msg-w, 80%) * 2 / 3);
-  min-width: 120px;
+  width: auto;
+  max-width: 75%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* 角色区分（ChatGPT / Claude 式）：提问 = 柔和实底气泡；回答 = 无框正文直接铺在画布上 */
+.row.user .bubble {
+  background: var(--nc-user-bubble);
+  border-color: transparent;
+  border-radius: 18px 18px 6px 18px;
+  padding: 9px 15px;
+}
+
+.row.assistant .bubble {
+  background: transparent;
+  border-color: transparent;
+  padding: 2px 0;
+  border-radius: 0;
 }
 
 .bubble.streaming {
-  border-color: color-mix(in srgb, var(--nc-primary) 55%, transparent);
+  border-color: transparent;
 }
 
 .images {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   justify-content: flex-end;
 }
 
 .msg-image {
   max-width: 220px;
   max-height: 220px;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--nc-border);
   object-fit: cover;
   cursor: zoom-in;
@@ -851,14 +876,13 @@ function prettyArgs(raw?: string): string {
   font-size: 12px;
   margin-top: 4px;
 }
-
-/* ---- 思考区：浅灰背景（与最终输出区分），折叠为收起动画，内容始终在 DOM ---- */
+/* ---- 思考区：轻量可折叠（细边 + 极淡底），折叠为收起动画，内容始终在 DOM ---- */
 .think-block {
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   border: 1px solid var(--nc-border);
-  border-radius: 8px;
-  padding: 4px 10px;
-  background: color-mix(in srgb, var(--nc-text-dim) 12%, transparent);
+  border-radius: 12px;
+  padding: 6px 12px;
+  background: var(--nc-surface-2);
 }
 
 .think-head {
@@ -868,11 +892,35 @@ function prettyArgs(raw?: string): string {
   display: flex;
   gap: 6px;
   align-items: center;
+  color: var(--nc-text-dim);
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+
+.think-head:hover {
+  color: var(--nc-text);
+}
+
+/* 思考进行中：文字微光扫过（替代 emoji） */
+.think-live {
+  background: linear-gradient(90deg, var(--nc-text-dim) 0%, var(--nc-text) 50%, var(--nc-text-dim) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: nc-shimmer 1.8s linear infinite;
+}
+
+@keyframes nc-shimmer {
+  to {
+    background-position: -200% 0;
+  }
 }
 
 .caret {
-  transition: transform 0.15s;
+  transition: transform 0.18s;
   display: inline-block;
+  opacity: 0.8;
 }
 
 .caret.open {
@@ -890,21 +938,23 @@ function prettyArgs(raw?: string): string {
 }
 
 .think-body {
-  margin-top: 4px;
+  margin: 6px 0 4px;
   font-size: 13px;
-  line-height: 1.15;
+  line-height: 1.6;
   white-space: pre-wrap;
-  opacity: 0.82;
+  color: var(--nc-text-dim);
   max-height: 320px;
   overflow-y: auto;
-  padding: 6px 10px;
-  border-left: 2px solid color-mix(in srgb, var(--nc-primary) 40%, transparent);
-  background: color-mix(in srgb, var(--nc-bg) 30%, transparent);
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--nc-border-strong);
 }
 
 .context-note {
-  font-size: 11.5px;
-  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 /* ---- 轮次布局（思考 → 工具 → 输出）---- */
@@ -915,15 +965,15 @@ function prettyArgs(raw?: string): string {
 .round {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .round-think {
   border: 1px solid var(--nc-border);
-  border-radius: 8px;
-  padding: 2px 10px;
-  background: color-mix(in srgb, var(--nc-text-dim) 8%, transparent);
+  border-radius: 12px;
+  padding: 4px 12px;
+  background: var(--nc-surface-2);
 }
 
 .round-think .think-head {
@@ -931,33 +981,48 @@ function prettyArgs(raw?: string): string {
 }
 
 .round-host .md-seg {
-  /* 轮内输出段与思考块/工具卡保持层级一致 */
   margin: 0;
 }
 
 .skeleton {
-  animation: blink 1s infinite;
-  color: var(--nc-primary);
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--nc-text);
+  color: transparent;
+  overflow: hidden;
+  animation: nc-pulse 1s ease-in-out infinite;
 }
 
-@keyframes blink {
+@keyframes nc-pulse {
   50% {
-    opacity: 0.2;
+    transform: scale(0.6);
+    opacity: 0.4;
   }
 }
 
 .usage {
-  font-size: 11px;
-  margin-top: 4px;
+  font-size: 11.5px;
+  margin-top: 6px;
+  color: var(--nc-text-faint);
 }
 
-/* ---- 话题操作按钮（hover 显示） ---- */
+/* ---- 话题操作按钮（图标化 + tooltip；hover 显示，最新回答常驻） ---- */
 .actions {
-  margin-top: 5px;
+  margin-top: 4px;
+  margin-left: -6px;
   opacity: 0;
   transition: opacity 0.15s;
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 0;
+}
+
+.row.user .actions {
+  margin-left: 0;
+  margin-right: -6px;
 }
 
 .body:hover .actions,
@@ -966,25 +1031,44 @@ function prettyArgs(raw?: string): string {
 }
 
 .act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 0 6px;
   font-size: 12px;
-  border-radius: 6px;
-  color: var(--nc-dim, var(--nc-text-dim));
+  border-radius: 7px;
+  color: var(--nc-text-faint);
   transition: background 0.15s, color 0.15s;
 }
 
 .act:hover {
-  background: color-mix(in srgb, var(--nc-text-dim) 15%, transparent);
+  background: var(--nc-surface-2);
   color: var(--nc-text);
 }
 
-.act.danger:hover {
-  color: var(--nc-danger, #f56c6c);
+.act:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--nc-primary) 70%, transparent);
 }
 
+.act.danger:hover {
+  color: var(--nc-danger);
+}
+
+.spin {
+  animation: nc-spin 0.9s linear infinite;
+}
+
+@keyframes nc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* ---- 打字机阶段的纯文本 ---- */
 .plain-text {
   white-space: pre-wrap;
@@ -997,92 +1081,144 @@ function prettyArgs(raw?: string): string {
   这里统一用全局类 .md 直接控制，行距压到 1.3（密集排版）。
 -->
 <style>
-/* 行距唯一事实源 = .md 容器（继承给所有子元素），子元素不再单独设 line-height，
-   避免任何子级规则被跳过/覆盖导致行距不一致；!important 免疫全局样式 */
+/* 行距唯一事实源 = .md 容器（继承给所有子元素），子元素不再单独设 line-height；
+   1.5 兼顾密度与可读性（原 1.1 对中文段落过紧） */
 .md {
-  line-height: 1.1 !important;
-  font-size: 13.5px;
+  line-height: 1.5 !important;
+  font-size: 14px;
+  color: var(--nc-text);
+}
+
+.md > :first-child {
+  margin-top: 0 !important;
+}
+
+.md > :last-child {
+  margin-bottom: 0 !important;
 }
 
 .md p {
-  margin: 0.08em 0 !important;
+  margin: 0.45em 0 !important;
 }
 
 .md li {
-  margin: 0.02em 0 !important;
+  margin: 0.15em 0 !important;
+}
+
+.md li::marker {
+  color: var(--nc-text-faint);
 }
 
 .md ol,
 .md ul {
-  margin: 0.08em 0 !important;
-  padding-left: 1.25em;
+  margin: 0.4em 0 !important;
+  padding-left: 1.4em;
 }
 
 .md h1,
 .md h2,
 .md h3,
 .md h4 {
-  margin: 0.26em 0 0.12em !important;
+  margin: 0.9em 0 0.35em !important;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
-.md h1 { font-size: 1.38em; }
-.md h2 { font-size: 1.22em; }
-.md h3 { font-size: 1.08em; }
+.md h1 { font-size: 1.4em; }
+.md h2 { font-size: 1.24em; }
+.md h3 { font-size: 1.1em; }
 .md h4 { font-size: 1em; }
+
+.md strong {
+  font-weight: 650;
+}
 
 .md a {
   color: var(--nc-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--nc-primary) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.md a:hover {
+  text-decoration-color: var(--nc-primary);
 }
 
 .md hr {
   border: none;
   border-top: 1px solid var(--nc-border);
-  margin: 0.4em 0 !important;
+  margin: 1em 0 !important;
 }
 
 .md img {
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .md blockquote {
-  border-left: 3px solid var(--nc-primary);
-  margin: 0.2em 0 !important;
-  padding-left: 10px;
+  border-left: 3px solid var(--nc-border-strong);
+  margin: 0.5em 0 !important;
+  padding: 0 0 0 12px;
   color: var(--nc-text-dim);
 }
 
+/* 表格：圆角外框 + 表头底色 + 斑马行 */
 .md table {
-  border-collapse: collapse;
-  margin: 0.2em 0 !important;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.6em 0 !important;
+  border: 1px solid var(--nc-border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 13px;
 }
 
 .md th,
 .md td {
-  border: 1px solid var(--nc-border);
-  padding: 1px 7px;
+  border: none;
+  border-bottom: 1px solid var(--nc-border);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.md th + th,
+.md td + td {
+  border-left: 1px solid var(--nc-border);
+}
+
+.md tr:last-child td {
+  border-bottom: none;
+}
+
+.md th {
+  background: var(--nc-surface-2);
+  font-weight: 600;
+}
+
+.md tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--nc-surface-2) 50%, transparent);
 }
 
 .md code {
-  font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
-  font-size: 0.9em;
+  font-family: var(--nc-font-mono);
+  font-size: 0.88em;
 }
 
 .md :not(pre) > code {
-  background: color-mix(in srgb, var(--nc-text-dim) 18%, transparent);
-  padding: 0 4px;
-  border-radius: 4px;
+  background: var(--nc-surface-3);
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
 }
 
 .md pre {
-  background: color-mix(in srgb, var(--nc-text-dim) 10%, transparent);
+  background: var(--nc-code-bg, var(--nc-surface-2));
   border: 1px solid var(--nc-border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 12px;
+  padding: 12px 14px;
   overflow-x: auto;
-  margin: 0.3em 0 !important;
+  margin: 0.6em 0 !important;
 }
-
 /* Mermaid 图：居中、自适应宽度 + 交互工具条（放大/缩小/重置/拖动） */
 .md pre.mermaid {
   background: transparent;

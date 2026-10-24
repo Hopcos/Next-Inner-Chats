@@ -41,13 +41,13 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const label = lang || 'text'
   const body = highlightCode(tok.content, lang)
   const formatBtn = canFormat(lang)
-    ? `<button type="button" class="code-act" data-act="format" data-lang="${md.utils.escapeHtml(lang)}">🪄 <span>${t('chat.formatCode')}</span></button>`
+    ? `<button type="button" class="code-act" data-act="format" data-lang="${md.utils.escapeHtml(lang)}"><svg class="ca-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.6 4.6-2.2-2.2a1.2 1.2 0 0 0-1.7 0L2.4 17.7a1.2 1.2 0 0 0 0 1.7l2.2 2.2a1.2 1.2 0 0 0 1.7 0L21.6 6.3a1.2 1.2 0 0 0 0-1.7Z"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></svg><span>${t('chat.formatCode')}</span></button>`
     : ''
   return (
     `<div class="code-wrap">` +
     `<div class="code-bar"><span class="code-lang">${md.utils.escapeHtml(label)}</span>` +
     `<span class="code-actions">${formatBtn}` +
-    `<button type="button" class="code-act" data-act="copy" data-lang="${md.utils.escapeHtml(lang)}">📋 <span>${t('chat.copyCode')}</span></button></span></div>` +
+    `<button type="button" class="code-act" data-act="copy" data-lang="${md.utils.escapeHtml(lang)}"><svg class="ca-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2"/></svg><span>${t('chat.copyCode')}</span></button></span></div>` +
     `<pre><code class="language-${safeLang} hljs" data-lang="${md.utils.escapeHtml(lang)}">${body}</code></pre>` +
     `</div>\n`
   )
@@ -251,7 +251,7 @@ const phaseClass = (phase: string) => {
             >
               <div class="think-head" role="button" tabindex="0" @click="toggleThink(segKey(seg))" @keydown.enter.prevent="toggleThink(segKey(seg))">
                 <span :class="['caret', { open: !collapsedThink.has(segKey(seg)) }]">▸</span>
-                🧠 <span>{{ t('chat.thinkProcess', { len: seg.thinking.length }) }}</span>
+                <span>{{ t('chat.thinkProcess', { len: seg.thinking.length }) }}</span>
               </div>
               <div v-if="!collapsedThink.has(segKey(seg))" class="think-body">{{ seg.thinking }}</div>
             </div>

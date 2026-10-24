@@ -1,45 +1,206 @@
-/* ================= Next Chats 主题 ================= */
+/* ================= Next Chats 设计令牌 =================
+   语义分层：bg（画布）< bg-elev（侧栏）< surface（卡片/输入）；
+   surface-2/3 = 悬停/选中的叠加层；text / text-dim / text-faint 三级文字；
+   primary-contrast = 主色块上的文字色（深色主题用浅主色 + 深字，保证对比度）。 */
 
 :root {
-  --nc-bg: #070b18;
-  --nc-bg-glow: rgba(56, 189, 248, 0.12);
-  --nc-surface: rgba(15, 23, 42, 0.72);
-  --nc-surface-solid: #0f172a;
-  --nc-border: rgba(148, 163, 184, 0.16);
-  --nc-text: #e2e8f0;
-  --nc-text-dim: #94a3b8;
-  --nc-primary: #38bdf8;
-  --nc-radius: 14px;
-}
-
-/* 主题：极光 aurora（默认）——深海蓝底 + 青绿/紫双光晕，与午夜（纯黑靛蓝）明确区分 */
-html[data-theme='aurora'] {
-  --nc-bg: #0a1830;
-  --nc-bg-glow: rgba(45, 212, 191, 0.2);
-  --nc-bg-glow2: rgba(167, 139, 250, 0.18);
-  --nc-surface: rgba(15, 35, 66, 0.66);
-  --nc-surface-solid: #0f2342;
-  --nc-border: rgba(148, 197, 255, 0.18);
+  --nc-bg: #0b1220;
+  --nc-bg-elev: #0f1729;
+  --nc-bg-glow: rgba(45, 212, 191, 0.06);
+  --nc-surface: rgba(20, 29, 47, 0.9);
+  --nc-surface-solid: #141d2f;
+  --nc-surface-2: rgba(148, 163, 184, 0.08);
+  --nc-surface-3: rgba(148, 163, 184, 0.14);
+  --nc-overlay: #172135;
+  --nc-border: rgba(148, 163, 184, 0.14);
+  --nc-border-strong: rgba(148, 163, 184, 0.24);
+  --nc-text: #e6edf6;
+  --nc-text-dim: #9aa8bc;
+  --nc-text-faint: #7d8ca3;
   --nc-primary: #2dd4bf;
+  --nc-primary-contrast: #042f2e;
+  --nc-primary-soft: rgba(45, 212, 191, 0.12);
+  --nc-user-bubble: #1c2840;
+  --nc-danger: #f87171;
+  --nc-shadow: 0 10px 34px rgba(0, 0, 0, 0.36);
+  --nc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --nc-radius: 14px;
+  --nc-radius-sm: 8px;
+  --nc-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  color-scheme: dark;
 }
 
-/* 主题：破晓 dawn（明亮） */
+/* 主题：极光 aurora（默认）——石板蓝底 + 青绿强调，低饱和、少光晕 */
+html[data-theme='aurora'] {
+  --nc-bg: #0b1220;
+  --nc-bg-elev: #0e1628;
+  --nc-bg-glow: rgba(45, 212, 191, 0.06);
+  --nc-bg-glow2: rgba(99, 102, 241, 0.05);
+  --nc-surface: rgba(20, 29, 47, 0.9);
+  --nc-surface-solid: #141d2f;
+  --nc-overlay: #172135;
+  --nc-primary: #2dd4bf;
+  --nc-primary-contrast: #042f2e;
+  --nc-primary-soft: rgba(45, 212, 191, 0.12);
+  --nc-user-bubble: #1c2840;
+}
+
+/* 主题：破晓 dawn（明亮）——近白画布 + 浅灰侧栏 + 靛蓝强调 */
 html[data-theme='dawn'] {
-  --nc-bg: #eef4fb;
-  --nc-bg-glow: rgba(59, 130, 246, 0.1);
-  --nc-surface: rgba(255, 255, 255, 0.82);
+  --nc-bg: #f8f9fb;
+  --nc-bg-elev: #f1f3f7;
+  --nc-bg-glow: rgba(79, 70, 229, 0.04);
+  --nc-bg-glow2: transparent;
+  --nc-surface: rgba(255, 255, 255, 0.96);
   --nc-surface-solid: #ffffff;
-  --nc-border: rgba(15, 23, 42, 0.12);
+  --nc-surface-2: rgba(15, 23, 42, 0.045);
+  --nc-surface-3: rgba(15, 23, 42, 0.08);
+  --nc-overlay: #ffffff;
+  --nc-border: rgba(15, 23, 42, 0.09);
+  --nc-border-strong: rgba(15, 23, 42, 0.16);
   --nc-text: #0f172a;
-  --nc-text-dim: #64748b;
-  --nc-primary: #2563eb;
+  --nc-text-dim: #475569;
+  --nc-text-faint: #64748b;
+  --nc-primary: #4f46e5;
+  --nc-primary-contrast: #ffffff;
+  --nc-primary-soft: rgba(79, 70, 229, 0.09);
+  --nc-user-bubble: #eef0fb;
+  --nc-danger: #dc2626;
+  --nc-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+  --nc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  color-scheme: light;
 }
 
-/* 主题：午夜 midnight（深黑，Element Plus dark） */
+/* 主题：午夜 midnight——中性纯黑（无蓝调）+ 薰衣草紫强调 */
 html[data-theme='midnight'] {
-  --nc-bg: #02040a;
-  --nc-bg-glow: rgba(99, 102, 241, 0.16);
-  --nc-primary: #818cf8;
+  --nc-bg: #0b0b0d;
+  --nc-bg-elev: #111114;
+  --nc-bg-glow: rgba(167, 139, 250, 0.05);
+  --nc-bg-glow2: transparent;
+  --nc-surface: rgba(24, 24, 28, 0.94);
+  --nc-surface-solid: #18181c;
+  --nc-surface-2: rgba(255, 255, 255, 0.055);
+  --nc-surface-3: rgba(255, 255, 255, 0.1);
+  --nc-overlay: #1c1c21;
+  --nc-border: rgba(255, 255, 255, 0.08);
+  --nc-border-strong: rgba(255, 255, 255, 0.15);
+  --nc-text: #ececf1;
+  --nc-text-dim: #a1a1aa;
+  --nc-text-faint: #85858f;
+  --nc-primary: #a78bfa;
+  --nc-primary-contrast: #1e1038;
+  --nc-primary-soft: rgba(167, 139, 250, 0.14);
+  --nc-user-bubble: #232329;
+}
+
+/* ---- Element Plus 映射（仅聊天页 html.nc-chat；工具页等保持原样，避免硬编码白底面板失配） ---- */
+html.nc-chat {
+  --el-color-primary: var(--nc-primary);
+  --el-color-primary-light-3: color-mix(in srgb, var(--nc-primary) 70%, var(--nc-bg));
+  --el-color-primary-light-5: color-mix(in srgb, var(--nc-primary) 50%, var(--nc-bg));
+  --el-color-primary-light-7: color-mix(in srgb, var(--nc-primary) 30%, var(--nc-bg));
+  --el-color-primary-light-8: color-mix(in srgb, var(--nc-primary) 20%, var(--nc-bg));
+  --el-color-primary-light-9: color-mix(in srgb, var(--nc-primary) 10%, var(--nc-bg));
+  --el-color-primary-dark-2: color-mix(in srgb, var(--nc-primary) 82%, #000);
+  --el-border-radius-base: 8px;
+}
+
+/* 深色主题（极光 / 午夜）：在聊天页内自供 EP 深色变量（不改全局 html.dark，以免影响工具页白底面板） */
+html.nc-chat:not([data-theme='dawn']) {
+  --el-bg-color: var(--nc-surface-solid);
+  --el-bg-color-page: var(--nc-bg);
+  --el-bg-color-overlay: var(--nc-overlay);
+  --el-fill-color-blank: var(--nc-surface-solid);
+  --el-fill-color-light: var(--nc-surface-2);
+  --el-fill-color: var(--nc-surface-3);
+  --el-text-color-primary: var(--nc-text);
+  --el-text-color-regular: var(--nc-text);
+  --el-text-color-secondary: var(--nc-text-dim);
+  --el-text-color-placeholder: var(--nc-text-faint);
+  --el-border-color: var(--nc-border-strong);
+  --el-border-color-light: var(--nc-border);
+  --el-border-color-lighter: var(--nc-border);
+  --el-box-shadow-light: var(--nc-shadow);
+  --el-mask-color: rgba(0, 0, 0, 0.6);
+}
+
+/* 主色实心按钮：文字用 primary-contrast（青绿/紫等浅主色上白字对比度不足） */
+html.nc-chat .el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-text-color: var(--nc-primary-contrast);
+  --el-button-hover-text-color: var(--nc-primary-contrast);
+  --el-button-active-text-color: var(--nc-primary-contrast);
+  --el-button-disabled-text-color: color-mix(in srgb, var(--nc-primary-contrast) 70%, transparent);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--nc-primary) 88%, var(--nc-text));
+  --el-button-hover-border-color: transparent;
+}
+
+html.nc-chat .el-switch {
+  --el-switch-on-color: var(--nc-primary);
+}
+
+/* 弹出菜单统一圆角/阴影 */
+html.nc-chat .el-dropdown__popper.el-popper,
+html.nc-chat .el-select__popper.el-popper,
+html.nc-chat .el-popover.el-popper {
+  border-radius: 10px;
+  border-color: var(--nc-border);
+  box-shadow: var(--nc-shadow);
+}
+
+html.nc-chat .el-dropdown-menu__item {
+  border-radius: 6px;
+  margin: 0 4px;
+  gap: 8px;
+}
+
+html.nc-chat .el-dropdown-menu {
+  padding: 4px 0;
+}
+
+/* 无障碍：仅屏幕阅读器可见（图标按钮保留文字语义） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 通用幽灵图标按钮 */
+.nc-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--nc-text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nc-icon-btn:hover {
+  background: var(--nc-surface-2);
+  color: var(--nc-text);
+}
+
+.nc-icon-btn.active {
+  color: var(--nc-primary);
+  background: var(--nc-primary-soft);
+}
+
+.nc-icon-btn:focus-visible,
+.nc-focus:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--nc-primary) 70%, transparent);
+  outline-offset: 1px;
 }
 
 * {
@@ -63,11 +224,17 @@ body {
     sans-serif;
   color: var(--nc-text);
   background:
-    radial-gradient(1200px 600px at 20% -10%, var(--nc-bg-glow), transparent 60%),
-    radial-gradient(900px 520px at 78% 38%, var(--nc-bg-glow2, transparent), transparent 55%),
-    radial-gradient(1000px 500px at 90% 110%, var(--nc-bg-glow), transparent 55%),
+    radial-gradient(1200px 600px at 70% -20%, var(--nc-bg-glow), transparent 60%),
+    radial-gradient(900px 520px at 10% 110%, var(--nc-bg-glow2, transparent), transparent 55%),
     var(--nc-bg);
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nc-primary) 30%, transparent);
 }
 
 /* 3D 背景层 */
@@ -88,28 +255,42 @@ body {
   font-size: 0.85em;
 }
 
-/* 消息气泡：紧凑行距（内容区行距由 MessageItem 的 .md 全局规则统一控制） */
+/* 消息气泡（内容区行距由 MessageItem 的 .md 全局规则统一控制；角色差异见 MessageItem） */
 .bubble {
   border-radius: var(--nc-radius);
   background: var(--nc-surface);
   border: 1px solid var(--nc-border);
-  backdrop-filter: blur(10px);
   padding: 10px 14px;
-  font-size: 13.5px;
-  line-height: 1.15;
+  font-size: 14px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-/* 薄滚动条 */
+/* 薄滚动条（悬停容器时才明显） */
+.nc-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.nc-scroll:hover {
+  scrollbar-color: var(--nc-border-strong) transparent;
+}
+
 .nc-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 .nc-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
-  border-radius: 3px;
+  background: transparent;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.nc-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: var(--nc-border-strong);
 }
 
 /* ---- KaTeX 数学公式（聊天 / Markdown 预览共用）---- */
@@ -153,11 +334,15 @@ code.math-fallback {
 
 /* ---- 代码块增强：顶栏（语言标签 + 格式化/复制按钮）---- */
 .md .code-wrap {
-  margin: 0.3em 0;
+  margin: 0.6em 0;
   border: 1px solid var(--nc-border);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--nc-text-dim) 8%, transparent);
+  background: var(--nc-code-bg, color-mix(in srgb, var(--nc-bg) 70%, #000 30%));
+}
+
+html[data-theme='dawn'] {
+  --nc-code-bg: #f6f7f9;
 }
 
 /* 顶栏容器接管边框/背景，内部 pre 还原为透明无边框 */
@@ -166,7 +351,9 @@ code.math-fallback {
   border: none;
   border-radius: 0;
   background: transparent;
-  padding: 8px 10px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .code-wrap .code-bar {
@@ -174,15 +361,16 @@ code.math-fallback {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 3px 10px;
-  background: color-mix(in srgb, var(--nc-text-dim) 10%, transparent);
+  height: 34px;
+  padding: 0 6px 0 14px;
+  background: var(--nc-surface-2);
   border-bottom: 1px solid var(--nc-border);
   user-select: none;
 }
 
 .code-wrap .code-lang {
-  font-family: var(--nc-font-mono, ui-monospace, 'Cascadia Code', monospace);
-  font-size: 11px;
+  font-family: var(--nc-font-mono);
+  font-size: 11.5px;
   color: var(--nc-text-dim);
   letter-spacing: 0.02em;
 }
@@ -193,19 +381,23 @@ code.math-fallback {
 }
 
 .code-wrap .code-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
   border: none;
   background: transparent;
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 0 8px;
   border-radius: 6px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--nc-text-dim);
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
 }
 
 .code-wrap .code-act:hover {
-  background: rgba(148, 163, 184, 0.15);
+  background: var(--nc-surface-3);
   color: var(--nc-text);
 }
 
@@ -213,7 +405,6 @@ code.math-fallback {
   opacity: 0.5;
   cursor: default;
 }
-
 /* ---- highlight.js token 色（One Dark 系，亮/暗主题通用） ---- */
 .hljs {
   color: inherit;
@@ -279,3 +470,32 @@ code.math-fallback {
 .hljs-strong {
   font-weight: 600;
 }
+
+/* 破晓（浅色）主题：GitHub Light 系 token 色，保证白底对比度 */
+html[data-theme='dawn'] .hljs-keyword,
+html[data-theme='dawn'] .hljs-selector-tag,
+html[data-theme='dawn'] .hljs-literal,
+html[data-theme='dawn'] .hljs-type { color: #cf222e; }
+html[data-theme='dawn'] .hljs-string,
+html[data-theme='dawn'] .hljs-attr,
+html[data-theme='dawn'] .hljs-regexp,
+html[data-theme='dawn'] .hljs-addition { color: #0a3069; }
+html[data-theme='dawn'] .hljs-number,
+html[data-theme='dawn'] .hljs-symbol,
+html[data-theme='dawn'] .hljs-bullet,
+html[data-theme='dawn'] .hljs-link { color: #0550ae; }
+html[data-theme='dawn'] .hljs-comment,
+html[data-theme='dawn'] .hljs-quote,
+html[data-theme='dawn'] .hljs-meta,
+html[data-theme='dawn'] .hljs-doctag { color: #6e7781; }
+html[data-theme='dawn'] .hljs-title,
+html[data-theme='dawn'] .hljs-title.function_,
+html[data-theme='dawn'] .hljs-section { color: #8250df; }
+html[data-theme='dawn'] .hljs-variable,
+html[data-theme='dawn'] .hljs-template-variable,
+html[data-theme='dawn'] .hljs-deletion,
+html[data-theme='dawn'] .hljs-name,
+html[data-theme='dawn'] .hljs-selector-id { color: #953800; }
+html[data-theme='dawn'] .hljs-built_in,
+html[data-theme='dawn'] .hljs-property,
+html[data-theme='dawn'] .hljs-params { color: #0550ae; }

@@ -5,6 +5,7 @@ import { kernel } from '@/kernel'
 import { http } from '@/api/http'
 import CanvasBoard from '@/components/chat/CanvasBoard.vue'
 import { uuid } from '@/utils/uuid'
+import NcIcon from '@/components/ui/NcIcon.vue'
 
 const { t } = useI18n()
 const text = ref('')
@@ -36,6 +37,7 @@ const noSession = computed(() => !kernel.session.state.currentId)
 
 // 全屏展开状态：点击右上角 ICON 后输入框上延至覆盖层（类似新层），再点收缩
 const expanded = ref(false)
+const focused = ref(false)
 // 输入框自动高度：最小 3 行；常规最大 20 行（超出出现内部滚动条），展开后放大到 40 行
 const autoSize = computed(() =>
   expanded.value ? { minRows: 8, maxRows: 40 } : { minRows: 3, maxRows: 20 },
@@ -152,21 +154,20 @@ function interrupt() {
 
 <template>
   <div class="input-bar-wrap" :class="{ expanded }">
-    <div class="input-bar" :class="{ expanded }">
-      <span
+    <div class="input-bar" :class="{ expanded, focused, team: teamMode }">
+      <button
         class="expand-btn"
+        type="button"
         :title="expanded ? t('chat.shrinkInput') : t('chat.expandInput')"
         :aria-label="expanded ? t('chat.shrinkInput') : t('chat.expandInput')"
         @click="expanded = !expanded"
       >
-        <!-- 全屏/还原 ICON -->
-        <svg v-if="!expanded" class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2L2 4l3 3M12 2l2 2-3 3M4 14l-2-2 3-3M12 14l2-2-3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        <svg v-else class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5l3-3 3 3M8 3H3v5M14 11l-3 3-3-3M8 13h5V8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      </span>
+        <NcIcon :name="expanded ? 'minimize' : 'maximize'" :size="15" />
+      </button>
       <div v-if="visionSupported && images.length > 0" class="image-row">
         <div v-for="img in images" :key="img.id" class="image-thumb">
           <img :src="img.dataUrl" :alt="img.fileName" />
-          <el-button class="remove" size="small" circle text :aria-label="t('chat.removeImage')" @click="removeImage(img.id)">×</el-button>
+          <button class="remove" type="button" :aria-label="t('chat.removeImage')" @click="removeImage(img.id)"><NcIcon name="x" :size="12" :stroke="2.4" /></button>
         </div>
       </div>
       <el-input
@@ -177,31 +178,35 @@ function interrupt() {
         :placeholder="noSession ? t('chat.inputPlaceholderNoSession') : t('chat.inputPlaceholder')"
         :disabled="noSession"
         @keydown="onKeydown"
+        @focus="focused = true"
+        @blur="focused = false"
       />
       <div class="bar-actions">
-        <span class="nc-dim hint">
+        <span class="tools">
           <template v-if="noSession">
             <el-button size="small" text type="primary" @click="kernel.session.create()">＋ {{ t('chat.newSession') }}</el-button>
-            <span>{{ t('chat.policyHintNoSession') }}</span>
-          </template>
-          <template v-else>
-            {{ t('chat.policyHint') }}
-          </template>
-          <template v-if="teamMode">
-            <span class="team-badge">👥 {{ t('chat.teamBadge') }}</span>
           </template>
           <template v-if="visionSupported">
-            <el-tooltip :content="t('chat.imagePasteHint')" placement="top">
-              <el-button text size="small" type="primary" @click="fileInput?.click()">🖼 {{ t('chat.uploadImage') }}</el-button>
+            <el-tooltip :content="t('chat.uploadImage') + ' · ' + t('chat.imagePasteHint')" placement="top">
+              <button class="tool-btn" type="button" :aria-label="t('chat.uploadImage')" @click="fileInput?.click()"><NcIcon name="image" :size="17" /></button>
             </el-tooltip>
-            <el-tooltip :content="t('chat.boardHint')" placement="top">
-              <el-button text size="small" type="primary" @click="boardVisible = true">🎨 {{ t('chat.board') }}</el-button>
+            <el-tooltip :content="t('chat.board') + ' · ' + t('chat.boardHint')" placement="top">
+              <button class="tool-btn" type="button" :aria-label="t('chat.board')" @click="boardVisible = true"><NcIcon name="brush" :size="17" /></button>
             </el-tooltip>
             <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple class="hidden-file" @change="onPickChange" />
           </template>
-          <span class="thinking-row">
-            <el-switch v-model="thinkingEnabled" size="small" @change="saveThinking" />
-            <span class="thinking-label">{{ t('chat.thinkingMode') }}</span>
+          <span class="thinking-row" :class="{ on: thinkingEnabled }">
+            <button
+              class="think-chip"
+              type="button"
+              role="switch"
+              :aria-checked="thinkingEnabled"
+              :title="t('chat.thinkingMode')"
+              @click="thinkingEnabled = !thinkingEnabled; saveThinking()"
+            >
+              <NcIcon name="lightbulb" :size="15" />
+              <span class="thinking-label">{{ t('chat.thinkingMode') }}</span>
+            </button>
             <el-select
               v-model="thinkingEffort"
               size="small"
@@ -212,44 +217,77 @@ function interrupt() {
               <el-option v-for="o in effortOptions" :key="o.value" :value="o.value" :label="t(o.labelKey)" />
             </el-select>
           </span>
+          <span v-if="teamMode" class="team-badge"><NcIcon name="users" :size="12" /> {{ t('chat.teamBadge') }}</span>
         </span>
-        <el-button v-if="streaming" type="danger" plain @click="interrupt">■ {{ t('chat.interrupt') }}</el-button>
-        <el-button v-else type="primary" :disabled="noSession || (!text.trim() && images.length === 0)" @click="send">
-          <template v-if="teamMode">👥 </template>{{ t('chat.send') }}
-        </el-button>
+        <el-tooltip v-if="streaming" :content="t('chat.interrupt')" placement="top">
+          <button class="send-btn stop" type="button" @click="interrupt">
+            <NcIcon name="stop" :size="14" />
+            <span class="sr-only">{{ t('chat.interrupt') }}</span>
+          </button>
+        </el-tooltip>
+        <el-tooltip v-else :content="t('chat.send') + ' (Enter)'" placement="top">
+          <button class="send-btn" type="button" :disabled="noSession || (!text.trim() && images.length === 0)" @click="send">
+            <NcIcon :name="teamMode ? 'users' : 'arrow-up'" :size="17" :stroke="2.2" />
+            <span class="sr-only">{{ t('chat.send') }}</span>
+          </button>
+        </el-tooltip>
       </div>
+    </div>
+    <div class="hint nc-dim">
+      <template v-if="noSession">{{ t('chat.policyHintNoSession') }}</template>
+      <template v-else>{{ t('chat.policyHint') }}</template>
     </div>
   </div>
   <CanvasBoard v-model:visible="boardVisible" @confirm="onBoardConfirm" />
 </template>
-
 <style scoped>
+/* 输入区：悬浮式输入卡片（画布底部渐隐，无整条分隔带） */
 .input-bar-wrap {
-  padding: 12px 8% 20px;
-  border-top: 1px solid var(--nc-border);
-  background: var(--nc-surface);
-  backdrop-filter: blur(10px);
+  position: relative;
+  padding: 0 4% 10px;
+  background: linear-gradient(to bottom, transparent, var(--nc-bg) 28px);
   transition: padding 0.2s, background 0.2s;
+}
+
+.input-bar-wrap > .input-bar,
+.input-bar-wrap > .hint {
+  max-width: 860px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* 展开态：整块输入区上延为覆盖层（fixed 全区域，类似弹出新层） */
 .input-bar-wrap.expanded {
   position: fixed;
-  inset: 56px 6% 14px;
+  inset: 52px 6% 14px;
   z-index: 90;
   padding: 0;
-  border-top: none;
   background: color-mix(in srgb, var(--nc-bg) 88%, transparent);
   backdrop-filter: blur(14px);
 }
 
-/* 圆角输入容器 */
+.input-bar-wrap.expanded > .input-bar {
+  max-width: none;
+}
+
+.input-bar-wrap.expanded > .hint {
+  display: none;
+}
+
+/* 圆角输入卡片 */
 .input-bar {
   position: relative;
-  border: 1px solid var(--nc-border);
-  border-radius: 14px;
-  padding: 10px 14px 8px;
-  background: color-mix(in srgb, var(--nc-bg) 55%, transparent);
+  border: 1px solid var(--nc-border-strong);
+  border-radius: 22px;
+  padding: 10px 10px 8px 14px;
+  background: var(--nc-surface-solid);
+  box-shadow: var(--nc-shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-bar.focused {
+  border-color: color-mix(in srgb, var(--nc-primary) 55%, var(--nc-border-strong));
+  box-shadow: var(--nc-shadow), 0 0 0 3px var(--nc-primary-soft);
 }
 
 .input-bar.expanded {
@@ -257,8 +295,7 @@ function interrupt() {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  border-radius: 18px;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
+  border-radius: 22px;
 }
 
 /* 展开态：textarea 占满剩余高度，内部滚动 */
@@ -274,6 +311,26 @@ function interrupt() {
   flex: 1;
 }
 
+/* textarea 去框去底：融入卡片 */
+.input-bar :deep(.el-textarea__inner) {
+  padding: 4px 38px 4px 2px;
+  border-radius: 0;
+  border: none;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--nc-text);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.input-bar :deep(.el-textarea__inner::placeholder) {
+  color: var(--nc-text-faint);
+}
+
+.input-bar :deep(.el-textarea.is-disabled .el-textarea__inner) {
+  background: transparent !important;
+}
+
 /* 右上角全屏/还原 ICON */
 .expand-btn {
   position: absolute;
@@ -283,88 +340,192 @@ function interrupt() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  color: var(--nc-text-dim);
-  background: color-mix(in srgb, var(--nc-text-dim) 8%, transparent);
+  color: var(--nc-text-faint);
+  background: transparent;
   transition: background 0.15s, color 0.15s;
 }
 
 .expand-btn:hover {
-  background: color-mix(in srgb, var(--nc-text-dim) 18%, transparent);
+  background: var(--nc-surface-2);
   color: var(--nc-text);
-}
-
-.expand-btn .ico {
-  width: 14px;
-  height: 14px;
-}
-
-/* 给 textarea 留出右上角 ICON 空间，避免首行文字被遮挡 */
-.input-bar :deep(.el-textarea__inner) {
-  padding-right: 38px;
-  border-radius: 8px;
 }
 
 .bar-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 6px;
 }
 
-.hint {
-  font-size: 12px;
+.tools {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--nc-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tool-btn:hover {
+  background: var(--nc-surface-2);
+  color: var(--nc-text);
 }
 
 .thinking-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 8px;
-  padding-left: 10px;
-  border-left: 1px solid var(--nc-border);
+  gap: 2px;
+  margin-left: 4px;
+}
+
+/* 思考模式：胶囊开关（开启时主题色描边+浅底） */
+.think-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--nc-border-strong);
+  background: transparent;
+  color: var(--nc-text-dim);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.think-chip:hover {
+  color: var(--nc-text);
+}
+
+.thinking-row.on .think-chip {
+  color: var(--nc-primary);
+  border-color: color-mix(in srgb, var(--nc-primary) 45%, transparent);
+  background: var(--nc-primary-soft);
 }
 
 .thinking-label {
-  font-size: 12px;
   white-space: nowrap;
+}
+
+.thinking-effort {
+  width: 84px;
+}
+
+.thinking-effort :deep(.el-select__wrapper) {
+  box-shadow: none;
+  background: transparent;
+  border-radius: 999px;
+  min-height: 30px;
+}
+
+.thinking-effort :deep(.el-select__wrapper:hover) {
+  background: var(--nc-surface-2);
+}
+
+.thinking-row:not(.on) .thinking-effort {
+  opacity: 0.5;
 }
 
 .team-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-left: 6px;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--nc-primary);
-  padding: 1px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--nc-primary) 40%, transparent);
-  background: color-mix(in srgb, var(--nc-primary) 8%, transparent);
+  background: var(--nc-primary-soft);
 }
 
-.thinking-effort {
-  width: 96px;
+/* 发送：圆形主色按钮（禁用为中性灰） */
+.send-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nc-primary);
+  color: var(--nc-primary-contrast);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+
+.send-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--nc-primary) 86%, var(--nc-text));
+}
+
+.send-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.send-btn:disabled {
+  background: var(--nc-surface-3);
+  color: var(--nc-text-faint);
+  cursor: not-allowed;
+}
+
+.send-btn.stop {
+  background: var(--nc-text);
+  color: var(--nc-bg);
+}
+
+.send-btn:focus-visible,
+.tool-btn:focus-visible,
+.think-chip:focus-visible,
+.expand-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--nc-primary) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.hint {
+  font-size: 11.5px;
+  text-align: center;
+  margin-top: 7px;
+  color: var(--nc-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .image-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
+  margin: 2px 0 8px;
 }
 
 .image-thumb {
   position: relative;
   width: 64px;
   height: 64px;
-  border-radius: 6px;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--nc-border);
 }
@@ -377,19 +538,28 @@ function interrupt() {
 
 .image-thumb .remove {
   position: absolute;
-  top: 0;
-  right: 0;
-  min-width: 18px;
-  height: 18px;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
   color: #fff;
-  font-size: 13px;
-  line-height: 18px;
-  border-radius: 0 0 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .hidden-file {
   display: none;
+}
+
+@media (max-width: 640px) {
+  .thinking-label {
+    display: none;
+  }
 }
 </style>

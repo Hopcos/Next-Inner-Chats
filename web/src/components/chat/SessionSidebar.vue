@@ -4,6 +4,7 @@ import { ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { kernel } from '@/kernel'
 import type { ChatSessionDto } from '@/api/types'
+import NcIcon from '@/components/ui/NcIcon.vue'
 
 const { t } = useI18n()
 // 必须用 computed：loadAll/remove 会“替换” sessions 数组引用，
@@ -136,9 +137,19 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
   <aside class="sidebar" :class="{ collapsed: kernel.session.state.sidebarCollapsed }">
     <div v-if="!kernel.session.state.sidebarCollapsed" class="sidebar-body">
       <div class="brand">
-        <span class="dot" /> Next <strong>Chats</strong>
-        <el-button class="collapse-top" size="small" text :title="t('chat.collapseSidebar')" @click="kernel.session.toggleSidebar()">⮜</el-button>
+        <span class="logo" aria-hidden="true"><NcIcon name="sparkles" :size="15" :stroke="2" /></span>
+        <span class="brand-name">Next Chats</span>
+        <el-tooltip :content="t('chat.collapseSidebar')" placement="right">
+          <button class="nc-icon-btn collapse-top" type="button" :aria-label="t('chat.collapseSidebar')" @click="kernel.session.toggleSidebar()">
+            <NcIcon name="panel-left" :size="18" />
+          </button>
+        </el-tooltip>
       </div>
+
+      <button class="new-chat nc-focus" type="button" @click="kernel.session.create().catch(() => {})">
+        <NcIcon name="square-pen" :size="16" />
+        <span>{{ t('chat.newSession') }}</span>
+      </button>
 
       <div class="search-box">
         <svg class="search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -166,7 +177,7 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
           >
             <div class="item-main">
               <div class="item-title">
-                <span class="pin-badge">📌</span>
+                <NcIcon class="pin-badge" name="pin" :size="12" />
                 <el-tooltip v-if="s.workspaceId" :content="workspaceNameOf(s.workspaceId)" placement="top" :show-after="250">
                   <svg class="ws-badge" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="2.5" y="7" width="19" height="12" rx="2" />
@@ -179,7 +190,7 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
               <div class="item-meta nc-dim">{{ metaText(s) }}</div>
             </div>
             <el-dropdown trigger="click" @command="(cmd: string) => onMenuCommand(cmd, s)" @click.stop>
-              <el-button class="item-menu" size="small" text :aria-label="t('chat.sessionOps')">⋮</el-button>
+              <button class="item-menu" type="button" :aria-label="t('chat.sessionOps')" @click.stop><NcIcon name="more" :size="16" :stroke="2" /></button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="rename">{{ t('chat.rename') }}</el-dropdown-item>
@@ -206,7 +217,7 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
             <div class="item-meta nc-dim">{{ metaText(s) }}</div>
           </div>
           <el-dropdown trigger="click" @command="(cmd: string) => onMenuCommand(cmd, s)" @click.stop>
-            <el-button class="item-menu" size="small" text :aria-label="t('chat.sessionOps')">⋮</el-button>
+            <button class="item-menu" type="button" :aria-label="t('chat.sessionOps')" @click.stop><NcIcon name="more" :size="16" :stroke="2" /></button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="rename">{{ t('chat.rename') }}</el-dropdown-item>
@@ -224,43 +235,40 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
         <div v-if="emptyAll" class="empty nc-dim">
           {{ t('chat.emptySessions') }}
           <div class="empty-retry">
-            <el-button size="small" text @click="void kernel.session.loadAll().catch(() => {})">🔄 {{ t('common.refresh') }}</el-button>
+            <el-button size="small" text @click="void kernel.session.loadAll().catch(() => {})">{{ t('common.refresh') }}</el-button>
           </div>
         </div>
       </div>
     </div>
 
     <div v-if="kernel.session.state.sidebarCollapsed" class="collapsed-head">
-      <el-button size="small" text :title="t('chat.expandSidebar')" @click="kernel.session.toggleSidebar()">⮞</el-button>
+      <button class="nc-icon-btn" type="button" :aria-label="t('chat.expandSidebar')" @click="kernel.session.toggleSidebar()"><NcIcon name="panel-left" :size="18" /></button>
     </div>
 
-    <div class="footer">
-      <el-button size="small" text @click="kernel.session.toggleSidebar()">
-        {{ kernel.session.state.sidebarCollapsed ? '⮞' : '⮜' }}
-      </el-button>
-    </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 260px;
-  min-width: 260px;
+  width: 264px;
+  min-width: 264px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--nc-border);
-  background: var(--nc-surface);
-  backdrop-filter: blur(10px);
-  transition: width 0.2s;
+  background: var(--nc-bg-elev);
+  transition: width 0.2s, min-width 0.2s;
 }
 
+/* 收起：完全隐藏（入口移到顶栏左侧的“展开侧栏”按钮，ChatGPT 式） */
 .sidebar.collapsed {
-  width: 48px;
-  min-width: 48px;
+  width: 0;
+  min-width: 0;
+  border-right: none;
+  overflow: hidden;
 }
 
 /* 关键：让列表层的直接父级成为 flex 容器，.list 的 flex:1 + overflow 才能真正生效，
-   列表超高时收缩自身并出现滚动条，底部 footer（＋新会话）始终可见 */
+   列表超高时收缩自身并出现滚动条 */
 .sidebar-body {
   display: flex;
   flex-direction: column;
@@ -270,75 +278,114 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
 }
 
 .brand {
-  padding: 18px 18px 8px;
-  font-size: 18px;
+  height: 52px;
+  padding: 0 8px 0 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+  flex-shrink: 0;
+}
+
+.logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nc-primary-contrast);
+  background: linear-gradient(135deg, var(--nc-primary), color-mix(in srgb, var(--nc-primary) 55%, #6366f1));
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .collapse-top {
   margin-left: auto;
-  color: var(--nc-text-dim);
-  font-size: 14px;
 }
 
 .collapsed-head {
-  display: flex;
-  justify-content: center;
-  padding: 14px 0 4px;
+  display: none;
 }
 
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--nc-primary);
-  box-shadow: 0 0 10px var(--nc-primary);
+/* 新会话：整行按钮（主操作，置于列表顶部） */
+.new-chat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 10px 8px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--nc-border);
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--nc-shadow-sm);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.new-chat:hover {
+  border-color: var(--nc-border-strong);
+  background: color-mix(in srgb, var(--nc-surface-solid) 85%, var(--nc-text) 4%);
+}
+
+.new-chat :deep(.nc-icon) {
+  color: var(--nc-primary);
 }
 
 /* ---------- 会话搜索框 ---------- */
 .search-box {
   position: relative;
-  margin: 0 12px 8px;
+  margin: 0 10px 6px;
   display: flex;
   align-items: center;
 }
 
 .search-icon {
   position: absolute;
-  left: 10px;
-  color: var(--nc-text-dim);
+  left: 11px;
+  color: var(--nc-text-faint);
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  height: 30px;
-  padding: 0 28px 0 30px;
-  border-radius: 9px;
-  border: 1px solid var(--nc-border);
-  background: color-mix(in srgb, var(--nc-surface) 80%, var(--nc-bg, #000) 20%);
+  height: 34px;
+  padding: 0 28px 0 32px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--nc-surface-2);
   color: var(--nc-text);
-  font-size: 12.5px;
+  font-size: 13px;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.search-input:hover {
+  background: var(--nc-surface-3);
 }
 
 .search-input:focus {
-  border-color: var(--nc-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-primary) 15%, transparent);
+  background: var(--nc-surface-solid);
+  border-color: color-mix(in srgb, var(--nc-primary) 60%, transparent);
+  box-shadow: 0 0 0 3px var(--nc-primary-soft);
 }
 
 .search-input::placeholder {
-  color: var(--nc-text-dim);
+  color: var(--nc-text-faint);
 }
 
 .search-clear {
   position: absolute;
-  right: 6px;
-  width: 18px;
-  height: 18px;
+  right: 7px;
+  width: 20px;
+  height: 20px;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -352,8 +399,8 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
 }
 
 .search-clear:hover {
-  color: var(--nc-primary);
-  background: color-mix(in srgb, var(--nc-primary) 12%, transparent);
+  color: var(--nc-text);
+  background: var(--nc-surface-3);
 }
 
 /* ---------- 会话列表 ---------- */
@@ -361,18 +408,20 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 10px;
+  padding: 4px 8px 12px;
 }
 
 .item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 6px 8px 12px;
   border-radius: 10px;
-  margin-bottom: 4px;
+  margin-bottom: 1px;
   cursor: pointer;
-  transition: background 0.15s;
+  color: var(--nc-text);
+  transition: background 0.12s;
 }
 
 .item-main {
@@ -383,12 +432,27 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
 .item-menu {
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
   color: var(--nc-text-dim);
-  padding: 4px 6px;
-  font-size: 15px;
-  line-height: 1;
-  letter-spacing: 1px;
+  cursor: pointer;
+  transition: opacity 0.12s, background 0.12s;
+}
+
+.item-menu:hover {
+  background: var(--nc-surface-3);
+  color: var(--nc-text);
+}
+
+.item-menu:focus-visible {
+  opacity: 1;
+  outline: 2px solid color-mix(in srgb, var(--nc-primary) 70%, transparent);
 }
 
 .item:hover .item-menu,
@@ -397,39 +461,58 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
 }
 
 .pin-badge {
-  margin-right: 4px;
-  font-size: 11px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  color: var(--nc-text-faint);
 }
 
 /* 工作空间绑定标识：已绑定会话在标题前的专属 icon */
 .ws-badge {
   display: inline-block;
   vertical-align: -2px;
-  margin-right: 4px;
+  margin-right: 5px;
   flex-shrink: 0;
   color: var(--nc-primary);
   opacity: 0.9;
 }
 
 .item:hover {
-  background: rgba(148, 163, 184, 0.12);
+  background: var(--nc-surface-2);
 }
 
 .item.active {
-  background: color-mix(in srgb, var(--nc-primary) 22%, transparent);
-  border: 1px solid color-mix(in srgb, var(--nc-primary) 45%, transparent);
+  background: var(--nc-surface-3);
+}
+
+/* 选中态：左侧主题色指示条（不再整块高饱和填充） */
+.item.active::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--nc-primary);
 }
 
 .item-title {
   font-size: 13.5px;
+  line-height: 1.35;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+.item.active .item-title {
+  font-weight: 550;
+}
+
 .item-meta {
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 1.3;
   margin-top: 2px;
+  color: var(--nc-text-faint);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -443,13 +526,5 @@ async function onMenuCommand(command: string, s: { id: string; title: string; is
 
 .empty-retry {
   margin-top: 8px;
-}
-
-.footer {
-  padding: 10px;
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  border-top: 1px solid var(--nc-border);
 }
 </style>

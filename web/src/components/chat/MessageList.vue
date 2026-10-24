@@ -2,6 +2,7 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { UiMessage } from '@/kernel/plugins'
+import NcIcon from '@/components/ui/NcIcon.vue'
 import MessageItem from '@/components/chat/MessageItem.vue'
 import TopicRail from '@/components/chat/TopicRail.vue'
 
@@ -231,7 +232,8 @@ onUnmounted(() => {
   <div class="msg-wrap">
     <div ref="scroller" class="msg-list nc-scroll" @scroll="onScroll">
       <div v-if="messages.length === 0" class="welcome">
-        <div class="hero">🚀 Next Chats</div>
+        <div class="hero-logo" aria-hidden="true"><NcIcon name="sparkles" :size="26" :stroke="1.8" /></div>
+        <div class="hero">Next Chats</div>
         <p class="nc-dim">{{ t('chat.welcomeSlogan') }}</p>
         <p class="hint nc-dim">{{ t('chat.welcomeHint') }}</p>
       </div>
@@ -267,10 +269,12 @@ onUnmounted(() => {
 .msg-list {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 4%;
+  padding: 24px 4% 8px;
   scroll-behavior: smooth;
-  /* 回答框宽度 = 剩余窗口（聊天内容区）的 80%，随窗口大小动态缩放 */
+  /* 回答框宽度 = 剩余窗口（聊天内容区）的 80%，并由 MessageItem 限制最大阅读宽度 */
   --nc-msg-w: 80%;
+  container-type: inline-size;
+  container-name: msglist;
 }
 
 .older-hint {
@@ -282,20 +286,40 @@ onUnmounted(() => {
 
 .welcome {
   text-align: center;
-  margin-top: 16vh;
+  margin-top: 18vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nc-primary-contrast);
+  background: linear-gradient(135deg, var(--nc-primary), color-mix(in srgb, var(--nc-primary) 55%, #6366f1));
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--nc-primary) 30%, transparent);
+  margin-bottom: 10px;
 }
 
 .hero {
-  font-size: 42px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  background: linear-gradient(120deg, var(--nc-primary), #a78bfa);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--nc-text);
+}
+
+.welcome p {
+  margin: 4px 0 0;
+  max-width: 560px;
+  line-height: 1.6;
 }
 
 .hint {
   font-size: 12.5px;
-}
-</style>
+  color: var(--nc-text-faint);
+}</style>

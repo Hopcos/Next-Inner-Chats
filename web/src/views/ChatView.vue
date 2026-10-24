@@ -13,10 +13,12 @@ import ChatInputBar from '@/components/chat/ChatInputBar.vue'
 import ChatSettingsDrawer from '@/components/chat/ChatSettingsDrawer.vue'
 import TeamConfigDrawer from '@/components/chat/TeamConfigDrawer.vue'
 import MusicPlayer from '@/components/chat/MusicPlayer.vue'
+import NcIcon from '@/components/ui/NcIcon.vue'
 
 const router = useRouter()
 const { t } = useI18n()
 const drawerOpen = ref(false)
+const appearanceOpen = ref(false)
 const teamDrawerOpen = ref(false)
 const editingTitle = ref(false)
 const titleDraft = ref('')
@@ -83,6 +85,8 @@ async function onWorkspaceChange(id: string | null | undefined) {
 }
 
 onMounted(() => {
+  // 聊天页专属 Element Plus 令牌映射（base.css 中 html.nc-chat 作用域）
+  document.documentElement.classList.add('nc-chat')
   void kernel.session.loadWorkspaces().catch(() => {})
   void (async () => {
     await kernel.session.loadAll().catch(() => {})
@@ -101,6 +105,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.clearTimeout(fallbackTimer)
+  document.documentElement.classList.remove('nc-chat')
 })
 
 async function openSettings() {
@@ -231,13 +236,17 @@ function openToolsHub() {
     <main class="chat-main">
       <header class="topbar">
         <div class="title-area">
+          <!-- 侧栏收起时：顶栏左侧补出“展开侧栏 / 新会话”入口（ChatGPT 式） -->
+          <template v-if="kernel.session.state.sidebarCollapsed">
+            <el-tooltip :content="t('chat.expandSidebar')" placement="bottom">
+              <button class="nc-icon-btn" type="button" :aria-label="t('chat.expandSidebar')" @click="kernel.session.toggleSidebar()">
+                <NcIcon name="panel-left" :size="18" />
+              </button>
+            </el-tooltip>
+          </template>
           <el-tooltip :content="t('chat.newSession')" placement="bottom">
-            <button class="new-session-btn" type="button" :aria-label="t('chat.newSession')" @click="onNewSession">
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
-                <path d="M12 9v6" />
-                <path d="M9 12h6" />
-              </svg>
+            <button class="nc-icon-btn new-session-btn" type="button" :aria-label="t('chat.newSession')" @click="onNewSession">
+              <NcIcon name="square-pen" :size="18" />
             </button>
           </el-tooltip>
           <template v-if="editingTitle">
@@ -246,7 +255,7 @@ function openToolsHub() {
           <template v-else>
             <h2 class="session-title" @dblclick="startRename">
               {{ current?.title ?? t('common.appName') }}
-              <span v-if="currentTeamMode" class="team-chip" :title="t('chat.teamConfig')">👥 {{ t('chat.teamBadge') }}</span>
+              <span v-if="currentTeamMode" class="team-chip" :title="t('chat.teamConfig')"><NcIcon name="users" :size="12" /> {{ t('chat.teamBadge') }}</span>
             </h2>
           </template>
           <!-- 工作空间选择（编码会话；仅当用户角色被授予 ≥1 个工作空间时显示）。
@@ -255,15 +264,9 @@ function openToolsHub() {
           <div v-if="kernel.session.state.workspaces.length > 0" class="ws-picker">
             <el-dropdown trigger="click" @command="(v: string | null) => onWorkspaceChange(v)">
               <button class="ws-picker-btn" :class="{ bound: !!currentWorkspaceId }" type="button" :aria-label="t('chat.workspaceSelect')">
-                <svg class="ws-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="2.5" y="7" width="19" height="12" rx="2" />
-                  <path d="M8.5 7V5.5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2V7" />
-                  <path d="M2.5 12h19" />
-                </svg>
+                <NcIcon class="ws-icon" name="briefcase" :size="13" />
                 <span class="ws-label">{{ boundWorkspaceLabel }}</span>
-                <svg class="ws-caret" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
+                <NcIcon class="ws-caret" name="chevron-down" :size="12" :stroke="2" />
               </button>
               <template #dropdown>
                 <el-dropdown-menu class="ws-menu">
@@ -271,7 +274,7 @@ function openToolsHub() {
                     <span class="ws-menu-item"><span class="ws-none-dot" />{{ t('chat.workspaceNone') }}</span>
                   </el-dropdown-item>
                   <el-dropdown-item v-for="w in kernel.session.state.workspaces" :key="w.id" :command="w.id" :class="{ 'is-active': w.id === currentWorkspaceId }">
-                    <span class="ws-menu-item">📁 {{ w.name }} · {{ wsLevelLabel(w.level) }}</span>
+                    <span class="ws-menu-item"><NcIcon name="briefcase" :size="14" style="margin-right: 6px" />{{ w.name }} · {{ wsLevelLabel(w.level) }}</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -282,74 +285,89 @@ function openToolsHub() {
         <div class="actions">
           <div class="icon-actions">
             <el-tooltip :content="t('chat.favorites')" placement="bottom">
-              <button class="toolbar-entry" :aria-label="t('chat.favorites')" @click="router.push('/favorites')">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="m12 3.5 2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.85 6.75 19.6l1-5.85L3.5 9.65l5.9-.85L12 3.5Z" />
-                </svg>
+              <button class="toolbar-entry nc-icon-btn" type="button" :aria-label="t('chat.favorites')" @click="router.push('/favorites')">
+                <NcIcon name="star" :size="18" />
               </button>
             </el-tooltip>
 
             <el-tooltip :content="t('chat.teamConfig')" placement="bottom">
-              <button class="toolbar-entry" :class="{ active: currentTeamMode || teamDrawerOpen }" :aria-label="t('chat.teamConfig')" @click="teamDrawerOpen = true">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="9" cy="8" r="3.2" />
-                  <path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" />
-                  <circle cx="17" cy="9" r="2.4" />
-                  <path d="M15.6 14.8c2.2.3 4 1.6 4.7 4" />
-                </svg>
+              <button class="toolbar-entry nc-icon-btn" type="button" :class="{ active: currentTeamMode || teamDrawerOpen }" :aria-label="t('chat.teamConfig')" @click="teamDrawerOpen = true">
+                <NcIcon name="users" :size="18" />
               </button>
             </el-tooltip>
 
             <el-tooltip :content="t('chat.settings')" placement="bottom">
-              <button class="toolbar-entry" :aria-label="t('chat.settings')" @click="openSettings">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 3.5v2.3M12 18.2v2.3M3.5 12h2.3M18.2 12h2.3M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6" />
-                </svg>
+              <button class="toolbar-entry nc-icon-btn" type="button" :class="{ active: drawerOpen }" :aria-label="t('chat.settings')" @click="openSettings">
+                <NcIcon name="sliders" :size="18" />
               </button>
             </el-tooltip>
 
             <el-tooltip :content="t('tools.hubTitle')" placement="bottom">
-              <button class="toolbar-entry" :aria-label="t('tools.hubTitle')" @click="openToolsHub">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M3 8h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8Z" />
-                  <path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <path d="M3 12h18" />
-                  <path d="M12 13.4v2.2" />
-                </svg>
+              <button class="toolbar-entry nc-icon-btn" type="button" :aria-label="t('tools.hubTitle')" @click="openToolsHub">
+                <NcIcon name="grid" :size="18" />
               </button>
             </el-tooltip>
+
+            <!-- 外观：主题 / 语言 / 3D 背景收进一个弹出面板，顶栏只保留高频入口 -->
+            <el-popover v-model:visible="appearanceOpen" trigger="click" placement="bottom-end" :width="264" popper-class="nc-appearance-pop">
+              <template #reference>
+                <button class="toolbar-entry nc-icon-btn appearance-btn" type="button" :class="{ active: appearanceOpen }" :aria-label="t('chat.appearance')">
+                  <NcIcon name="palette" :size="18" />
+                </button>
+              </template>
+              <div class="ap">
+                <div class="ap-label">{{ t('chat.theme') }}</div>
+                <div class="ap-themes" role="radiogroup" :aria-label="t('chat.theme')">
+                  <button
+                    v-for="tOpt in themeOptions"
+                    :key="tOpt.value"
+                    type="button"
+                    role="radio"
+                    class="ap-theme nc-focus"
+                    :class="[tOpt.value, { on: kernel.theme.state.theme === tOpt.value }]"
+                    :aria-checked="kernel.theme.state.theme === tOpt.value"
+                    @click="kernel.theme.set(tOpt.value as never)"
+                  >
+                    <span class="ap-swatch"><i /><b /></span>
+                    <span class="ap-name">{{ t(tOpt.labelKey) }}</span>
+                  </button>
+                </div>
+                <div class="ap-label">{{ t('chat.langLabel') }}</div>
+                <div class="ap-seg" role="radiogroup" :aria-label="t('chat.langLabel')">
+                  <button
+                    v-for="l in langOptions"
+                    :key="l.value"
+                    type="button"
+                    role="radio"
+                    class="nc-focus"
+                    :class="{ on: lang === l.value }"
+                    :aria-checked="lang === l.value"
+                    @click="setLang(l.value)"
+                  >{{ l.label }}</button>
+                </div>
+                <div class="ap-row">
+                  <span>{{ t('chat.threeD') }}</span>
+                  <el-switch :model-value="kernel.settings.state.threeEnabled" size="small" @change="(v: boolean) => kernel.settings.toggleThree(v)" />
+                </div>
+              </div>
+            </el-popover>
           </div>
 
-          <el-tooltip :content="t('chat.threeD')" placement="bottom">
-            <el-switch
-              :model-value="kernel.settings.state.threeEnabled"
-              style="--el-switch-on-color: var(--nc-primary)"
-              @change="(v: boolean) => kernel.settings.toggleThree(v)"
-            />
-          </el-tooltip>
+          <span class="actions-sep" aria-hidden="true" />
 
-          <el-select
-            :model-value="kernel.theme.state.theme"
-            size="small"
-            class="theme-picker"
-            style="width: 96px"
-            @change="(v: string) => kernel.theme.set(v as never)"
-          >
-            <el-option v-for="tOpt in themeOptions" :key="tOpt.value" :label="t(tOpt.labelKey)" :value="tOpt.value" />
-          </el-select>
-
-          <el-select :model-value="lang" size="small" style="width: 96px" @change="(v: AppLang) => setLang(v)">
-            <el-option v-for="l in langOptions" :key="l.value" :label="l.label" :value="l.value" />
-          </el-select>
-
-          <el-dropdown trigger="click">
-            <el-avatar :size="26" class="avatar">{{ (user?.displayName ?? user?.username ?? '?').slice(0, 1) }}</el-avatar>
+          <el-dropdown trigger="click" placement="bottom-end">
+            <button class="avatar-btn nc-focus" type="button" :aria-label="user?.displayName ?? user?.username ?? ''">
+              <el-avatar :size="28" class="avatar">{{ (user?.displayName ?? user?.username ?? '?').slice(0, 1).toUpperCase() }}</el-avatar>
+            </button>
             <template #dropdown>
+              <div class="user-card">
+                <div class="user-name">{{ user?.displayName ?? user?.username }}</div>
+                <div v-if="user?.displayName && user?.username" class="user-sub">@{{ user.username }}</div>
+              </div>
               <el-dropdown-menu>
-                <el-dropdown-item @click="router.push('/settings')">{{ t('chat.personalCatalog') }}</el-dropdown-item>
-                <el-dropdown-item v-if="user?.isAdmin" @click="router.push('/admin')">{{ t('common.admin') }}</el-dropdown-item>
-                <el-dropdown-item divided @click="logout">{{ t('common.logout') }}</el-dropdown-item>
+                <el-dropdown-item @click="router.push('/settings')"><NcIcon name="user" :size="15" />{{ t('chat.personalCatalog') }}</el-dropdown-item>
+                <el-dropdown-item v-if="user?.isAdmin" @click="router.push('/admin')"><NcIcon name="shield" :size="15" />{{ t('common.admin') }}</el-dropdown-item>
+                <el-dropdown-item divided @click="logout"><NcIcon name="log-out" :size="15" />{{ t('common.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -395,14 +413,15 @@ function openToolsHub() {
 }
 
 .topbar {
-  height: 56px;
+  height: 52px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 14px 0 12px;
   border-bottom: 1px solid var(--nc-border);
-  background: var(--nc-surface);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--nc-bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
 }
 
 /* 左侧标题区：允许被压缩（flex 默认 min-width:auto 不收缩，超长标题会把右侧 actions
@@ -412,39 +431,30 @@ function openToolsHub() {
   flex: 0 1 auto;
   display: flex;
   align-items: center;
+  gap: 4px;
   overflow: hidden;
   margin-right: 12px;
 }
 
 .session-title {
-  margin: 0;
-  font-size: 16px;
+  margin: 0 0 0 6px;
+  font-size: 15px;
   font-weight: 600;
-  cursor: pointer;
+  letter-spacing: -0.005em;
+  cursor: text;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
 }
 
-/* 顶部「新建会话」图标按钮：主题色突出、与当前皮肤协调，仅 icon 无文字 */
-.new-session-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  margin-right: 10px;
-  border-radius: 9px;
-  border: 1px solid color-mix(in srgb, var(--nc-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--nc-primary) 12%, transparent);
-  color: var(--nc-primary);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease, transform 0.1s ease;
+.session-title:hover {
+  background: var(--nc-surface-2);
 }
-.new-session-btn:hover {
-  background: color-mix(in srgb, var(--nc-primary) 22%, transparent);
-}
+
+/* 顶部「新建会话」：幽灵图标按钮（与其它顶栏图标同形态），悬停才出底色 */
 .new-session-btn:active {
   transform: scale(0.94);
 }
@@ -453,7 +463,7 @@ function openToolsHub() {
 .team-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   margin-left: 8px;
   font-size: 11px;
   font-weight: 600;
@@ -461,12 +471,11 @@ function openToolsHub() {
   color: var(--nc-primary);
   padding: 1px 8px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--nc-primary) 40%, transparent);
-  background: color-mix(in srgb, var(--nc-primary) 8%, transparent);
+  background: var(--nc-primary-soft);
 }
 
 .ws-picker {
-  margin-left: 10px;
+  margin-left: 6px;
   flex-shrink: 1;
   max-width: 260px;
   min-width: 0;
@@ -479,11 +488,11 @@ function openToolsHub() {
   gap: 6px;
   width: 100%;
   max-width: 260px;
-  height: 26px;
+  height: 28px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: 999px;
   border: 1px solid var(--nc-border);
-  background: var(--nc-surface);
+  background: transparent;
   color: var(--nc-text-dim);
   cursor: pointer;
   font-size: 12.5px;
@@ -492,14 +501,14 @@ function openToolsHub() {
 }
 
 .ws-picker-btn:hover {
-  border-color: var(--nc-primary);
-  color: var(--nc-primary);
+  background: var(--nc-surface-2);
+  color: var(--nc-text);
 }
 
 .ws-picker-btn.bound {
   color: var(--nc-primary);
-  border-color: color-mix(in srgb, var(--nc-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--nc-primary) 10%, transparent);
+  border-color: transparent;
+  background: var(--nc-primary-soft);
 }
 
 .ws-icon,
@@ -543,104 +552,194 @@ function openToolsHub() {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 
-.avatar {
-  cursor: pointer;
-  background: var(--nc-primary);
-  color: #04121f;
-  font-weight: 700;
-}
-
-/* 四个图标按钮统一容器：固定间距，宽度/圆角/描边完全一致 */
 .icon-actions {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
 }
 
-.toolbar-entry {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  border: 1px solid var(--nc-border);
-  background: var(--nc-surface);
-  color: var(--nc-text-dim, #94a3b8);
-  cursor: pointer;
+.actions-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--nc-border);
+}
+
+.avatar-btn {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.15s;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
 }
 
-.toolbar-entry:hover {
-  color: var(--nc-primary);
-  border-color: var(--nc-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-primary) 15%, transparent);
+.avatar {
+  background: linear-gradient(135deg, var(--nc-primary), color-mix(in srgb, var(--nc-primary) 55%, #6366f1));
+  color: var(--nc-primary-contrast);
+  font-weight: 700;
+  font-size: 13px;
+  transition: box-shadow 0.15s;
 }
 
-.toolbar-entry.active {
-  color: var(--nc-primary);
-  border-color: color-mix(in srgb, var(--nc-primary) 55%, transparent);
-  background: color-mix(in srgb, var(--nc-primary) 12%, transparent);
+.avatar-btn:hover .avatar {
+  box-shadow: 0 0 0 3px var(--nc-primary-soft);
 }
 
-/* 窄窗口自适应：actions 固定总宽约 790px 时，最右的头像下拉会被推出视口右侧，
-   导致整块区域悬停/点击失效（指针不变、点了没反应；缩小页面后视口变宽才恢复）。
-   这里按宽度分级压缩次要控件，保证头像始终落在视口内。 */
-@media (max-width: 1020px) {
-  .actions {
-    gap: 8px;
-  }
-
-  .icon-actions {
-    gap: 6px;
-  }
-
-  .toolbar-entry {
-    width: 28px;
-    height: 28px;
-  }
-
-  /* 3D 背景开关属锦上添花，窄屏优先隐藏（:deep 命中 el-switch 根元素） */
-  :deep(.actions .el-switch) {
-    display: none;
-  }
+.user-card {
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--nc-border);
+  min-width: 200px;
 }
 
+.user-name {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--nc-text);
+}
+
+.user-sub {
+  font-size: 12px;
+  color: var(--nc-text-faint);
+  margin-top: 2px;
+}
+
+/* 窄窗口自适应：保证头像始终落在视口内（次要入口按宽度分级隐藏） */
 @media (max-width: 900px) {
-  /* 900 档：除收窄选择器外，隐藏主题选择器与 3/4 号图标（设置/工具台），
-     否则 820~880px 窗口下头像（原 x≈854）仍溢出视口无法点击 */
-  :deep(.actions .el-select) {
-    width: 76px !important;
-  }
-
-  :deep(.actions .el-select.theme-picker) {
+  .icon-actions .toolbar-entry:nth-child(3),
+  .icon-actions .toolbar-entry:nth-child(4) {
     display: none;
-  }
-
-  .icon-actions .toolbar-entry:nth-child(4),
-  .icon-actions .toolbar-entry:nth-child(5) {
-    display: none;
-  }
-
-  .actions {
-    gap: 6px;
-  }
-}
-
-@media (max-width: 780px) {
-  :deep(.actions .el-select) {
-    width: 70px !important;
   }
 }
 
 @media (max-width: 560px) {
-  /* 极端窄窗（手机横屏/极小窗口）：隐藏整个图标组，只留语言选择与头像，保证头像不溢出 */
-  .icon-actions {
+  /* 极端窄窗（手机横屏/极小窗口）：隐藏整个图标组，只留头像，保证头像不溢出 */
+  .icon-actions,
+  .actions-sep {
     display: none;
   }
+}
+</style>
+
+<!-- 外观面板（popper teleport 到 body，需非 scoped） -->
+<style>
+.nc-appearance-pop.el-popover.el-popper {
+  padding: 14px;
+}
+
+.nc-appearance-pop .ap-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--nc-text-faint);
+  margin: 0 0 8px;
+}
+
+.nc-appearance-pop .ap-label:not(:first-child) {
+  margin-top: 14px;
+}
+
+.nc-appearance-pop .ap-themes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.nc-appearance-pop .ap-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--nc-border);
+  background: transparent;
+  color: var(--nc-text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.nc-appearance-pop .ap-theme:hover {
+  border-color: var(--nc-border-strong);
+  color: var(--nc-text);
+}
+
+.nc-appearance-pop .ap-theme.on {
+  border-color: var(--nc-primary);
+  box-shadow: 0 0 0 1px var(--nc-primary);
+  color: var(--nc-text);
+}
+
+.nc-appearance-pop .ap-swatch {
+  position: relative;
+  height: 34px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: block;
+}
+
+.nc-appearance-pop .ap-swatch i {
+  position: absolute;
+  inset: 0 62% 0 0;
+}
+
+.nc-appearance-pop .ap-swatch b {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.nc-appearance-pop .ap-theme.aurora .ap-swatch { background: #0b1220; }
+.nc-appearance-pop .ap-theme.aurora .ap-swatch i { background: #0e1628; border-right: 1px solid rgba(148, 163, 184, 0.18); }
+.nc-appearance-pop .ap-theme.aurora .ap-swatch b { background: #2dd4bf; }
+.nc-appearance-pop .ap-theme.dawn .ap-swatch { background: #f8f9fb; box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08); }
+.nc-appearance-pop .ap-theme.dawn .ap-swatch i { background: #eceff4; border-right: 1px solid rgba(15, 23, 42, 0.08); }
+.nc-appearance-pop .ap-theme.dawn .ap-swatch b { background: #4f46e5; }
+.nc-appearance-pop .ap-theme.midnight .ap-swatch { background: #0b0b0d; }
+.nc-appearance-pop .ap-theme.midnight .ap-swatch i { background: #141417; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.nc-appearance-pop .ap-theme.midnight .ap-swatch b { background: #a78bfa; }
+
+.nc-appearance-pop .ap-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 9px;
+  background: var(--nc-surface-2);
+}
+
+.nc-appearance-pop .ap-seg button {
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--nc-text-dim);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.nc-appearance-pop .ap-seg button.on {
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
+  font-weight: 600;
+  box-shadow: var(--nc-shadow-sm);
+}
+
+.nc-appearance-pop .ap-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--nc-border);
+  font-size: 13px;
+  color: var(--nc-text);
 }
 </style>
