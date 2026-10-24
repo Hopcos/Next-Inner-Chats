@@ -1,14 +1,8 @@
 # Next Chats
 
-> [**English README**](./README.md)
+![Next Chats](docs/chats.png)
 
-<div align="center">
-  <img src="docs/chat-window.png" alt="聊天窗口" width="88%" style="border-radius:8px;border:1px solid #333" />
-  <p><em>聊天窗口（对话 / 思考 / 工具 / 话题导航）</em></p>
-  <br/>
-  <img src="docs/admin-window.png" alt="管理后台" width="88%" style="border-radius:8px;border:1px solid #333" />
-  <p><em>管理后台（LLM 供应商 / MCP / RBAC / 内部鉴权 / 审批 / 审计 / 用量）</em></p>
-</div>
+> [**English README**](./README.md)
 
 基于 **DeepSeek Harness 原理** 的 B/S 多模态 AI 聊天平台：LLM + MCP（Model Context Protocol）+ Skill 插件化编排，前端由 **Cordis** 插件内核驱动 Three.js 轻量 3D 界面。
 
@@ -354,6 +348,52 @@ cd web && npm install && npm run dev
 # 打开 http://localhost:5173 （种子管理员：admin / admin123）
 ```
 
+## Docker 部署
+
+镜像同时打包了 Vue 前端与 .NET API：由 API 直接托管前端页面，所以 **一个容器 = 完整产品**（界面 + API，端口 8080）。数据保存在命名卷里（SQLite 数据库、聊天附件、日志）。
+
+```bash
+# 1. 创建 .env，填入两个【必填】密钥（缺失时 compose 会拒绝启动）
+cp .env.example .env
+#    编辑 .env，例如：NEXTCHATS_JWT_KEY=$(openssl rand -base64 48)
+#                     NEXTCHATS_ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+# 2. 构建并启动
+docker compose up --build -d
+
+# 3. 验证后访问 http://localhost:8080 （种子管理员：admin / admin123，请立即修改密码）
+curl http://localhost:8080/health
+```
+
+| 项 | 说明 |
+|---|---|
+| 端口 | 宿主机 `NEXTCHATS_PORT`（默认 `8080`）→ 容器 `8080` |
+| 密钥 | `NEXTCHATS_JWT_KEY`（登录令牌签名）、`NEXTCHATS_ENCRYPTION_KEY`（加密存储的 LLM / MCP 密钥）。加密密钥务必**保持稳定**：更换后，已存储的密钥将无法解密 |
+| 数据（卷） | `next-chats-data` → `/app/data`（SQLite，**务必备份**）、`next-chats-uploads` → `/app/uploads`、`next-chats-logs` → `/app/logs` |
+| 配置 | `appsettings.json` 里的任意键都能用环境变量覆盖，层级分隔符用 `__`，例如 `Policy__MaxReActSteps=30` |
+| 日志 | `docker compose logs -f next-chats`（同时写入日志卷） |
+| 健康检查 | 镜像内置 `HEALTHCHECK`，探测 `/health` |
+| 运行身份 | 非 root 用户（`$APP_UID`） |
+
+**可选 —— 演示 MCP 服务器**（Streamable HTTP，方便初次体验）：
+
+```bash
+docker compose --profile demo up -d
+# 管理后台 → MCP 服务器 → 添加  http://mcp-demo:5300/mcp
+```
+
+**可选 —— 把宿主机目录作为智能体工作空间：** 取消 `docker-compose.yml` 里 `/workspaces` 卷的注释，然后在管理后台创建工作空间，根路径填 `/workspaces/<名称>`。
+
+**升级 / 备份：**
+
+```bash
+git pull && docker compose up --build -d      # 命名卷会保留
+# 备份 SQLite 卷（卷名带 compose 项目名前缀）
+docker run --rm -v next-chats_next-chats-data:/d -v "$PWD":/b busybox tar czf /b/nextchats-data.tgz -C /d .
+```
+
+> compose 不处理 TLS。对外提供服务时请在前面加反向代理（放行 `PUT` / `DELETE`、透传 `Authorization`、对 SSE 关闭 `proxy_buffering`）。
+
 ## 部署（IIS / 反向代理）注意事项
 
 **症状：** 后台管理里 PUT / DELETE 接口（启停、编辑、删除 MCP 服务器等）全部返回 `405 Method Not Allowed`，而 GET / POST 正常。
@@ -368,6 +408,7 @@ cd web && npm install && npm run dev
 **自检：** 对任意管理接口发 `PUT`，未登录时应返回 `401`；返回 `405` 说明仍被 WebDAV（或反向代理未放行该动词）拦截。
 
 若前面还有 nginx 等反向代理，需放行 `PUT` / `DELETE`（并按需转发 `Authorization` 头与 SSE 的 `proxy_buffering off`）。
+
 ## 核心设计
 
 ### 认证（default 账号 + 内部鉴权）
@@ -461,3 +502,7 @@ powershell -File e2e/run-internal-auth-e2e.ps1   # 断言 CRUD / 登录方式 / 
 ## MCP 参考
 - [What's new in MCP (2026-07-28)](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
 - ModelContextProtocol C# SDK 2.2.0：`McpClient.CreateAsync` + `HttpClientTransport`（Streamable HTTP）/ `StdioClientTransport`
+
+## License
+
+本项目采用 [Apache License 2.0](./LICENSE) 许可。

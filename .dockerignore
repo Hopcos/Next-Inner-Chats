@@ -1,0 +1,38 @@
+# VCS / IDE
+.git
+.gitignore
+.vs
+.vscode
+.idea
+
+# Build output (rebuilt inside the image)
+**/bin
+**/obj
+web/node_modules
+web/dist
+web/.vite
+*.tsbuildinfo
+
+# Runtime state, never baked into the image
+data
+uploads
+logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Not needed to build
+docs
+e2e
+reviews
+web/scripts
+*.md
+AGENTS.md
+Dockerfile
+docker-compose*.yml

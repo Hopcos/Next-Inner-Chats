@@ -1,0 +1,52 @@
+services:
+  next-chats:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: next-chats:latest
+    container_name: next-chats
+    ports:
+      - "${NEXTCHATS_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+      # REQUIRED secrets (set in .env, see .env.example). Compose refuses to start when empty.
+      #   JwtKey         signs login tokens; changing it logs everybody out.
+      #   EncryptionKey  encrypts stored LLM / MCP API keys; keep it stable.
+      Security__JwtKey: "${NEXTCHATS_JWT_KEY:?Set NEXTCHATS_JWT_KEY in .env (openssl rand -base64 48)}"
+      Security__EncryptionKey: "${NEXTCHATS_ENCRYPTION_KEY:?Set NEXTCHATS_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
+      # Same-origin by default (UI is served by the API) → CORS is not needed.
+      # Only set this when the UI is served from another origin.
+      Cors__Origins__0: "${NEXTCHATS_CORS_ORIGIN:-http://localhost:5173}"
+      # Optional tuning (defaults live in appsettings.json):
+      # Policy__MaxReActSteps: "50"
+      # Policy__ApprovalTimeoutSeconds: "120"
+      # BuiltinTool__HttpFetchAllowHosts__0: "github.com"
+    volumes:
+      # SQLite database (data/nextchats.db) — back this up.
+      - next-chats-data:/app/data
+      # Chat image attachments.
+      - next-chats-uploads:/app/uploads
+      # Serilog rolling files (logs/nextchats-YYYYMMDD.log); the same output also goes to `docker compose logs`.
+      - next-chats-logs:/app/logs
+      # Optional: expose a host folder as an agent workspace root.
+      # In the admin UI create a workspace whose root path is /workspaces/<name>.
+      # - ${NEXTCHATS_WORKSPACES:-./workspaces}:/workspaces
+    restart: unless-stopped
+
+  # Optional demo MCP server (Streamable HTTP). Start with:  docker compose --profile demo up -d
+  # In the admin UI add an MCP server with URL  http://mcp-demo:5300/mcp
+  mcp-demo:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: demo
+    image: next-chats-mcp-demo:latest
+    container_name: next-chats-mcp-demo
+    restart: unless-stopped
+
+volumes:
+  next-chats-data:
+  next-chats-uploads:
+  next-chats-logs:

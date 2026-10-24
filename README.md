@@ -1,14 +1,8 @@
 # Next Chats
 
-> [**中文版 README（简体中文）**](./README.zh.md)
+![Next Chats](docs/chats.png)
 
-<div align="center">
-  <img src="docs/chat-window.png" alt="Chat window" width="88%" style="border-radius:8px;border:1px solid #333" />
-  <p><em>Chat window (conversation / thinking / tools / topic rail)</em></p>
-  <br/>
-  <img src="docs/admin-window.png" alt="Admin console" width="88%" style="border-radius:8px;border:1px solid #333" />
-  <p><em>Admin console (LLM providers / MCP / RBAC / internal auth / approvals / audit / usage)</em></p>
-</div>
+> [**中文版 README（简体中文）**](./README.zh.md)
 
 A B/S multimodal AI chat platform based on the **DeepSeek Harness principles**: LLM + MCP (Model Context Protocol) + Skill plugin orchestration, with a **Cordis**-driven, Three.js-powered 3D frontend.
 
@@ -354,6 +348,52 @@ cd web && npm install && npm run dev
 # Open http://localhost:5173  (seeded admin: admin / admin123)
 ```
 
+## Docker Deployment
+
+The image bundles the Vue frontend and the .NET API: the API serves the SPA itself, so **one container = the whole product** (UI + API on port 8080). State lives in named volumes (SQLite DB, chat attachments, logs).
+
+```bash
+# 1. Create .env with two REQUIRED secrets (compose refuses to start without them)
+cp .env.example .env
+#    edit .env, e.g.:  NEXTCHATS_JWT_KEY=$(openssl rand -base64 48)
+#                      NEXTCHATS_ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+# 2. Build & run
+docker compose up --build -d
+
+# 3. Verify, then open http://localhost:8080  (seeded admin: admin / admin123 — change it right away)
+curl http://localhost:8080/health
+```
+
+| Item | Details |
+|---|---|
+| Port | `NEXTCHATS_PORT` (host, default `8080`) → container `8080` |
+| Secrets | `NEXTCHATS_JWT_KEY` (signs login tokens) and `NEXTCHATS_ENCRYPTION_KEY` (encrypts stored LLM/MCP keys). Keep the encryption key **stable** — after changing it, stored keys can no longer be decrypted |
+| Data (volumes) | `next-chats-data` → `/app/data` (SQLite, **back this up**), `next-chats-uploads` → `/app/uploads`, `next-chats-logs` → `/app/logs` |
+| Config | Any `appsettings.json` key can be overridden by an environment variable, with `__` as the level separator, e.g. `Policy__MaxReActSteps=30` |
+| Logs | `docker compose logs -f next-chats` (also written to the logs volume) |
+| Health | The image has a built-in `HEALTHCHECK` on `/health` |
+| Runs as | non-root user (`$APP_UID`) |
+
+**Optional — demo MCP server** (Streamable HTTP, handy for a first try):
+
+```bash
+docker compose --profile demo up -d
+# Admin UI → MCP servers → add  http://mcp-demo:5300/mcp
+```
+
+**Optional — agent workspaces on the host:** uncomment the `/workspaces` volume in `docker-compose.yml`, then create a workspace in the admin UI whose root path is `/workspaces/<name>`.
+
+**Upgrade / backup:**
+
+```bash
+git pull && docker compose up --build -d      # named volumes are kept
+# backup the SQLite volume (the volume name is prefixed with the compose project name)
+docker run --rm -v next-chats_next-chats-data:/d -v "$PWD":/b busybox tar czf /b/nextchats-data.tgz -C /d .
+```
+
+> The compose file does not terminate TLS. For public access put a reverse proxy in front (allow `PUT` / `DELETE`, forward `Authorization`, and set `proxy_buffering off` for SSE).
+
 ## Deployment notes (IIS / reverse proxy)
 
 **Symptom:** Admin-side PUT / DELETE calls (enable/disable, edit, delete MCP servers, ...) all return `405 Method Not Allowed`, while GET / POST work.
@@ -368,6 +408,7 @@ cd web && npm install && npm run dev
 **Self-check:** an unauthenticated `PUT` to any admin endpoint should return `401`; `405` means WebDAV (or a reverse proxy that does not allow the verb) is still intercepting it.
 
 If a reverse proxy such as nginx sits in front, allow `PUT` / `DELETE` (and forward the `Authorization` header and set `proxy_buffering off` for SSE as needed).
+
 ## Core Design
 
 ### Authentication (default accounts + internal auth)
@@ -461,3 +502,7 @@ powershell -File e2e/run-internal-auth-e2e.ps1   # assert CRUD / providers / aut
 ## MCP References
 - [What's new in MCP (2026-07-28)](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
 - ModelContextProtocol C# SDK 2.2.0: `McpClient.CreateAsync` + `HttpClientTransport` (Streamable HTTP) / `StdioClientTransport`
+
+## License
+
+This project is licensed under the [Apache License 2.0](./LICENSE).

@@ -2,6 +2,16 @@
   <Folder Name="/samples/">
     <Project Path="samples/McpDemoServer/McpDemoServer.csproj" />
   </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".dockerignore" />
+    <File Path=".env.example" />
+    <File Path=".gitignore" />
+    <File Path="docker-compose.yml" />
+    <File Path="Dockerfile" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="README.zh.md" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/NextChats.Api/NextChats.Api.csproj" />
     <Project Path="src/NextChats.Core/NextChats.Core.csproj" />
