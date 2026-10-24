@@ -55,7 +55,6 @@ public sealed class ContextManager : IContextManager
         IReadOnlyList<LlmChatMessage> messages, int contextWindow, IReadOnlyList<LlmToolDef>? tools, CancellationToken ct)
     {
         // 必须保留：system 首条 + 最近的 user 轮
-        var systemIdx = 0;
         var keepHead = 1;
         var keepTail = 2;
         if (messages.Count <= keepHead + keepTail + 1)

@@ -105,7 +105,8 @@ public sealed class ChatImageStorage(
         var name = parts[1];
         if (name.Length != 36 || !name[..32].All(c => char.IsAsciiHexDigit(c)) || name[32] != '.') return false;
         var ext = name[(name.IndexOf('.') + 1)..];
-        if (!MimeByExt.TryGetValue(ext, out mime)) return false;
+        if (!MimeByExt.TryGetValue(ext, out var foundMime)) return false;
+        mime = foundMime;
         path = Path.Combine(Root, parts[0], name);
         return true;
     }

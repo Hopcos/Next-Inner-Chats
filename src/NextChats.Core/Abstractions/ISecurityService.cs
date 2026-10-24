@@ -12,8 +12,8 @@ public interface ISecurityService
     /// <summary>AES-GCM 加密敏感配置（API Key 等）</summary>
     string EncryptSecret(string plain);
 
-    /// <summary>AES-GCM 解密</summary>
-    string DecryptSecret(string encrypted);
+    /// <summary>AES-GCM 解密（null / 空串返回空串）</summary>
+    string DecryptSecret(string? encrypted);
 
     /// <summary>
     /// 输入 Injection 检测与过滤。返回清洗后的文本与检出标志。

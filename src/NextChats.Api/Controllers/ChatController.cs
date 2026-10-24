@@ -146,7 +146,8 @@ public sealed class ChatController(
     [HttpPut("sessions/{sessionId:guid}")]
     public async Task<IActionResult> RenameSession(Guid sessionId, [FromBody] RenameSessionRequest req)
     {
-        var ok = await chat.RenameSessionAsync(UserId, sessionId, req.Title);
+        // Title 缺省/为 null 时按“不改名”处理（store 内空白标题会保留原值），避免 NullReference → 500
+        var ok = await chat.RenameSessionAsync(UserId, sessionId, req.Title ?? string.Empty);
         if (!ok) return NotFound(Err("SESSION_NOT_FOUND"));
         await audit.RecordAsync(AuditCategory.Chat, "SESSION.RENAME", $"trc_{Guid.NewGuid():N}"[..24], UserId, sessionId.ToString());
         return NoContent();

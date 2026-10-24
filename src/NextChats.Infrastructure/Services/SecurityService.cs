@@ -86,7 +86,7 @@ public sealed partial class SecurityService : ISecurityService
         return V1Prefix + Convert.ToBase64String(payload);
     }
 
-    public string DecryptSecret(string encrypted)
+    public string DecryptSecret(string? encrypted)
     {
         if (string.IsNullOrEmpty(encrypted)) return string.Empty;
         if (!encrypted.StartsWith(V1Prefix, StringComparison.Ordinal)) return encrypted; // 兼容未加密旧值

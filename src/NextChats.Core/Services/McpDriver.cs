@@ -333,9 +333,11 @@ public sealed class McpDriver : IMcpDriver
                 case ImageContentBlock:
                     sb.AppendLine(Texts.Get("MCP_IMAGE_CONTENT", "en"));
                     break;
+#pragma warning disable MCP9005 // Sampling 随规范 2026-07-28 弃用；仅为兼容仍返回该块的旧服务器而保留，SDK 移除该类型时删除此分支
                 case ToolResultContentBlock toolResult:
                     sb.AppendLine(toolResult.Content?.ToString() ?? Texts.Get("MCP_EMPTY", "en"));
                     break;
+#pragma warning restore MCP9005
                 case ResourceLinkBlock:
                     sb.AppendLine(Texts.Get("MCP_RESOURCE_REF", "en"));
                     break;
@@ -377,7 +379,8 @@ public sealed class McpDriver : IMcpDriver
             .ConfigureAwait(false);
         foreach (var prompt in prompts)
         {
-            var args = prompt.ProtocolPrompt.Arguments;
+            // 提示词无参数时 SDK 返回 null：按空列表处理，避免整个服务器的提示词目录加载失败
+            var args = prompt.ProtocolPrompt.Arguments ?? [];
             var schema = new JsonObject
             {
                 ["arguments"] = new JsonArray(args.Select(a => new JsonObject
@@ -575,17 +578,17 @@ public sealed class McpDriver : IMcpDriver
 
     // ---------------- 工具方法 ----------------
 
-    private static IReadOnlyDictionary<string, object> ParseArgs(string? argumentsJson)
+    private static IReadOnlyDictionary<string, object?> ParseArgs(string? argumentsJson)
     {
-        if (string.IsNullOrWhiteSpace(argumentsJson)) return new Dictionary<string, object>();
+        if (string.IsNullOrWhiteSpace(argumentsJson)) return new Dictionary<string, object?>();
         try
         {
             using var doc = JsonDocument.Parse(argumentsJson);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                return new Dictionary<string, object>();
+                return new Dictionary<string, object?>();
             }
-            var dict = new Dictionary<string, object>();
+            var dict = new Dictionary<string, object?>();
             foreach (var prop in doc.RootElement.EnumerateObject())
             {
                 dict[prop.Name] = prop.Value.Clone();
@@ -594,7 +597,7 @@ public sealed class McpDriver : IMcpDriver
         }
         catch (JsonException)
         {
-            return new Dictionary<string, object>();
+            return new Dictionary<string, object?>();
         }
     }
 

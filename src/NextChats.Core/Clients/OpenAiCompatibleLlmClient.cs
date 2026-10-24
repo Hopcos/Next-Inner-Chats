@@ -530,7 +530,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         var calls = new List<LlmToolCall>();
         foreach (var tc in tcs.EnumerateArray())
         {
-            var id = tc.TryGetProperty("id", out var idp) ? idp.GetString() : $"call_{Guid.NewGuid():N}";
+            // 供应商缺 id 或返回 "id": null / 空串时补一个，否则回传工具结果时 tool_call_id 为空会被拒
+            var id = tc.TryGetProperty("id", out var idp) ? idp.GetString() : null;
+            if (string.IsNullOrEmpty(id)) id = $"call_{Guid.NewGuid():N}";
             var name = tc.TryGetProperty("function", out var fn) && fn.TryGetProperty("name", out var np) ? np.GetString() ?? "" : "";
             var argsStr = tc.TryGetProperty("function", out var fn2) && fn2.TryGetProperty("arguments", out var ap) ? ap.GetString() : null;
             JsonObject? args = null;
