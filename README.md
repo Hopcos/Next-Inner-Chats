@@ -354,6 +354,20 @@ cd web && npm install && npm run dev
 # Open http://localhost:5173  (seeded admin: admin / admin123)
 ```
 
+## Deployment notes (IIS / reverse proxy)
+
+**Symptom:** Admin-side PUT / DELETE calls (enable/disable, edit, delete MCP servers, ...) all return `405 Method Not Allowed`, while GET / POST work.
+
+**Cause:** IIS's WebDAV module intercepts the `PUT` / `DELETE` verbs and answers 405 itself, so the request never reaches the app (an app response would be 401 / 404).
+
+**Fix (either):**
+
+1. Use the shipped [`src/NextChats.Api/web.config`](src/NextChats.Api/web.config) (`dotnet publish` copies it into the publish output); it removes the `WebDAVModule` module and the `WebDAV` handler. For an already deployed site, replace the published `web.config` with this template (keep `processPath` / `arguments`) and recycle the app pool — no code change needed.
+2. Or uninstall / disable WebDAV on the server: IIS Manager → server level → Modules → remove `WebDAVModule`; Handler Mappings → remove `WebDAV`.
+
+**Self-check:** an unauthenticated `PUT` to any admin endpoint should return `401`; `405` means WebDAV (or a reverse proxy that does not allow the verb) is still intercepting it.
+
+If a reverse proxy such as nginx sits in front, allow `PUT` / `DELETE` (and forward the `Authorization` header and set `proxy_buffering off` for SSE as needed).
 ## Core Design
 
 ### Authentication (default accounts + internal auth)

@@ -354,6 +354,20 @@ cd web && npm install && npm run dev
 # 打开 http://localhost:5173 （种子管理员：admin / admin123）
 ```
 
+## 部署（IIS / 反向代理）注意事项
+
+**症状：** 后台管理里 PUT / DELETE 接口（启停、编辑、删除 MCP 服务器等）全部返回 `405 Method Not Allowed`，而 GET / POST 正常。
+
+**原因：** 这是 IIS 的 WebDAV 模块接管了 `PUT` / `DELETE` 动词并直接返回 405，请求根本到不了应用（返回的不是应用的 401 / 404）。
+
+**解决（二选一）：**
+
+1. 使用仓库内的 [`src/NextChats.Api/web.config`](src/NextChats.Api/web.config)（`dotnet publish` 会自动带入发布目录），其中已移除 `WebDAVModule` 与 `WebDAV` 处理程序。若是已部署的站点，把发布目录里的 `web.config` 换成该模板（保留 `processPath` / `arguments`）后，回收应用池即可，无需改代码。
+2. 或在服务器上卸载 / 禁用 WebDAV：IIS 管理器 → 服务器级别 → 模块 → 删除 `WebDAVModule`；处理程序映射 → 删除 `WebDAV`。
+
+**自检：** 对任意管理接口发 `PUT`，未登录时应返回 `401`；返回 `405` 说明仍被 WebDAV（或反向代理未放行该动词）拦截。
+
+若前面还有 nginx 等反向代理，需放行 `PUT` / `DELETE`（并按需转发 `Authorization` 头与 SSE 的 `proxy_buffering off`）。
 ## 核心设计
 
 ### 认证（default 账号 + 内部鉴权）
