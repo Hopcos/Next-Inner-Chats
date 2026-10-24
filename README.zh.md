@@ -1,5 +1,3 @@
-# Next Chats
-
 ![Next Chats](docs/chats.png)
 
 > [**English README**](./README.md)

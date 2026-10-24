@@ -1,5 +1,3 @@
-# Next Chats
-
 ![Next Chats](docs/chats.png)
 
 > [**中文版 README（简体中文）**](./README.zh.md)
