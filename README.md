@@ -446,6 +446,19 @@ sequenceDiagram
 - **Active Skill matching**: Skills are exposed to the model as *meta tools* (`skill_<slug>`); instructions are lazy-loaded to avoid token explosion.
 - **Prompt building**: a template engine (`{{var}}` / `#if` / `#each` / `#section`) renders system prompts.
 - **ReAct loop (AgentLoopEngine)**: producer–consumer Channel architecture decouples LLM streaming from the main loop; safe interruption.
+- **Workspace coding sessions — completion standard + `AGENTS.md`**: when a session is bound to a workspace, the system prompt gets two extra blocks.
+  - *Completion standard* (only at **WorkspaceWrite** level or above): after changing files the model must build/test via `ws_exec`, fix failures and re-run, never weaken tests to make them pass, and end with a short "Verification" section listing what ran, the result, and what could not be verified. Read-only sessions don't get it (they cannot run anything).
+  - *Project guide*: the workspace root's `AGENTS.md` (if present) is injected as-is, so **each workspace declares its own build/test/verification commands**, e.g.
+
+    ```markdown
+    # AGENTS.md
+    - build: dotnet build -c Release
+    - test: dotnet test
+    - frontend: cd web && npm run build
+    ```
+
+    Capped at 12,000 characters (longer files are truncated); read through the workspace path sandbox (a symlink/junction pointing outside the root is ignored at levels below FullAccess); a missing, empty or unreadable file is silently skipped. The guide cannot override the permission level, safety rules or approval policy.
+  - This is **prompt-level guidance, not enforcement**: whether the model verifies still depends on the model. An engine-side "don't finish before verifying" gate is a possible later step. Only normal workspace sessions are affected (team mode is unchanged).
 
 ### Team collaboration (TeamOrchestrator)
 - **Execution model**: each team message runs 「responsible engineer drafts a solution → assistants give independent suggestions (parallel or sequential, isolated) → responsible evaluates and produces the next-round plan (early stop on consensus) → final wrap-up」, up to `maxRounds`.

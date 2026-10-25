@@ -493,6 +493,12 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 $"- rules: all ws_* file paths are validated against the root (escape is rejected server-side); " +
                 "ws_write/ws_edit/ws_mkdir/ws_delete/ws_exec require workspace-write level and may trigger approval; " +
                 "ws_exec working directory is always inside the root.");
+
+            // 完成标准（有写权限时）+ 工作空间根目录 AGENTS.md 项目指南（构建/测试/验证命令由各工作空间自行声明）
+            var wsGuide = await WorkspaceGuide.LoadAsync(_workspaces, wsCtx, ct);
+            foreach (var block in WorkspaceGuide.BuildBlocks(wsCtx, wsGuide, lang)) systemBlocks.Add(block);
+            _logger.LogInformation("[Orchestrator] workspace guide trace={Trace} ws={Ws} agentsMd={Loaded} chars={Chars}",
+                trace, wsCtx.Name, wsGuide is not null, wsGuide?.Length ?? 0);
         }
         var systemPrompt = string.Join("\n\n---\n\n", systemBlocks);
 
