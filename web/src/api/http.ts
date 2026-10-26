@@ -114,6 +114,43 @@ export async function request<T = unknown>(path: string, options: RequestInit = 
   return body as T
 }
 
+/**
+ * 以 Blob 形式下载（带 JWT；401 自动刷新后重放一次）。用于二进制 / 附件响应，不能走 request()（它按 JSON/文本解析）。
+ * 文件名取自 Content-Disposition（filename* 优先），取不到由调用方回退。
+ */
+export async function downloadBlob(path: string): Promise<{ blob: Blob; filename: string | null }> {
+  const build = (): Record<string, string> => ({
+    'X-Lang': getLang(),
+    ...(tokenStore.get() ? { Authorization: `Bearer ${tokenStore.get()}` } : {}),
+  })
+  let res = await fetch(path, { method: 'GET', headers: build() })
+  if (res.status === 401 && (await refreshTokens())) {
+    res = await fetch(path, { method: 'GET', headers: build() })
+  }
+  if (res.status === 401) {
+    throw { code: 'AUTH_EXPIRED', message: translateError('AUTH_EXPIRED', '登录已过期，请重新登录') } as ApiError
+  }
+  if (!res.ok) {
+    let err: Partial<ApiError> = {}
+    try {
+      err = (await res.json()) as Partial<ApiError>
+    } catch {
+      /* 非 JSON 错误体 */
+    }
+    throw { code: err.code ?? 'HTTP_ERROR', message: err.message ? translateError(err.code, err.message) : i18n.global.t('err.HTTP_ERROR') } as ApiError
+  }
+  const cd = res.headers.get('content-disposition') ?? ''
+  const star = /filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i.exec(cd)
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(cd)
+  let filename: string | null = null
+  try {
+    filename = star ? decodeURIComponent(star[1].trim()) : plain ? plain[1].trim() : null
+  } catch {
+    filename = plain ? plain[1].trim() : null
+  }
+  return { blob: await res.blob(), filename }
+}
+
 /** 需要走「401 → 刷新重放」的路径（登录、刷新本身除外） */
 function isAuthPath(path: string): boolean {
   return !path.startsWith('/api/auth/login') && !path.startsWith('/api/auth/refresh')

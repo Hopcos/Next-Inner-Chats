@@ -247,6 +247,10 @@ export default {
       contentEmpty: 'File missing or empty',
       contentLoadFailed: 'Failed to read file',
       copyFormatted: 'Copy formatted',
+      download: 'Download',
+      downloadFile: 'Download file',
+      downloadFailed: 'Download failed',
+      downloadStarted: 'Download started: {name}',
     },
   },
 }

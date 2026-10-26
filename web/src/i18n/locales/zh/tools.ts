@@ -247,6 +247,10 @@ export default {
       contentEmpty: '文件不存在或为空',
       contentLoadFailed: '读取文件失败',
       copyFormatted: '复制格式化文本',
+      download: '下载',
+      downloadFile: '下载文件',
+      downloadFailed: '下载失败',
+      downloadStarted: '已开始下载：{name}',
     },
   },
 }

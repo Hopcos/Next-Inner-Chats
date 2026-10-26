@@ -11,7 +11,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { http } from '@/api/http'
+import { downloadBlob, http } from '@/api/http'
 import { kernel } from '@/kernel'
 import { copyText } from '@/utils/clipboard'
 import { highlightJson } from './jsonHighlight'
@@ -206,9 +206,12 @@ const contentPretty = ref('')
 const contentHtml = ref('')
 const contentRaw = ref('')
 const contentErr = ref('')
+/** 当前弹窗查看的文件完整路径（下载按钮使用） */
+const contentPath = ref('')
 
 async function viewFile(name: string) {
   contentOpen.value = true
+  contentPath.value = fbPath.value === '/' ? `/${name}` : `${fbPath.value}/${name}`
   contentMeta.value = `${fbPod.value} · ${fbPath.value === '/' ? '/' : fbPath.value}/${name}`
   contentHtml.value = ''
   contentPretty.value = ''
@@ -247,6 +250,37 @@ async function onCopyContent() {
   const ok = await copyText(text)
   if (ok) kernel.notify.success(t('tools.common.copied'))
   else kernel.notify.error(t('tools.common.copyFailed'))
+}
+
+// ---------------- 文件下载（/files/download，二进制原样透传） ----------------
+const downloadingPath = ref('')
+
+/** 下载 Pod 内文件：以 Blob 取回后触发浏览器保存（带 JWT，不能直接用 <a href>）；文件名取响应头，缺省用路径末段 */
+async function downloadFile(path: string) {
+  if (!fbPod.value || !environment.value || downloadingPath.value) return
+  downloadingPath.value = path
+  try {
+    const url = `${endpoint}/api/environments/${encodeURIComponent(environment.value)}/pods/${encodeURIComponent(fbPod.value)}/files/download?path=${encodeURIComponent(path)}`
+    const { blob, filename } = await downloadBlob(url)
+    const name = filename || path.split('/').filter(Boolean).pop() || 'download'
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 10_000)
+    kernel.notify.success(t('tools.k8s.downloadStarted', { name }))
+  } catch (e) {
+    kernel.notify.error((e as { message?: string }).message ?? t('tools.k8s.downloadFailed'), (e as { code?: string }).code)
+  } finally {
+    downloadingPath.value = ''
+  }
+}
+
+function entryPath(name: string): string {
+  return fbPath.value === '/' ? `/${name}` : `${fbPath.value}/${name}`
 }
 
 // ---------------- 展示辅助 ----------------
@@ -372,6 +406,7 @@ onMounted(async () => {
               <th class="k8s-th name">{{ t('tools.k8s.colName') }}</th>
               <th class="k8s-th">{{ t('tools.k8s.colType') }}</th>
               <th class="k8s-th num">{{ t('tools.k8s.colSize') }}</th>
+              <th class="k8s-th act" />
             </tr>
           </thead>
           <tbody>
@@ -383,6 +418,18 @@ onMounted(async () => {
               </td>
               <td class="k8s-td">{{ en.isDir ? 'dir' : 'file' }}</td>
               <td class="k8s-td num">{{ fmtSize(en.size) }}</td>
+              <td class="k8s-td act">
+                <button
+                  v-if="!en.isDir"
+                  type="button"
+                  class="k8s-dl"
+                  :title="t('tools.k8s.downloadFile')"
+                  :disabled="!!downloadingPath"
+                  @click="downloadFile(entryPath(en.name))"
+                >
+                  {{ downloadingPath === entryPath(en.name) ? '…' : '⬇' }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -398,6 +445,9 @@ onMounted(async () => {
       </template>
       <template #footer>
         <el-button :disabled="!contentOpen" @click="contentOpen = false">{{ t('common.close') }}</el-button>
+        <el-button :disabled="!contentOpen || !contentPath" :loading="downloadingPath === contentPath" @click="downloadFile(contentPath)">
+          {{ t('tools.k8s.download') }}
+        </el-button>
         <el-button type="primary" :disabled="!contentOpen" @click="onCopyContent">
           {{ contentIsJson ? t('tools.k8s.copyFormatted') : t('tools.common.copy') }}
         </el-button>
@@ -604,6 +654,38 @@ onMounted(async () => {
 
 .k8s-cell.dir {
   color: color-mix(in srgb, #7c3aed 55%, var(--nc-text));
+}
+
+/* 下载列：窄列、居中；按钮用主题令牌，深浅主题下都清晰 */
+.k8s-th.act,
+.k8s-td.act {
+  width: 44px;
+  text-align: center;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.k8s-dl {
+  border: 1px solid var(--nc-border-strong);
+  background: transparent;
+  color: var(--nc-primary);
+  border-radius: 6px;
+  width: 26px;
+  height: 24px;
+  line-height: 1;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.k8s-dl:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--nc-primary) 14%, transparent);
+  border-color: var(--nc-primary);
+}
+
+.k8s-dl:disabled {
+  opacity: 0.5;
+  cursor: progress;
 }
 
 /* 文件浏览器 */

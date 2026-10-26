@@ -109,14 +109,52 @@ public sealed class ToolEndpointProxyController(IAdminStore store, IHttpClientFa
             return StatusCode(StatusCodes.Status502BadGateway, Err("TOOL_ENDPOINT_UNREACHABLE"));
         }
 
-        var bytes = await upstream.Content.ReadAsByteArrayAsync(ct);
         var contentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/json";
+
+        // 二进制 / 附件响应（如 K8S Explorer 的 files/download）：必须按字节原样流式透传。
+        // 下面的 UTF-8 字符串化只适合 JSON / 文本，用于二进制会把非法字节替换成 U+FFFD 导致文件损坏。
+        if (IsBinaryResponse(upstream))
+        {
+            Response.StatusCode = (int)upstream.StatusCode;
+            Response.ContentType = contentType;
+            if (upstream.Content.Headers.ContentDisposition is { } cd)
+            {
+                Response.Headers.ContentDisposition = cd.ToString();
+            }
+            if (upstream.Content.Headers.ContentLength is { } len)
+            {
+                Response.ContentLength = len;
+            }
+            await using var upstreamStream = await upstream.Content.ReadAsStreamAsync(ct);
+            await upstreamStream.CopyToAsync(Response.Body, ct);
+            upstream.Dispose();
+            return new EmptyResult();
+        }
+
+        var bytes = await upstream.Content.ReadAsByteArrayAsync(ct);
         return new ContentResult
         {
             Content = Encoding.UTF8.GetString(bytes),
             ContentType = contentType,
             StatusCode = (int)upstream.StatusCode,
         };
+    }
+
+    /// <summary>
+    /// 上游响应是否应按二进制透传：带 attachment 的 Content-Disposition，或 Content-Type 不是 JSON / 文本类。
+    /// 无 Content-Type 时按 JSON 处理（保持既有行为）。
+    /// </summary>
+    private static bool IsBinaryResponse(HttpResponseMessage upstream)
+    {
+        if (upstream.Content.Headers.ContentDisposition?.DispositionType?.Equals("attachment", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return true;
+        }
+        var mt = upstream.Content.Headers.ContentType?.MediaType;
+        if (string.IsNullOrEmpty(mt)) return false;
+        return !(mt.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
+                 || mt.Contains("json", StringComparison.OrdinalIgnoreCase)
+                 || mt.Contains("xml", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>解析并解密该工具配置的授权头（落库时整体加密；解密失败/非法 JSON 返回空）</summary>
