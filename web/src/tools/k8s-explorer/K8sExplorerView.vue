@@ -419,8 +419,8 @@ onMounted(async () => {
 }
 
 .k8s-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface-solid);
+  border: 1px solid var(--nc-border-strong);
   border-radius: 12px;
   padding: 14px 16px;
 }
@@ -445,7 +445,7 @@ onMounted(async () => {
 
 .k8s-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
   font-weight: 600;
 }
 
@@ -501,10 +501,10 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 14px;
   padding: 2px 2px 10px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border);
   margin-bottom: 10px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .k8s-meta-item {
@@ -521,7 +521,7 @@ onMounted(async () => {
 .k8s-empty {
   padding: 26px 10px;
   text-align: center;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   font-size: 13px;
 }
 
@@ -536,13 +536,13 @@ onMounted(async () => {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f8fafc;
+  background: var(--nc-surface-2);
   text-align: left;
   font-size: 12px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--nc-text-dim);
   padding: 7px 10px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border);
   white-space: nowrap;
 }
 
@@ -559,15 +559,15 @@ onMounted(async () => {
 }
 
 .k8s-tr:hover .k8s-td {
-  background: #f8fafc;
+  background: var(--nc-surface-2);
   cursor: pointer;
 }
 
 .k8s-td {
   padding: 7px 10px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--nc-border);
   white-space: nowrap;
-  color: #334155;
+  color: var(--nc-text);
 }
 
 .k8s-td.num {
@@ -586,7 +586,7 @@ onMounted(async () => {
   border: none;
   background: transparent;
   padding: 0;
-  color: #2563eb;
+  color: var(--nc-primary);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -603,7 +603,7 @@ onMounted(async () => {
 }
 
 .k8s-cell.dir {
-  color: #7c3aed;
+  color: color-mix(in srgb, #7c3aed 55%, var(--nc-text));
 }
 
 /* 文件浏览器 */
@@ -618,8 +618,8 @@ onMounted(async () => {
   flex: 1;
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Menlo, monospace;
   font-size: 12.5px;
-  color: #475569;
-  background: #f1f5f9;
+  color: var(--nc-text-dim);
+  background: var(--nc-surface-2);
   border-radius: 6px;
   padding: 4px 10px;
   overflow: hidden;
@@ -629,13 +629,13 @@ onMounted(async () => {
 
 .k8s-fb-count {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   white-space: nowrap;
 }
 
 .k8s-fb-list {
   max-height: 52vh;
-  border: 1px solid #eef2f7;
+  border: 1px solid var(--nc-border);
   border-radius: 8px;
   overflow: auto;
 }
@@ -659,9 +659,9 @@ onMounted(async () => {
 .k8s-raw-pre {
   margin: 0;
   padding: 14px 16px;
-  background: #f8fafc;
-  color: #334155;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface-2);
+  color: var(--nc-text);
+  border: 1px solid var(--nc-border-strong);
   border-radius: 10px;
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Menlo, monospace;
   font-size: 12.5px;
@@ -690,7 +690,7 @@ onMounted(async () => {
 }
 
 :deep(.jq-punc) {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
 }
 
 :deep(.k8s-dlg .el-dialog__title) {

@@ -110,8 +110,8 @@ function toggle() {
   align-items: center;
   width: 74px;
   height: 100%;
-  background: #ffffff;
-  border-right: 1px solid #eef1f5;
+  background: var(--nc-surface-solid);
+  border-right: 1px solid var(--nc-border);
   user-select: none;
 }
 
@@ -162,22 +162,22 @@ function toggle() {
 
 /* JSON 语法高亮（与编辑页配色一致） */
 .jq-key {
-  color: #0550ae;
+  color: color-mix(in srgb, #0550ae 60%, var(--nc-text));
 }
 
 .jq-str {
-  color: #22863a;
+  color: color-mix(in srgb, #22863a 60%, var(--nc-text));
 }
 
 .jq-num {
-  color: #953800;
+  color: color-mix(in srgb, #953800 60%, var(--nc-text));
 }
 
 .jq-bool {
-  color: #cf222e;
+  color: color-mix(in srgb, #cf222e 60%, var(--nc-text));
 }
 
 .jq-punc {
-  color: #57606a;
+  color: color-mix(in srgb, #57606a 60%, var(--nc-text));
 }
 </style>

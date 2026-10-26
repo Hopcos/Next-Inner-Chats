@@ -92,8 +92,8 @@ async function savePng() {
   border: 0;
   outline: none;
   resize: none;
-  background: #ffffff;
-  color: #1e293b;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   padding: 14px 16px;
   font-size: 13px;
   line-height: 1.7;
@@ -104,18 +104,18 @@ async function savePng() {
 }
 
 .mp-area::placeholder {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   opacity: 0.8;
 }
 
 .mp-preview {
   flex: 1;
   overflow: auto;
-  background: #ffffff;
+  background: var(--nc-surface-solid);
   padding: 16px 22px;
   font-size: 14px;
   line-height: 1.75;
-  color: #1f2937;
+  color: var(--nc-text);
   word-break: break-word;
 }
 
@@ -126,8 +126,8 @@ async function savePng() {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid #eef2f7;
-  background: #ffffff;
+  border-bottom: 1px solid var(--nc-border);
+  background: var(--nc-surface-solid);
   flex: none;
 }
 
@@ -137,17 +137,17 @@ async function savePng() {
   gap: 5px;
   padding: 4px 10px;
   font-size: 12.5px;
-  color: #2563eb;
-  background: #ffffff;
-  border: 1px solid #dbe4ef;
+  color: var(--nc-primary);
+  background: var(--nc-surface-solid);
+  border: 1px solid var(--nc-border-strong);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .mp-download:hover {
-  background: #f1f5f9;
-  border-color: #bfd2e8;
+  background: var(--nc-surface-2);
+  border-color: var(--nc-border-strong);
 }
 
 .mp-download:disabled {
@@ -171,7 +171,7 @@ async function savePng() {
 .mp-preview :deep(h1) {
   font-size: 22px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border);
 }
 
 .mp-preview :deep(h2) {
@@ -187,7 +187,7 @@ async function savePng() {
 }
 
 .mp-preview :deep(a) {
-  color: #2563eb;
+  color: var(--nc-primary);
   text-decoration: none;
 }
 
@@ -223,9 +223,9 @@ async function savePng() {
 .mp-preview :deep(blockquote) {
   margin: 12px 0;
   padding: 6px 14px;
-  border-left: 3px solid #2563eb;
-  color: #64748b;
-  background: #f1f5f9;
+  border-left: 3px solid var(--nc-primary);
+  color: var(--nc-text-dim);
+  background: var(--nc-surface-2);
   border-radius: 0 8px 8px 0;
 }
 
@@ -238,13 +238,13 @@ async function savePng() {
 
 .mp-preview :deep(th),
 .mp-preview :deep(td) {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--nc-border-strong);
   padding: 7px 12px;
   text-align: left;
 }
 
 .mp-preview :deep(th) {
-  background: #f1f5f9;
+  background: var(--nc-surface-2);
   font-weight: 700;
 }
 

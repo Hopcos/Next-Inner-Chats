@@ -808,8 +808,8 @@ onMounted(async () => {
 }
 
 .kp-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface-solid);
+  border: 1px solid var(--nc-border-strong);
   border-radius: 12px;
   padding: 14px 16px;
 }
@@ -834,7 +834,7 @@ onMounted(async () => {
 
 .kp-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
   font-weight: 600;
 }
 
@@ -871,9 +871,9 @@ onMounted(async () => {
   gap: 6px 8px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--nc-border-strong);
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .kp-schema-title {
@@ -941,10 +941,10 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 14px;
   padding: 2px 2px 10px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border);
   margin-bottom: 10px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .kp-meta-item {
@@ -964,8 +964,8 @@ onMounted(async () => {
 }
 
 .kp-rtable :deep(th.el-table__cell) {
-  background: #f8fafc;
-  color: #64748b;
+  background: var(--nc-surface-2);
+  color: var(--nc-text-dim);
   font-size: 12px;
   font-weight: 700;
 }
@@ -976,7 +976,7 @@ onMounted(async () => {
 
 .kp-ts {
   font-variant-numeric: tabular-nums;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .kp-table {
@@ -990,13 +990,13 @@ onMounted(async () => {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f8fafc;
+  background: var(--nc-surface-2);
   text-align: left;
   font-size: 12px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--nc-text-dim);
   padding: 7px 10px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border);
   white-space: nowrap;
 }
 
@@ -1005,12 +1005,12 @@ onMounted(async () => {
 }
 
 .kp-tr:hover .kp-td {
-  background: #f8fafc;
+  background: var(--nc-surface-2);
 }
 
 .kp-td {
   padding: 5px 10px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--nc-border);
   vertical-align: top;
   max-width: 460px;
 }
@@ -1019,13 +1019,13 @@ onMounted(async () => {
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: #334155;
+  color: var(--nc-text);
 }
 
 .kp-td.ts {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .kp-td.kv {
@@ -1035,19 +1035,19 @@ onMounted(async () => {
 
 .kp-target {
   font-weight: 600;
-  color: #334155;
+  color: var(--nc-text);
   word-break: break-all;
 }
 
 .kp-sub {
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
 }
 
 .kp-fail-msg {
   margin-top: 3px;
   font-size: 11.5px;
-  color: #b91c1c;
+  color: var(--nc-danger);
   word-break: break-word;
 }
 
@@ -1073,7 +1073,7 @@ onMounted(async () => {
 .kp-empty {
   padding: 24px 10px;
   text-align: center;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   font-size: 12.5px;
 }
 
@@ -1096,9 +1096,9 @@ onMounted(async () => {
 .kp-raw-pre {
   margin: 0;
   padding: 14px 16px;
-  background: #f8fafc;
-  color: #334155;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface-2);
+  color: var(--nc-text);
+  border: 1px solid var(--nc-border-strong);
   border-radius: 10px;
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Menlo, monospace;
   font-size: 12.5px;
@@ -1127,7 +1127,7 @@ onMounted(async () => {
 }
 
 :deep(.jq-punc) {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
 }
 
 :deep(.kp-dlg .el-dialog__title) {

@@ -410,7 +410,7 @@ onBeforeUnmount(stopSpeak)
 
 .tr-seg-btn.on {
   background: var(--nc-primary);
-  color: #fff;
+  color: var(--nc-primary-contrast, #fff); /* 亮主色（赛博青 / 极光青）上用深字，白字对比度不足 */
 }
 
 .tr-seg-code {
@@ -507,10 +507,10 @@ onBeforeUnmount(stopSpeak)
 .tr-pane {
   display: flex;
   flex-direction: column;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--nc-border-strong);
   border-radius: 12px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--nc-surface-solid);
   min-width: 0;
   min-height: 0;
 }
@@ -520,14 +520,14 @@ onBeforeUnmount(stopSpeak)
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-bottom: 1px solid #eef2f7;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--nc-border);
+  background: var(--nc-surface-2);
 }
 
 .tr-pane-title {
   font-size: 13px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--nc-text);
 }
 
 .tr-pane-lang {
@@ -541,7 +541,7 @@ onBeforeUnmount(stopSpeak)
 .tr-pane-count {
   margin-left: auto;
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
 }
 
 .tr-area {
@@ -550,8 +550,8 @@ onBeforeUnmount(stopSpeak)
   border: 0;
   outline: none;
   resize: none;
-  background: #ffffff;
-  color: #1e293b;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   padding: 12px 14px;
   font-size: 14px;
   line-height: 1.7;
@@ -559,11 +559,11 @@ onBeforeUnmount(stopSpeak)
 }
 
 .tr-area.out {
-  background: #ffffff;
+  background: var(--nc-surface-solid);
 }
 
 .tr-area::placeholder {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   opacity: 0.8;
 }
 
@@ -571,8 +571,8 @@ onBeforeUnmount(stopSpeak)
   display: flex;
   gap: 8px;
   padding: 7px 10px;
-  border-top: 1px solid #eef2f7;
-  background: #fafbfd;
+  border-top: 1px solid var(--nc-border);
+  background: var(--nc-surface-2);
 }
 
 .tr-icon-btn {

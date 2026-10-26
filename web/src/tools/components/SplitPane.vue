@@ -64,19 +64,19 @@ function onDown(e: MouseEvent) {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--nc-border-strong);
   border-radius: 12px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--nc-surface-solid);
 }
 
 .sp-head {
   padding: 8px 12px;
   font-size: 12.5px;
   font-weight: 700;
-  color: #64748b;
-  border-bottom: 1px solid #eef2f7;
-  background: #f8fafc;
+  color: var(--nc-text-dim);
+  border-bottom: 1px solid var(--nc-border);
+  background: var(--nc-surface-2);
   letter-spacing: 0.02em;
 }
 

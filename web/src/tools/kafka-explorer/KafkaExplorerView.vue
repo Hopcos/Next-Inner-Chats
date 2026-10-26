@@ -391,11 +391,13 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/* 颜色一律取主题令牌（--nc-*），避免在深色主题（极光 / 午夜 / 赛博朋克）下“继承浅色字 + 写死白底”导致看不清 */
 .kf-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface);
+  border: 1px solid var(--nc-border);
   border-radius: 12px;
   padding: 14px 16px;
+  color: var(--nc-text);
 }
 
 .kf-form {
@@ -418,7 +420,7 @@ onMounted(async () => {
 
 .kf-label {
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
   font-weight: 600;
 }
 
@@ -450,10 +452,10 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 14px;
   padding: 2px 2px 10px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border);
   margin-bottom: 10px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .kf-meta-item {
@@ -480,13 +482,13 @@ onMounted(async () => {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f8fafc;
+  background: var(--nc-surface-solid); /* 粘性表头需不透明，否则滚动内容会透出 */
   text-align: left;
   font-size: 12px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--nc-text-dim);
   padding: 7px 10px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--nc-border-strong);
   white-space: nowrap;
 }
 
@@ -495,27 +497,28 @@ onMounted(async () => {
 }
 
 .kf-tr:hover .kf-td {
-  background: #f8fafc;
+  background: var(--nc-surface-2);
 }
 
 .kf-td {
   padding: 5px 10px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--nc-border);
   vertical-align: top;
   max-width: 460px;
+  color: var(--nc-text);
 }
 
 .kf-td.num {
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: #334155;
+  color: var(--nc-text);
 }
 
 .kf-td.ts {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: #64748b;
+  color: var(--nc-text-dim);
 }
 
 .kf-td.kv {
@@ -530,7 +533,7 @@ onMounted(async () => {
   background: transparent;
   text-align: left;
   font: inherit;
-  color: inherit;
+  color: var(--nc-text);
   white-space: pre-wrap;
   word-break: break-all;
   cursor: pointer;
@@ -543,14 +546,14 @@ onMounted(async () => {
 }
 
 .kf-cell.err {
-  color: #b91c1c;
+  color: var(--nc-danger);
 }
 
 .kf-dec-err {
   display: inline-block;
   font-size: 11px;
-  color: #b91c1c;
-  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: var(--nc-danger);
+  background: color-mix(in srgb, var(--nc-danger) 14%, transparent);
   border-radius: 4px;
   padding: 0 5px;
   margin-right: 6px;
@@ -560,7 +563,7 @@ onMounted(async () => {
 .kf-empty {
   padding: 24px 10px;
   text-align: center;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   font-size: 12.5px;
 }
 
@@ -583,9 +586,9 @@ onMounted(async () => {
 .kf-raw-pre {
   margin: 0;
   padding: 14px 16px;
-  background: #f8fafc;
-  color: #334155;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
+  border: 1px solid var(--nc-border);
   border-radius: 10px;
   font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, Menlo, monospace;
   font-size: 12.5px;

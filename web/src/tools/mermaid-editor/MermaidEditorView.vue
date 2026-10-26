@@ -299,8 +299,8 @@ async function savePng() {
   border: 0;
   outline: none;
   resize: none;
-  background: #ffffff;
-  color: #1e293b;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   padding: 14px 16px;
   font-size: 13px;
   line-height: 1.65;
@@ -311,7 +311,7 @@ async function savePng() {
 }
 
 .me-area::placeholder {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   opacity: 0.8;
 }
 
@@ -320,30 +320,30 @@ async function savePng() {
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-bottom: 1px solid #eef2f7;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--nc-border);
+  background: var(--nc-surface-2);
 }
 
 .me-zoom {
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #64748b;
+  border: 1px solid var(--nc-border-strong);
+  background: var(--nc-surface-solid);
+  color: var(--nc-text-dim);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
 }
 
 .me-zoom:hover {
-  color: #2563eb;
-  border-color: #2563eb;
+  color: var(--nc-primary);
+  border-color: var(--nc-primary);
 }
 
 .me-scale {
   font-size: 12px;
-  color: #64748b;
+  color: var(--nc-text-dim);
   min-width: 42px;
   text-align: center;
 }
@@ -351,7 +351,7 @@ async function savePng() {
 .me-hint {
   margin-left: auto;
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   opacity: 0.9;
 }
 
@@ -393,9 +393,9 @@ async function savePng() {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fee2e2;
+  color: var(--nc-danger);
+  background: color-mix(in srgb, var(--nc-danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--nc-danger) 30%, transparent);
   border-radius: 10px;
   padding: 12px 14px;
   z-index: 2;

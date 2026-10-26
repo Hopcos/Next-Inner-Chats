@@ -255,8 +255,8 @@ async function copyOutput() {
   border: 0;
   outline: none;
   resize: none;
-  background: #ffffff;
-  color: #1e293b;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   padding: 14px 16px;
   font-size: 13px;
   line-height: 1.65;
@@ -267,7 +267,7 @@ async function copyOutput() {
 }
 
 .jf-area::placeholder {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   opacity: 0.8;
 }
 
@@ -278,8 +278,8 @@ async function copyOutput() {
   margin: 0;
   padding: 12px 14px;
   font-size: 13px;
-  background: #ffffff;
-  color: #334155;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   tab-size: 2;
 }
 
@@ -291,30 +291,30 @@ async function copyOutput() {
   padding: 14px 16px;
   font-size: 13px;
   line-height: 1.65;
-  background: #ffffff;
-  color: #334155;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   white-space: pre;
   word-break: break-all;
 }
 
 .jf-out :deep(.jq-key) {
-  color: #0550ae;
+  color: color-mix(in srgb, #0550ae 60%, var(--nc-text));
 }
 
 .jf-out :deep(.jq-str) {
-  color: #22863a;
+  color: color-mix(in srgb, #22863a 60%, var(--nc-text));
 }
 
 .jf-out :deep(.jq-num) {
-  color: #953800;
+  color: color-mix(in srgb, #953800 60%, var(--nc-text));
 }
 
 .jf-out :deep(.jq-bool) {
-  color: #cf222e;
+  color: color-mix(in srgb, #cf222e 60%, var(--nc-text));
 }
 
 .jf-out :deep(.jq-punc) {
-  color: #57606a;
+  color: color-mix(in srgb, #57606a 60%, var(--nc-text));
 }
 
 .jf-empty {
@@ -331,9 +331,9 @@ async function copyOutput() {
   gap: 10px;
   align-items: flex-start;
   padding: 16px;
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fee2e2;
+  color: var(--nc-danger);
+  background: color-mix(in srgb, var(--nc-danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--nc-danger) 30%, transparent);
   border-radius: 10px;
   margin: 12px;
 }

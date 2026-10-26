@@ -192,17 +192,17 @@ function backToEdit() {
 }
 
 .tc-stat.add {
-  color: #16a34a;
+  color: color-mix(in srgb, #16a34a 55%, var(--nc-text));
   background: color-mix(in srgb, #22c55e 14%, transparent);
 }
 
 .tc-stat.same {
-  color: #16a34a;
+  color: color-mix(in srgb, #16a34a 55%, var(--nc-text));
   background: color-mix(in srgb, #22c55e 14%, transparent);
 }
 
 .tc-stat.del {
-  color: #dc2626;
+  color: color-mix(in srgb, #dc2626 55%, var(--nc-text));
   background: color-mix(in srgb, #ef4444 12%, transparent);
 }
 
@@ -228,8 +228,8 @@ function backToEdit() {
   border: 0;
   outline: none;
   resize: none;
-  background: #ffffff;
-  color: #1e293b;
+  background: var(--nc-surface-solid);
+  color: var(--nc-text);
   padding: 14px 16px;
   font-size: 13px;
   line-height: 1.65;
@@ -240,7 +240,7 @@ function backToEdit() {
 }
 
 .tc-area::placeholder {
-  color: #94a3b8;
+  color: var(--nc-text-faint);
   opacity: 0.8;
 }
 
@@ -249,8 +249,8 @@ function backToEdit() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--nc-surface-solid);
+  border: 1px solid var(--nc-border-strong);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -258,8 +258,8 @@ function backToEdit() {
 .tc-compare-head {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  border-bottom: 1px solid #eef2f7;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--nc-border);
+  background: var(--nc-surface-2);
   padding-left: 10px;
   padding-right: 10px;
 }
@@ -268,7 +268,7 @@ function backToEdit() {
   padding: 8px 8px;
   font-size: 12.5px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--nc-text-dim);
   letter-spacing: 0.02em;
 }
 
@@ -282,7 +282,7 @@ function backToEdit() {
   padding: 10px;
   font-size: 12.5px;
   line-height: 1.7;
-  color: #334155;
+  color: var(--nc-text);
 }
 
 .tc-table {
@@ -314,7 +314,7 @@ function backToEdit() {
   min-width: 34px;
   margin-right: 10px;
   text-align: right;
-  color: #cbd5e1;
+  color: var(--nc-text-faint);
   font-size: 11.5px;
   line-height: inherit;
   user-select: none;
@@ -331,12 +331,12 @@ function backToEdit() {
 /* 不一致行：左红右绿 */
 .tc-added {
   background: color-mix(in srgb, #22c55e 18%, transparent);
-  color: #14532d;
+  color: var(--nc-text);
 }
 
 .tc-removed {
   background: color-mix(in srgb, #ef4444 16%, transparent);
-  color: #7f1d1d;
+  color: var(--nc-text);
 }
 
 .tc-none {
