@@ -13,6 +13,7 @@ import { http } from '@/api/http'
 import { kernel } from '@/kernel'
 import { copyText } from '@/utils/clipboard'
 import { highlightJson } from './jsonHighlight'
+import { prettyJson } from './prettyJson'
 
 const { t } = useI18n()
 const TOOL_KEY = 'kafka-explorer'
@@ -212,9 +213,10 @@ function openDetail(which: 'key' | 'value', rec: KfRecord) {
   dialogTitle.value = `${which} · p${rec.partition}/o${rec.offset}`
   dialogRaw.value = text
   try {
-    const parsed: unknown = JSON.parse(text)
-    dialogPretty.value = JSON.stringify(parsed, null, 2)
-    dialogHtml.value = highlightJson(dialogPretty.value)
+    // 美化按原文逐字保留（0.000000000000000000 不被 double 归一化为 0；非法 JSON 时抛错 → 下方原样回退）
+    const pretty = prettyJson(text)
+    dialogPretty.value = pretty
+    dialogHtml.value = highlightJson(pretty)
     dialogIsJson.value = true
   } catch {
     dialogPretty.value = text
