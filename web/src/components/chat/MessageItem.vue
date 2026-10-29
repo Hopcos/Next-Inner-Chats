@@ -1082,12 +1082,12 @@ function prettyArgs(raw?: string): string {
 -->
 <style>
 /* 行距唯一事实源 = .md 容器（继承给所有子元素），子元素不再单独设 line-height；
-   1.5 兼顾密度与可读性（原 1.1 对中文段落过紧）；
+   在原 1.5 基础上加大 30% 到 1.95，提升长段落与列表文本的呼吸感与可读性；
    white-space 必须设为 normal，重置继承自外层 .bubble 的 pre-wrap，
    避免 Markdown 渲染生成的 HTML 块级标签之间的空白换行符（如 </p>\n<p>、</li>\n<li>）被渲染成额外的空行，导致行距异常过大。 */
 .md {
   white-space: normal;
-  line-height: 1.5 !important;
+  line-height: 1.95 !important;
   font-size: 14px;
   color: var(--nc-text);
 }
