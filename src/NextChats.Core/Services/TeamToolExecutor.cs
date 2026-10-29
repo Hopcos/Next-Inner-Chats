@@ -56,6 +56,7 @@ public sealed class TeamToolExecutor
     private readonly IWorkspaceSandbox _workspaces;
     private readonly IAuditLogger _audit;
     private readonly IOptions<BuiltinToolOptions> _builtinOptions;
+    private readonly IChatImageStorage? _imageStorage;
     private readonly ILogger<TeamToolExecutor> _logger;
 
     public TeamToolExecutor(
@@ -65,7 +66,8 @@ public sealed class TeamToolExecutor
         IWorkspaceSandbox workspaces,
         IAuditLogger audit,
         IOptions<BuiltinToolOptions> builtinOptions,
-        ILogger<TeamToolExecutor> logger)
+        ILogger<TeamToolExecutor> logger,
+        IChatImageStorage? imageStorage = null)
     {
         _config = config;
         _mcp = mcp;
@@ -73,6 +75,7 @@ public sealed class TeamToolExecutor
         _workspaces = workspaces;
         _audit = audit;
         _builtinOptions = builtinOptions;
+        _imageStorage = imageStorage;
         _logger = logger;
     }
 
@@ -157,6 +160,9 @@ public sealed class TeamToolExecutor
         IReadOnlyList<McpServer> servers, IReadOnlyDictionary<string, Skill> skillByName,
         string traceId, string lang, CancellationToken ct)
     {
+        // 自动解析图片引用为 Base64 Data URI
+        args = SessionImageResolver.RewriteToolArguments(args, [], _imageStorage);
+
         if (tool.IsSkill)
         {
             if (!skillByName.TryGetValue(tool.Name, out var skill))

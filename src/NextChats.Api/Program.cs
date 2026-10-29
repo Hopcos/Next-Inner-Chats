@@ -93,7 +93,8 @@ builder.Services.AddCors(o => o.AddPolicy("web", p =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddScoped<NextChats.Api.Services.ChatImageStorage>();
+builder.Services.AddSingleton<NextChats.Api.Services.ChatImageStorage>();
+builder.Services.AddSingleton<NextChats.Core.Abstractions.IChatImageStorage>(sp => sp.GetRequiredService<NextChats.Api.Services.ChatImageStorage>());
 
 var app = builder.Build();
 

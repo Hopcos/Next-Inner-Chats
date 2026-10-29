@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using NextChats.Core.Abstractions;
 
 namespace NextChats.Api.Services;
 
@@ -9,7 +10,7 @@ namespace NextChats.Api.Services;
 /// </summary>
 public sealed class ChatImageStorage(
     Microsoft.AspNetCore.Hosting.IWebHostEnvironment env,
-    ILogger<ChatImageStorage> logger)
+    ILogger<ChatImageStorage> logger) : IChatImageStorage
 {
     private string Root => Path.Combine(env.ContentRootPath, "uploads", "chat");
 

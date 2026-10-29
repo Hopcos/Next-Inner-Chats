@@ -85,6 +85,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
     private readonly IOptions<ToolTraceOptions> _toolTraceOptions;
     private readonly ILlmRouter _router;
     private readonly IWorkspaceSandbox _workspaces;
+    private readonly IChatImageStorage? _imageStorage;
     private readonly ILogger _logger;
 
     /// <summary>http_fetch 专用 HttpClient（禁用自动重定向 —— 手动跟随并逐跳校验白名单，防 SSRF）</summary>
@@ -110,7 +111,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         IOptions<ToolTraceOptions> toolTraceOptions,
         ILlmRouter router,
         IWorkspaceSandbox workspaces,
-        ILogger<ChatOrchestrator> logger)
+        ILogger<ChatOrchestrator> logger,
+        IChatImageStorage? imageStorage = null)
     {
         _config = config;
         _chat = chat;
@@ -128,6 +130,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         _toolTraceOptions = toolTraceOptions;
         _router = router;
         _workspaces = workspaces;
+        _imageStorage = imageStorage;
         _logger = logger;
     }
 
@@ -500,10 +503,17 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             _logger.LogInformation("[Orchestrator] workspace guide trace={Trace} ws={Ws} agentsMd={Loaded} chars={Chars}",
                 trace, wsCtx.Name, wsGuide is not null, wsGuide?.Length ?? 0);
         }
+
+        // ---------- 会话历史（按用户隔离）与会话图片附件收集 ----------
+        var history = await _chat.ListMessagesAsync(request.UserId, session.Id, ct);
+        var sessionImages = SessionImageResolver.CollectSessionImages(history, userMessage.AttachmentsJson ?? request.AttachmentsJson, request.Images);
+        if (SessionImageResolver.BuildPromptBlock(sessionImages, lang) is { } imgPromptBlock)
+        {
+            systemBlocks.Add(imgPromptBlock);
+        }
+
         var systemPrompt = string.Join("\n\n---\n\n", systemBlocks);
 
-        // ---------- 会话历史（按用户隔离） ----------
-        var history = await _chat.ListMessagesAsync(request.UserId, session.Id, ct);
         var llmHistory = history
             .Where(m => m.Id != userMessage.Id && m.Role is ChatRole.User or ChatRole.Assistant && !string.IsNullOrWhiteSpace(m.Content))
             .TakeLast(40)
@@ -582,7 +592,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             // 思考模式：前端全局开关（默认启用）+ 强度（默认 high）；映射在客户端统一执行
             ThinkingEnabled = request.ThinkingEnabled ?? true,
             ThinkingEffort = ParseEffort(request.ThinkingEffort) ?? NextChats.Core.Domain.LlmThinkingEffort.High,
-            ToolExecutor = (tool, args, t, tct) => ExecuteToolAsync(tool, args, t, tct, request2, servers, skillByName, lang, subAgentModelId, wsCtx),
+            ToolExecutor = (tool, args, t, tct) => ExecuteToolAsync(tool, args, t, tct, request2, servers, skillByName, lang, subAgentModelId, wsCtx, sessionImages),
         };
 
         // ---------- 主-从委派启动前拆解（Planner）：可拆时首轮自动并行 delegate_task，不依赖模型自觉 ----------
@@ -839,8 +849,12 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
     /// <summary>统一工具执行器：Skill 元工具 → SkillExecutionEngine；MCP 工具 → IMcpDriver；内置工具 → 本地执行器</summary>
     private async Task<McpToolResult> ExecuteToolAsync(UnifiedTool tool, string? args, string traceId, CancellationToken ct,
-        AgentRunRequest request, IReadOnlyList<McpServer> servers, Dictionary<string, Skill> skillByName, string lang, Guid? subAgentModelId, WsContext? wsCtx = null)
+        AgentRunRequest request, IReadOnlyList<McpServer> servers, Dictionary<string, Skill> skillByName, string lang, Guid? subAgentModelId, WsContext? wsCtx = null,
+        IReadOnlyList<SessionImageAttachment>? sessionImages = null)
     {
+        // 自动解析图片引用（如 attachment:1 或相对路径）为标准 Base64 Data URI，确保远程/跨机 MCP 服务正常获取图片数据
+        args = SessionImageResolver.RewriteToolArguments(args, sessionImages ?? [], _imageStorage);
+
         if (tool.IsSkill)
         {
             if (!skillByName.TryGetValue(tool.Name, out var skill))
@@ -858,8 +872,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             {
                 HttpFetchToolName => await ExecuteHttpFetchAsync(args, traceId, lang, ct),
                 McpPromptToolName => await ExecuteMcpPromptAsync(args, servers, traceId, lang, ct),
-                McpResourcesToolName => await ExecuteMcpResourcesAsync(args, servers, traceId, lang, ct),
-                McpReadResourceToolName => await ExecuteMcpReadResourceAsync(args, servers, traceId, lang, ct),
+                McpResourcesToolName => await ExecuteMcpResourcesAsync(args, servers, sessionImages ?? [], traceId, lang, ct),
+                McpReadResourceToolName => await ExecuteMcpReadResourceAsync(args, servers, sessionImages ?? [], traceId, lang, ct),
                 DelegateTaskToolName => await ExecuteDelegateTaskAsync(args, request, subAgentModelId, traceId, lang, ct),
                 // 工作空间工具：仅当会话绑定工作空间且已注入时可用；每次执行重校验角色绑定（权限即时生效）
                 _ when wsCtx is not null && IsWorkspaceTool(tool.Name)
@@ -1233,13 +1247,21 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         return new McpToolResult(false, "", Texts.Get("MCP_PROMPT_NOT_FOUND", lang, name, target), "MCP_PROMPT_NOT_FOUND", (int)sw.ElapsedMilliseconds, 1);
     }
 
-    private async Task<McpToolResult> ExecuteMcpResourcesAsync(string? args, IReadOnlyList<McpServer> servers, string traceId, string lang, CancellationToken ct)
+    private async Task<McpToolResult> ExecuteMcpResourcesAsync(string? args, IReadOnlyList<McpServer> servers, IReadOnlyList<SessionImageAttachment> sessionImages, string traceId, string lang, CancellationToken ct)
     {
         var (_, serverName, _, _) = ParseMcpToolArgs(args);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var (candidates, errKey) = PickMcpServers(servers, serverName, lang);
-        if (errKey is not null) return new McpToolResult(false, "", errKey, "MCP_SERVER_NOT_FOUND", 0, 1);
+        if (errKey is not null && !string.Equals(serverName, "session", StringComparison.OrdinalIgnoreCase) && !string.Equals(serverName, "attachment", StringComparison.OrdinalIgnoreCase))
+            return new McpToolResult(false, "", errKey, "MCP_SERVER_NOT_FOUND", 0, 1);
         var sb = new System.Text.StringBuilder();
+
+        // 包含会话上传图片附件（若未限定非 session 服务器）
+        if ((string.IsNullOrWhiteSpace(serverName) || string.Equals(serverName, "session", StringComparison.OrdinalIgnoreCase) || string.Equals(serverName, "attachment", StringComparison.OrdinalIgnoreCase)) && sessionImages.Count > 0)
+        {
+            sb.AppendLine(SessionImageResolver.FormatResourcesListing(sessionImages));
+        }
+
         foreach (var s in candidates)
         {
             try
@@ -1258,13 +1280,20 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         return new McpToolResult(true, sb.ToString().TrimEnd(), null, null, (int)sw.ElapsedMilliseconds, 1);
     }
 
-    private async Task<McpToolResult> ExecuteMcpReadResourceAsync(string? args, IReadOnlyList<McpServer> servers, string traceId, string lang, CancellationToken ct)
+    private async Task<McpToolResult> ExecuteMcpReadResourceAsync(string? args, IReadOnlyList<McpServer> servers, IReadOnlyList<SessionImageAttachment> sessionImages, string traceId, string lang, CancellationToken ct)
     {
         var (_, serverName, uri, _) = ParseMcpToolArgs(args);
         if (string.IsNullOrWhiteSpace(uri))
         {
             return new McpToolResult(false, "", Texts.Get("MCP_RESOURCE_NEED_URI", lang), "MCP_RESOURCE_NEED_URI", 0, 1);
         }
+
+        // 检查是否为会话图片附件资源
+        if (SessionImageResolver.ReadResourceDescription(uri, sessionImages) is { } sessionResourceDesc)
+        {
+            return new McpToolResult(true, $"[session-attachment]\n{sessionResourceDesc}", null, null, 1, 1);
+        }
+
         var maxChars = Math.Max(2_000, _builtinOptions.Value.HttpFetchMaxChars);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var (candidates, errKey) = PickMcpServers(servers, serverName, lang);
