@@ -10,7 +10,7 @@ namespace NextChats.Api.Controllers;
 [Route("api/admin/tools")]
 public sealed class AdminToolController(IAdminStore store, IConfigStore config, IAuditLogger audit, ISecurityService security) : AdminControllerBase
 {
-    public sealed record ToolInput(string ToolKey, string Name, string? Icon, string? Description, string? BaseUrl, string? HeadersJson, bool Enabled, Guid[]? RoleIds);
+    public sealed record ToolInput(string ToolKey, string Name, string? Icon, string? Description, string? BaseUrl, string? HeadersJson, bool Enabled, int SortOrder, Guid[]? RoleIds);
 
     /// <summary>http_fetch 白名单请求体（域名数组；自动规范化：trim / 去前导 * . / 小写 / 去重）</summary>
     public sealed record HttpFetchAllowHostsInput(string[]? AllowHosts);
@@ -21,7 +21,7 @@ public sealed class AdminToolController(IAdminStore store, IConfigStore config, 
         var tools = await store.ListToolsAsync();
         return Ok(tools.Select(x => new
         {
-            x.Id, x.ToolKey, x.Name, x.Icon, x.Description, x.BaseUrl, x.Enabled, x.CreatedAt, x.UpdatedAt,
+            x.Id, x.ToolKey, x.Name, x.Icon, x.Description, x.BaseUrl, x.SortOrder, x.Enabled, x.CreatedAt, x.UpdatedAt,
             // 授权头含敏感值：展示时解密后整体脱敏（仅管理端可见掩码，不落地明文）
             headersMasked = x.IsHeadersEncrypted ? LogSanitizer.MaskHeaders(security.DecryptSecret(x.HeadersJson!)) : LogSanitizer.MaskHeaders(x.HeadersJson),
             roleIds = x.AllowedRoles.Select(r => r.Id).ToList(),
@@ -41,9 +41,9 @@ public sealed class AdminToolController(IAdminStore store, IConfigStore config, 
             string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
             string.IsNullOrWhiteSpace(input.BaseUrl) ? null : input.BaseUrl.Trim(),
             headersJson, headersEncrypted,
-            input.Enabled, input.RoleIds ?? [], HttpContext.RequestAborted);
+            input.Enabled, input.SortOrder, input.RoleIds ?? [], HttpContext.RequestAborted);
         await audit.RecordAsync(AuditCategory.Admin, "TOOL.CREATE", $"trc_{Guid.NewGuid():N}"[..24], UserId,
-            detail: new { toolKey = saved.ToolKey, name = saved.Name });
+            detail: new { toolKey = saved.ToolKey, name = saved.Name, sortOrder = saved.SortOrder });
         return Ok(saved.Id);
     }
 
@@ -67,9 +67,9 @@ public sealed class AdminToolController(IAdminStore store, IConfigStore config, 
                 string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
                 string.IsNullOrWhiteSpace(input.BaseUrl) ? null : input.BaseUrl.Trim(),
                 headersJson, headersEncrypted,
-                input.Enabled, input.RoleIds ?? [], HttpContext.RequestAborted);
+                input.Enabled, input.SortOrder, input.RoleIds ?? [], HttpContext.RequestAborted);
             await audit.RecordAsync(AuditCategory.Admin, "TOOL.UPDATE", $"trc_{Guid.NewGuid():N}"[..24], UserId,
-                detail: new { toolKey = input.ToolKey.Trim() });
+                detail: new { toolKey = input.ToolKey.Trim(), sortOrder = input.SortOrder });
             return NoContent();
         }
         catch (KeyNotFoundException)

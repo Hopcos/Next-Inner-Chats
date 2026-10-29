@@ -27,6 +27,7 @@ interface AdminToolDto {
   icon: string
   description?: string | null
   baseUrl?: string | null
+  sortOrder: number
   /** 授权头脱敏摘要（如 {"authorization":"B***jU"}；未配置为 null） */
   headersMasked?: string | null
   enabled: boolean
@@ -59,6 +60,7 @@ const emptyForm = () => ({
   description: '',
   baseUrl: '',
   headersJson: '',
+  sortOrder: 0,
   enabled: true,
   roleIds: [] as string[],
 })
@@ -99,6 +101,7 @@ function openEdit(row: AdminToolDto) {
     name: row.name,
     description: row.description ?? '',
     baseUrl: row.baseUrl ?? '',
+    sortOrder: row.sortOrder ?? 0,
     // 授权头不回显明文（加密存储 + 脱敏展示）：留空 = 保持不变，重新填写 = 整体替换
     headersJson: '',
     enabled: row.enabled,
@@ -140,6 +143,7 @@ async function onSave() {
       icon: form.icon,
       description: form.description.trim() || null,
       baseUrl: form.baseUrl.trim() || null,
+      sortOrder: Number.isFinite(form.sortOrder) ? form.sortOrder : 0,
       // 授权头：编辑时留空 = 后端保持原值；创建时留空 = 不配置
       headersJson: hdr || undefined,
       enabled: form.enabled,
@@ -225,6 +229,7 @@ async function saveFetchHosts() {
         <template #default="{ row }"><code class="key">{{ row.toolKey }}</code></template>
       </el-table-column>
       <el-table-column prop="name" :label="t('admin.tools.name')" width="150" />
+      <el-table-column prop="sortOrder" :label="t('admin.tools.sortOrder')" width="80" align="center" />
       <el-table-column prop="description" :label="t('admin.tools.description')" min-width="200" show-overflow-tooltip />
       <el-table-column prop="baseUrl" :label="t('admin.tools.endpoint')" min-width="180" show-overflow-tooltip />
       <el-table-column :label="t('admin.tools.headers')" min-width="170" show-overflow-tooltip>
@@ -284,6 +289,11 @@ async function saveFetchHosts() {
 
         <el-form-item :label="t('admin.tools.name')">
           <el-input v-model="form.name" maxlength="64" />
+        </el-form-item>
+
+        <el-form-item :label="t('admin.tools.sortOrder')">
+          <el-input-number v-model="form.sortOrder" :step="1" style="width: 160px" />
+          <div class="field-tip">{{ t('admin.tools.sortOrderTip') }}</div>
         </el-form-item>
 
         <el-form-item :label="t('admin.tools.description')">

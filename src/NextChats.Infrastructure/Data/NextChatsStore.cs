@@ -1195,7 +1195,8 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         await using var db = await _db.CreateDbContextAsync(ct);
         return await db.Tools.AsNoTracking()
             .Include(t => t.AllowedRoles)
-            .OrderBy(t => t.CreatedAt)
+            .OrderByDescending(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
     }
 
@@ -1207,7 +1208,7 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
             .FirstOrDefaultAsync(t => t.ToolKey == toolKey, ct);
     }
 
-    public async Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, string? headersJson, bool headersEncrypted, bool enabled, Guid[] roleIds, CancellationToken ct = default)
+    public async Task<AppTool> SaveToolAsync(Guid id, string toolKey, string name, string icon, string? description, string? baseUrl, string? headersJson, bool headersEncrypted, bool enabled, int sortOrder, Guid[] roleIds, CancellationToken ct = default)
     {
         await using var db = await _db.CreateDbContextAsync(ct);
         AppTool tool;
@@ -1233,6 +1234,7 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         tool.BaseUrl = baseUrl;
         tool.HeadersJson = headersJson;
         tool.IsHeadersEncrypted = headersEncrypted;
+        tool.SortOrder = sortOrder;
         tool.Enabled = enabled;
         tool.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -1257,7 +1259,8 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         var all = await db.Tools.AsNoTracking()
             .Include(t => t.AllowedRoles)
             .Where(t => t.Enabled)
-            .OrderBy(t => t.CreatedAt)
+            .OrderByDescending(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
         if (isAdmin) return all;
         // 普通用户：仅显示绑定了其任一角色的工具（未绑定 = 不可见）

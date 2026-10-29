@@ -18,6 +18,7 @@ interface UserToolDto {
   name: string
   icon: string
   description?: string | null
+  sortOrder?: number
 }
 
 const { t } = useI18n()

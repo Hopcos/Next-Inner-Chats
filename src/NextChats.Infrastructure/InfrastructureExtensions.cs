@@ -95,6 +95,8 @@ public static class InfrastructureExtensions
             // AppTools 外部 API 请求头（JSON 对象，整体 AES-GCM 加密落库；代理转发时解密附加）
             await AddColumnIfMissingAsync(conn, "AppTools", "HeadersJson", "TEXT");
             await AddColumnIfMissingAsync(conn, "AppTools", "IsHeadersEncrypted", "INTEGER NOT NULL DEFAULT 0");
+            // AppTools 排序序号（数字越大越靠前，降序）
+            await AddColumnIfMissingAsync(conn, "AppTools", "SortOrder", "INTEGER NOT NULL DEFAULT 0");
             // ChatSessions 置顶（聊天气泡内会话置顶区域）
             await AddColumnIfMissingAsync(conn, "ChatSessions", "IsPinned", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatSessions", "PinnedAt", "TEXT");

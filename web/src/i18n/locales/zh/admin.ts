@@ -209,6 +209,8 @@ export default {
       icon: '图标',
       name: '显示名称',
       description: '描述',
+      sortOrder: '序号',
+      sortOrderTip: '排序序号，支持负数与大数；后台与前台均按序号从大到小（降序）排列，序号相同时按创建时间先后排列。',
       endpoint: 'API Endpoint',
       endpointTip: '工具需要的外部 API 基础地址（如 Kafka Explorer 的 kafka-mcp 端点 http://10.14.6.49:6523/、K8S Explorer 的 k8s-mcp 端点 http://10.14.6.49:6527/、Kafka Producer 的 kafka-producer 端点 http://localhost:8080/）；不需要外部接口的工具可留空。',
       headers: '授权头 (JSON)',

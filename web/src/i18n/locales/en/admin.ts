@@ -209,6 +209,8 @@ export default {
       icon: 'Icon',
       name: 'Display Name',
       description: 'Description',
+      sortOrder: 'Order',
+      sortOrderTip: 'Sorting order number; tools in both admin and user hub are sorted in descending order (highest first). When order numbers are identical, tools are sorted by creation time.',
       endpoint: 'API Endpoint',
       endpointTip: 'External API base URL the tool needs (e.g. the kafka-mcp endpoint http://10.14.6.49:6523/ for Kafka Explorer, the k8s-mcp endpoint http://10.14.6.49:6527/ for K8S Explorer, the kafka-producer endpoint http://localhost:8080/ for Kafka Producer); leave empty when not needed.',
       headers: 'Auth Headers (JSON)',

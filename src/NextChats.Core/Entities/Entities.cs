@@ -184,6 +184,9 @@ public class AppTool
     /// <summary>HeadersJson 是否已整体加密（AES-GCM 落库，使用时解密）</summary>
     public bool IsHeadersEncrypted { get; set; }
 
+    /// <summary>排序序号（数字越大越靠前，降序排列）</summary>
+    public int SortOrder { get; set; } = 0;
+
     public bool Enabled { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
