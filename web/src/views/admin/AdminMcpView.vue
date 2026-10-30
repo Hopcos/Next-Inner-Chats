@@ -48,7 +48,7 @@ function openCreate() {
   dialogOpen.value = true
 }
 
-function openEdit(row: McpServerDto) {
+async function openEdit(row: McpServerDto) {
   editingId.value = row.id
   Object.assign(form, {
     name: row.name, transport: row.transport, endpoint: row.endpoint ?? '', headersJson: '',
@@ -56,6 +56,17 @@ function openEdit(row: McpServerDto) {
     instructions: row.instructions ?? '',
   })
   dialogOpen.value = true
+  try {
+    const detail = await http.get<McpServerDto>(`/api/admin/mcp-servers/${row.id}`)
+    if (editingId.value === row.id) {
+      if (detail.stdioCommand !== undefined) form.stdioCommand = detail.stdioCommand ?? ''
+      if (detail.stdioArgsJson !== undefined) form.stdioArgsJson = detail.stdioArgsJson ?? ''
+      if (detail.endpoint !== undefined && !form.endpoint) form.endpoint = detail.endpoint ?? ''
+      if (detail.instructions !== undefined && !form.instructions) form.instructions = detail.instructions ?? ''
+    }
+  } catch {
+    // 忽略详情网络异常，已优先使用列表行数据
+  }
 }
 
 async function save() {
@@ -229,7 +240,7 @@ onMounted(load)
       <el-table-column prop="name" :label="t('common.name')" width="150" />
       <el-table-column prop="transport" :label="t('admin.mcp.transport')" width="90" />
       <el-table-column :label="t('admin.mcp.endpoint')" min-width="180">
-        <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.endpoint || row.stdioCommand || t('common.placeholderDash') }}</span></template>
+        <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.transport === 'Stdio' ? (row.stdioCommand || row.stdioArgsJson || t('common.placeholderDash')) : (row.endpoint || t('common.placeholderDash')) }}</span></template>
       </el-table-column>
       <el-table-column :label="t('admin.mcp.headers')" width="120">
         <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.headersMasked || t('common.placeholderDash') }}</span></template>
@@ -272,10 +283,10 @@ onMounted(load)
         <el-form-item v-if="form.transport === 'Http'" :label="t('admin.mcp.headersJson')">
           <el-input v-model="form.headersJson" type="textarea" :rows="3" placeholder='{"Authorization": "Bearer xxx"}' />
         </el-form-item>
-        <el-form-item v-if="form.transport === 'Stdio'" :label="t('admin.mcp.command')">
+        <el-form-item :label="t('admin.mcp.command')">
           <el-input v-model="form.stdioCommand" placeholder="node /path/to/server.js" />
         </el-form-item>
-        <el-form-item v-if="form.transport === 'Stdio'" :label="t('admin.mcp.argsJson')">
+        <el-form-item :label="t('admin.mcp.argsJson')">
           <el-input v-model="form.stdioArgsJson" type="textarea" :rows="2" placeholder='["--flag"]' />
         </el-form-item>
         <el-form-item :label="t('admin.mcp.timeoutSeconds')"><el-input-number v-model="form.timeoutSeconds" :min="5" :max="600" /></el-form-item>

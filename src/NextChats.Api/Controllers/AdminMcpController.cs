@@ -24,9 +24,11 @@ public sealed class AdminMcpController(IAdminStore store, IMcpDriver driver, ISe
         var list = await store.ListMcpServersAsync(includeItems: true);
         return Ok(list.Select(m => new
         {
-            m.Id, m.Name, transport = m.Transport.ToString(), endpoint = LogSanitizer.MaskUri(m.Endpoint),
+            m.Id, m.Name, transport = m.Transport.ToString(),
+            endpoint = m.Transport == McpTransportType.Stdio ? null : LogSanitizer.MaskUri(m.Endpoint),
             headersMasked = m.IsHeadersEncrypted ? LogSanitizer.MaskHeaders(security.DecryptSecret(m.HeadersJson!)) : LogSanitizer.MaskHeaders(m.HeadersJson),
             m.Enabled, m.IsVision, m.TimeoutSeconds, m.Description, m.Instructions, m.MetadataJson, m.LastError, m.LastFetchedAt,
+            m.StdioCommand, m.StdioArgsJson,
             toolCount = m.Items.Count(i => i.Kind == McpItemKind.Tool),
             promptCount = m.Items.Count(i => i.Kind == McpItemKind.Prompt),
             resourceCount = m.Items.Count(i => i.Kind == McpItemKind.Resource),
@@ -41,7 +43,8 @@ public sealed class AdminMcpController(IAdminStore store, IMcpDriver driver, ISe
         if (m is null) return NotFound(Err("MCP_SERVER_NOT_FOUND"));
         return Ok(new
         {
-            m.Id, m.Name, transport = m.Transport.ToString(), endpoint = LogSanitizer.MaskUri(m.Endpoint),
+            m.Id, m.Name, transport = m.Transport.ToString(),
+            endpoint = m.Transport == McpTransportType.Stdio ? null : LogSanitizer.MaskUri(m.Endpoint),
             headersMasked = m.IsHeadersEncrypted ? LogSanitizer.MaskHeaders(security.DecryptSecret(m.HeadersJson!)) : LogSanitizer.MaskHeaders(m.HeadersJson),
             m.Enabled, m.IsVision, m.TimeoutSeconds, m.Description, m.Instructions, m.MetadataJson, m.LastError, m.LastFetchedAt,
             m.StdioCommand, m.StdioArgsJson,
