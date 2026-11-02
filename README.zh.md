@@ -346,6 +346,39 @@ cd web && npm install && npm run dev
 # 打开 http://localhost:5173 （种子管理员：admin / admin123）
 ```
 
+### 运行已编译 DLL 与指定端口
+
+不走 IIS、也不用 `dotnet run`，直接运行已编译程序集时，监听地址由 `--urls` 决定：
+
+```powershell
+dotnet NextChats.Api.dll --urls "http://*:6500"
+```
+
+| 端口来源 | 示例 | 优先级 |
+|---|---|---|
+| 命令行 `--urls` | `dotnet NextChats.Api.dll --urls "http://*:6500"` | 最高 |
+| `ASPNETCORE_URLS` 环境变量 | `$env:ASPNETCORE_URLS="http://*:6500"` | 中 |
+| `launchSettings.json` 的 `applicationUrl` | 仅 `dotnet run` 生效（本仓库：53803 / 53805） | — |
+| `appsettings.json` 根级 `"Urls"` 或 `Kestrel:Endpoints` | 长期默认 | 低 |
+| Kestrel 默认值 | `http://localhost:5000` | 最低 |
+
+**`localhost` 只绑定回环网卡。** `--urls "http://localhost:6500"` 实际只监听 `127.0.0.1` / `::1`，所以用 `http://<主机名>:6500/`（解析到网卡地址，如 `10.0.5.179`）访问会直接得到 `net::ERR_CONNECTION_REFUSED`；页面外壳可能因浏览器缓存先显示出来，随后在未缓存的资源上报 `Unable to preload CSS for /assets/...`。此时应改为监听所有网卡：
+
+```powershell
+dotnet NextChats.Api.dll --urls "http://*:6500"        # 双栈：IPv6 + IPv4
+dotnet NextChats.Api.dll --urls "http://0.0.0.0:6500"  # 仅 IPv4
+dotnet NextChats.Api.dll --urls "http://[::]:6500"     # IPv6 双栈
+```
+
+验证监听地址是 `0.0.0.0` / `::`（而不是 `127.0.0.1` / `::1`），且主机名可访问：
+
+```powershell
+Get-NetTCPConnection -LocalPort 6500 | Select-Object LocalAddress, State
+curl.exe -s -o NUL -w "%{http_code}" "http://<主机名>:6500/"
+```
+
+另外请把工作目录设为程序集所在目录（`appsettings.json` 与 SQLite 路径 `data/nextchats.db` 都是相对路径）；同一端口只能有一个监听者 —— IIS 站点仍在监听时需先停止站点。IIS 默认绑定所有地址，这正是同一主机名 URL 在 IIS 下正常、而 `--urls "http://localhost:6500"` 下失败的原因。
+
 ## Docker 部署
 
 镜像同时打包了 Vue 前端与 .NET API：由 API 直接托管前端页面，所以 **一个容器 = 完整产品**（界面 + API，端口 8080）。数据保存在命名卷里（SQLite 数据库、聊天附件、日志）。

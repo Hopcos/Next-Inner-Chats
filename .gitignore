@@ -42,5 +42,7 @@ Thumbs.db
 .probe/
 nc-*.mjs
 *.bak
+# Playwright MCP session artifacts (page snapshots / console logs / screenshots)
+.playwright-mcp/
 # headless 浏览器临时数据目录（Edge CDP 探测）
 web/scripts/.edge-*/

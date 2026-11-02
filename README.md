@@ -346,6 +346,39 @@ cd web && npm install && npm run dev
 # Open http://localhost:5173  (seeded admin: admin / admin123)
 ```
 
+### Running the built DLL and choosing the port
+
+Running the published assembly directly (no IIS, no `dotnet run`) means the listening address comes from `--urls`:
+
+```powershell
+dotnet NextChats.Api.dll --urls "http://*:6500"
+```
+
+| Port source | Example | Priority |
+|---|---|---|
+| Command line `--urls` | `dotnet NextChats.Api.dll --urls "http://*:6500"` | highest |
+| `ASPNETCORE_URLS` env var | `$env:ASPNETCORE_URLS="http://*:6500"` | middle |
+| `launchSettings.json` → `applicationUrl` | only applies to `dotnet run` (this repo: 53803 / 53805) | — |
+| `appsettings.json` → root `"Urls"` or `Kestrel:Endpoints` | persistent default | low |
+| Kestrel default | `http://localhost:5000` | lowest |
+
+**`localhost` binds the loopback adapter only.** `--urls "http://localhost:6500"` listens on `127.0.0.1` / `::1`, so `http://<hostname>:6500/` (which resolves to a NIC address, e.g. `10.0.5.179`) is answered with `net::ERR_CONNECTION_REFUSED`. The SPA shell may still render from browser cache and then fail on uncached assets (`Unable to preload CSS for /assets/...`). Bind all interfaces instead:
+
+```powershell
+dotnet NextChats.Api.dll --urls "http://*:6500"        # dual-stack: IPv6 + IPv4
+dotnet NextChats.Api.dll --urls "http://0.0.0.0:6500"  # IPv4 only
+dotnet NextChats.Api.dll --urls "http://[::]:6500"     # IPv6 dual-stack
+```
+
+Verify the listener is `0.0.0.0` / `::` (not `127.0.0.1` / `::1`) and that the hostname answers:
+
+```powershell
+Get-NetTCPConnection -LocalPort 6500 | Select-Object LocalAddress, State
+curl.exe -s -o NUL -w "%{http_code}" "http://<hostname>:6500/"
+```
+
+Run the DLL from its own directory (`appsettings.json` and the SQLite path `data/nextchats.db` are relative), and only one process can own a port — stop the IIS site first if it is still bound to the same port. IIS binds all addresses by default, which is exactly why the same hostname URL works under IIS but fails with `--urls "http://localhost:6500"`.
+
 ## Docker Deployment
 
 The image bundles the Vue frontend and the .NET API: the API serves the SPA itself, so **one container = the whole product** (UI + API on port 8080). State lives in named volumes (SQLite DB, chat attachments, logs).
