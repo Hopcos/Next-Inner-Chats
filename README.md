@@ -440,6 +440,8 @@ docker run --rm -v next-chats_next-chats-data:/d -v "$PWD":/b busybox tar czf /b
 
 If a reverse proxy such as nginx sits in front, allow `PUT` / `DELETE` (and forward the `Authorization` header and set `proxy_buffering off` for SSE as needed).
 
+**Browser automation (Playwright MCP):** the MCP server spawns a **headed** browser in the session of its own process. Run the API standalone (`dotnet NextChats.Api.dll ...`) from the logged-on user's desktop session so the window is visible and login-protected sites can be signed in manually. Under IIS (`w3wp`) the API lives in Session 0, whose GUI is isolated from the desktop — the browser still works, but its window is never visible to the user.
+
 ## Core Design
 
 ### Authentication (default accounts + internal auth)
