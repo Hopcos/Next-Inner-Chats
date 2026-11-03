@@ -14,7 +14,11 @@ let tick: ((t: number, dt: number) => void) | null = null
 /** 场景内需要释放的资源 */
 const disposables: Array<{ dispose: () => void }> = []
 
-const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+/**
+ * 3D 背景是否运动，只由聊天设置里的“3D 背景”开关决定（关闭时整个场景销毁）。
+ * 不再按系统 prefers-reduced-motion 静默冻结 tick：浏览器窗口可见时画面却“卡住不动”，
+ * 很容易被误认为故障（CSS 层的闪烁/网格动效仍由 base.css 的 reduce 规则负责）。
+ */
 
 const themeColor = () => {
   const theme = kernel.theme.state.theme
@@ -224,7 +228,7 @@ function build() {
     // 后台标签页恢复时 dt 可能极大，钳制防跳帧
     const dt = Math.min((now - last) / 1000, 0.1)
     last = now
-    if (!reduceMotion) tick?.(now / 1000, dt)
+    tick?.(now / 1000, dt)
     renderer?.render(scene!, camera!)
   }
   animate()
