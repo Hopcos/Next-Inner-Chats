@@ -442,6 +442,8 @@ docker run --rm -v next-chats_next-chats-data:/d -v "$PWD":/b busybox tar czf /b
 
 **浏览器自动化（Playwright MCP）：** MCP 会在**自身进程所在的会话**中启动一个**有界面**的浏览器。请以桌面登录用户身份直接运行 API（`dotnet NextChats.Api.dll ...`），这样窗口可见、需要登录的站点可以手动登录；若由 IIS（`w3wp`）承载，API 处于 Session 0，其 GUI 对桌面隔离 —— 浏览器仍能工作，但窗口对桌面用户不可见。
 
+只要存在浏览器工具，服务端会在 system 提示中注入内置的「浏览器工作流」指南：收到 URL 后立即打开页面（不先索要 Cookie/Token），保持有界面浏览器窗口不关闭；若页面跳转到登录/SSO 墙，则先提示用户在已打开的窗口中登录，并在同一回合内用 `browser_wait_for` + 复检持续轮询（最长约 10 分钟），登录成功后自动继续抓取，用户无需重复提问。该指南不依赖所选提示词（即使选择「不使用提示词」也会注入）。
+
 ## 核心设计
 
 ### 认证（default 账号 + 内部鉴权）

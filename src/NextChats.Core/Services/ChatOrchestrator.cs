@@ -487,6 +487,14 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             systemBlocks.Add(Texts.Get("MCP_INSTRUCTIONS_HEADER", lang) + "\n" + string.Join("\n", mcpGuides));
         }
 
+        // ---------- 浏览器工作流指南：只要有 Playwright/浏览器工具就注入（不依赖提示词模板） ----------
+        var hasBrowserTools = servers.Any(s => s.Name.Contains("playwright", StringComparison.OrdinalIgnoreCase))
+            || unifiedTools.Any(t => t.Name.StartsWith("browser_", StringComparison.OrdinalIgnoreCase));
+        if (hasBrowserTools)
+        {
+            systemBlocks.Add(Texts.Get("BROWSER_WORKFLOW_GUIDE", lang));
+        }
+
         // ---------- 工作空间上下文注入（仅编码会话；明确根目录与级别约束） ----------
         if (wsCtx is not null)
         {

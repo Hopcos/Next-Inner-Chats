@@ -127,6 +127,19 @@ public static class Texts
         // ---------- 默认系统提示 / 模板变量 ----------
         ["DEFAULT_SYSTEM"] = ("You are a helpful AI assistant. Use the context and available tools to answer the user's questions as best you can.", "你是一个乐于助人的 AI 助手。请基于上下文与可用的工具，尽你所能回答用户的问题。"),
         ["MCP_INSTRUCTIONS_HEADER"] = ("System-level usage guides provided by the connected MCP servers (follow them when using these servers' tools):", "以下为已连接 MCP 服务器提供的系统级使用指南（使用对应服务器工具时请遵循）："),
+        ["BROWSER_WORKFLOW_GUIDE"] = (
+            "Browser workflow (Playwright MCP) — follow strictly:\n" +
+            "1. Whenever the user gives a URL or asks to open, read, summarize or extract a web page (content, styles, screenshot), immediately call the Playwright browser tools in this same turn (browser_navigate first). Do NOT ask for cookies/tokens/credentials first and do NOT ask the user to extract them manually: the browser is already configured and persistent.\n" +
+            "2. The browser is headed and persistent: its window opens on the user's desktop and keeps the login state between calls. Reuse the running browser; never call browser_close while the task is ongoing.\n" +
+            "3. If the page redirects to a login / SSO wall, do NOT end the turn immediately. Briefly tell the user to complete the login in the already-open browser window, then poll in the SAME turn: call browser_wait_for (time 20–30s), then re-check the page with browser_evaluate (e.g. document.title + location.href) or browser_snapshot; repeat this wait+check loop for up to 10 minutes (~20 rounds). As soon as the target page becomes accessible, continue the extraction automatically and answer — the user must not need to repeat the request.\n" +
+            "4. Only after the full wait window without success, report that login is still pending and ask the user once; keep the browser open for the next turn.\n" +
+            "5. Extract content with browser_evaluate for bulk text, and report the real page title, URL and content. Never fabricate content that the page did not return.",
+            "浏览器工作流（Playwright MCP）——必须严格遵守：\n" +
+            "1. 用户给出 URL，或要求打开/读取/总结/提取网页（正文、样式、截图）时，立即在同一个回合调用 Playwright 浏览器工具（先 browser_navigate）。不要先索要 Cookie/Token/账号，也不要让用户手工提取凭证：浏览器已配置好并会保留登录态。\n" +
+            "2. 浏览器是带界面且持久化的：窗口会在用户桌面打开，并在多次调用之间保留登录状态。复用已运行的浏览器；任务进行中不要调用 browser_close。\n" +
+            "3. 如果页面被重定向到登录/SSO 页，不要立即结束回合。先用一句话告知用户「请在已打开的浏览器窗口中完成登录」，然后在同一回合内轮询：调用 browser_wait_for（time 20–30 秒），再用 browser_evaluate（document.title + location.href）或 browser_snapshot 重新检查；如此等待+检查循环最多 10 分钟（约 20 轮）。一旦目标页面可访问，立即自动继续提取并回答，用户无需再说一遍。\n" +
+            "4. 只有在完整等待窗口后仍未登录成功，才告知用户登录仍未完成（只问一次）；保持浏览器打开以便下一回合继续。\n" +
+            "5. 正文提取优先用 browser_evaluate 批量取文本；如实报告页面标题、URL 与内容，绝不编造页面未返回的内容。"),
         ["WORKSPACE_CTX_HEADER"] = ("Workspace coding session context (restrict all file/command operations to this directory):", "工作空间编码会话上下文（所有文件与命令操作必须限定在该目录内）："),
         ["WS_COMPLETION_STANDARD"] = (
             "Completion standard for workspace coding tasks (applies whenever you change files):\n" +

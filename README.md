@@ -442,6 +442,8 @@ If a reverse proxy such as nginx sits in front, allow `PUT` / `DELETE` (and forw
 
 **Browser automation (Playwright MCP):** the MCP server spawns a **headed** browser in the session of its own process. Run the API standalone (`dotnet NextChats.Api.dll ...`) from the logged-on user's desktop session so the window is visible and login-protected sites can be signed in manually. Under IIS (`w3wp`) the API lives in Session 0, whose GUI is isolated from the desktop — the browser still works, but its window is never visible to the user.
 
+When any browser tool is available, the server injects a built-in browser workflow guide into the system prompt: it opens the URL immediately (no cookies/tokens requested first), keeps the headed browser open, and when a page hits a login/SSO wall it tells the user to sign in in the already-open window and keeps polling (`browser_wait_for` + re-check) for up to 10 minutes in the same turn, then continues the extraction automatically — the user does not have to repeat the request. This guide is injected regardless of the selected prompt (even with "no prompt").
+
 ## Core Design
 
 ### Authentication (default accounts + internal auth)
