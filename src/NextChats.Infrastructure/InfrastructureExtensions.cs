@@ -46,6 +46,8 @@ public static class InfrastructureExtensions
         // ---------- 引擎 ----------
         services.AddSingleton<IPromptTemplateEngine, PromptTemplateEngine>();
         services.AddSingleton<IPolicyEngine, PolicyEngine>();
+        // MCP OAuth 2.1 集成（浏览器授权 + PKCE + 令牌刷新），McpDriver 依赖它注入 Bearer
+        services.AddSingleton<IMcpOAuthService, McpOAuthService>();
         services.AddSingleton<IMcpDriver, McpDriver>();
         services.AddSingleton<IApprovalCoordinator, ApprovalCoordinator>();
         services.AddSingleton<IAutonomousApprovalPolicy, AutonomousApprovalPolicy>();
@@ -90,6 +92,13 @@ public static class InfrastructureExtensions
             await AddColumnIfMissingAsync(conn, "LlmModels", "ThinkingEffort", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "LlmProviders", "ThinkingParam", "TEXT NOT NULL DEFAULT 'None'");
             await AddColumnIfMissingAsync(conn, "McpServers", "Instructions", "TEXT");
+            // MCP OAuth 2.1 集成（浏览器授权 + PKCE + 自动刷新令牌）：老库补列
+            await AddColumnIfMissingAsync(conn, "McpServers", "AuthMode", "TEXT NOT NULL DEFAULT 'headers'");
+            await AddColumnIfMissingAsync(conn, "McpServers", "OAuthConfigJson", "TEXT");
+            await AddColumnIfMissingAsync(conn, "McpServers", "IsOAuthConfigEncrypted", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "McpServers", "OAuthTokensJson", "TEXT");
+            await AddColumnIfMissingAsync(conn, "McpServers", "IsOAuthTokensEncrypted", "INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(conn, "McpServers", "OAuthAuthorizedAt", "TEXT");
             // AppTools 外部 API 端点（管理端为工具配置，如 Kafka Explorer 的 kafka-mcp REST 地址）
             await AddColumnIfMissingAsync(conn, "AppTools", "BaseUrl", "TEXT");
             // AppTools 外部 API 请求头（JSON 对象，整体 AES-GCM 加密落库；代理转发时解密附加）

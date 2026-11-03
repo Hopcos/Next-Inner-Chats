@@ -81,6 +81,20 @@ export interface McpServerDto {
   lastFetchedAt?: string
   stdioCommand?: string
   stdioArgsJson?: string
+  /** 认证方式：headers（静态 Header）/ oauth（OAuth 2.1 浏览器授权） */
+  authMode?: string
+  /** OAuth 授权状态（授权/到期/端点摘要，secret 不回传） */
+  oauth?: {
+    authorized: boolean
+    authorizedAt?: string
+    expiresAt?: number
+    scopes?: string
+    clientId?: string
+    authorizationEndpoint?: string
+    tokenEndpoint?: string
+    registrationEndpoint?: string
+    redirectUri?: string
+  }
   toolCount: number
   promptCount: number
   resourceCount: number

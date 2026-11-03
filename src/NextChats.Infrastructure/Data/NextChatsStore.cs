@@ -916,6 +916,13 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         row.TimeoutSeconds = server.TimeoutSeconds;
         row.Description = server.Description;
         row.Instructions = server.Instructions;
+        // MCP OAuth 2.1（配置/令牌均为加密 JSON，允许清空以撤销授权，因此不做非空判断）
+        row.AuthMode = server.AuthMode;
+        row.OAuthConfigJson = server.OAuthConfigJson;
+        row.IsOAuthConfigEncrypted = server.IsOAuthConfigEncrypted;
+        row.OAuthTokensJson = server.OAuthTokensJson;
+        row.IsOAuthTokensEncrypted = server.IsOAuthTokensEncrypted;
+        row.OAuthAuthorizedAt = server.OAuthAuthorizedAt;
         row.MetadataJson = server.MetadataJson;
         row.LastError = server.LastError;
         row.LastFetchedAt = server.LastFetchedAt;

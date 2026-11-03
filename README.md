@@ -547,6 +547,33 @@ node e2e/mock-auth.js           # start mock auth center (127.0.0.1:53131)
 powershell -File e2e/run-internal-auth-e2e.ps1   # assert CRUD / providers / auto-provision / uniqueness / role-based catalog
 ```
 
+## MCP OAuth 2.1 (remote MCP servers)
+
+Remote MCP servers protected by OAuth are supported in addition to static-header HTTP servers (e.g. Coralogix `https://api.ap2.coralogix.com/mgmt/api/v1/mcp`):
+
+1. **Admin → MCP Servers** → create/edit an HTTP server and set **Auth mode = OAuth 2.1 (browser authorization)**.
+2. Click **Authorize**: the backend discovers the protected-resource metadata (RFC 9728) and the authorization-server metadata (RFC 8414), dynamically registers a client (RFC 7591) when a `registration_endpoint` exists, then returns an authorization URL carrying PKCE (`S256`) and a `state` value; NextChats opens it in the browser.
+3. Sign in to the provider and click **Authorize**; the provider redirects to `/api/admin/mcp-servers/{id}/oauth/callback`, where the authorization code is exchanged for tokens (AES-GCM encrypted in SQLite) and the page reports success.
+4. `McpDriver` injects `Authorization: Bearer <access_token>` automatically, refreshes it with the `refresh_token` when it expires (or when starting a tool call near expiry), and the **Revoke** button clears the stored tokens.
+
+The callback route is anonymous (the browser follows a redirect) but validated by the OAuth `state` (15-minute TTL); token/config values are never returned by the API — only masked authorization status.
+
+> Redirect URI rule: for `http` requests the callback falls back to `http://localhost:{port}` (RFC 8252 native-client loopback), because providers such as Coralogix reject non-loopback `http` redirect URIs during dynamic registration (`invalid_redirect_uri`). The browser therefore must run on the same machine as NextChats when authorizing; `https://` hosts keep the request host.
+
+> Coralogix data region: the authorization page's “Your data region” is decided by the MCP endpoint host. Use the host matching your Coralogix data region:
+>
+> | Region | MCP endpoint |
+> |---|---|
+> | EU1 | `https://api.eu1.coralogix.com/mgmt/api/v1/mcp` |
+> | EU2 | `https://api.eu2.coralogix.com/mgmt/api/v1/mcp` |
+> | AP1 | `https://api.ap1.coralogix.com/mgmt/api/v1/mcp` |
+> | AP2 | `https://api.ap2.coralogix.com/mgmt/api/v1/mcp` |
+> | AP3 | `https://api.ap3.coralogix.com/mgmt/api/v1/mcp` |
+> | US1 | `https://api.us1.coralogix.com/mgmt/api/v1/mcp` |
+> | US2 | `https://api.us2.coralogix.com/mgmt/api/v1/mcp` |
+>
+> (`api.coralogix.com` currently resolves to EU1.) The MCP server dialog shows a **Coralogix region** selector that rewrites the endpoint host; changing the endpoint clears the previous OAuth registration/tokens, so authorize again.
+
 ## MCP References
 - [What's new in MCP (2026-07-28)](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
 - ModelContextProtocol C# SDK 2.2.0: `McpClient.CreateAsync` + `HttpClientTransport` (Streamable HTTP) / `StdioClientTransport`

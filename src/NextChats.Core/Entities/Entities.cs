@@ -315,6 +315,32 @@ public class McpServer
     /// <summary>服务器提供的系统级使用指南（MCP 协议 instructions；“获取”后自动回填，可手工编辑；注入 LLM 系统提示供模型遵循）</summary>
     [MaxLength(8192)] public string? Instructions { get; set; }
 
+    /// <summary>
+    /// 认证方式：headers（静态 Header，默认）/ oauth（OAuth 2.1 授权码 + PKCE，浏览器登录后授权，
+    /// 令牌自动刷新）。oauth 模式下请求头由服务端按令牌自动注入，无需手工填 Bearer。
+    /// </summary>
+    [MaxLength(16)] public string AuthMode { get; set; } = "headers";
+
+    /// <summary>
+    /// OAuth 配置（JSON：resource / issuer / authorization_endpoint / token_endpoint /
+    /// registration_endpoint / client_id / client_secret / scopes / redirect_uri），AES-GCM 加密落库。
+    /// </summary>
+    public string? OAuthConfigJson { get; set; }
+
+    /// <summary>OAuthConfigJson 是否已加密</summary>
+    public bool IsOAuthConfigEncrypted { get; set; }
+
+    /// <summary>
+    /// OAuth 令牌（JSON：access_token / refresh_token / token_type / expires_at / scope），AES-GCM 加密落库。
+    /// </summary>
+    public string? OAuthTokensJson { get; set; }
+
+    /// <summary>OAuthTokensJson 是否已加密</summary>
+    public bool IsOAuthTokensEncrypted { get; set; }
+
+    /// <summary>OAuth 最近一次授权成功时间（null = 尚未授权）</summary>
+    public DateTimeOffset? OAuthAuthorizedAt { get; set; }
+
     /// <summary>自动带出的元数据缓存（JsonObject：capabilities / protocolVersion / tools/prompts/resources 摘要）</summary>
     public string? MetadataJson { get; set; }
 

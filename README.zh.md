@@ -547,6 +547,33 @@ node e2e/mock-auth.js           # 启动 mock 鉴权中心（127.0.0.1:53131）
 powershell -File e2e/run-internal-auth-e2e.ps1   # 断言 CRUD / 登录方式 / 自动建号 / 唯一性 / 角色目录
 ```
 
+## MCP OAuth 2.1（远程 MCP 服务器）
+
+除静态请求头 HTTP 服务器外，NextChats 支持需要 OAuth 授权的远程 MCP 服务器（如 Coralogix `https://api.ap2.coralogix.com/mgmt/api/v1/mcp`）：
+
+1. **管理端 → MCP 服务器** → 新建/编辑 HTTP 服务器，把**认证方式**选为 **OAuth 2.1（浏览器授权）**。
+2. 点击**授权**：后端自动发现保护资源元数据（RFC 9728）与授权服务器元数据（RFC 8414），若服务器提供 `registration_endpoint` 则自动动态注册客户端（RFC 7591），随后生成带 PKCE（`S256`）和 `state` 的授权 URL，由 NextChats 在浏览器中打开。
+3. 登录提供方并点击 **Authorize**，提供方会跳回 `/api/admin/mcp-servers/{id}/oauth/callback`，后端用授权码换取令牌（AES-GCM 加密存入 SQLite），页面提示授权成功。
+4. `McpDriver` 自动注入 `Authorization: Bearer <access_token>`；令牌到期（或工具调用前即将到期）时用 `refresh_token` 自动刷新；**撤销授权**按钮清除令牌。
+
+回调路由匿名可访问（浏览器重定向），但由 OAuth `state`（15 分钟 TTL）校验；令牌/配置值不会经 API 回传，仅返回脱敏的授权状态。
+
+> 回调地址规则：`http` 请求下回调地址固定回退为 `http://localhost:{端口}`（RFC 8252 原生客户端 loopback），因为 Coralogix 等提供方在动态注册时会拒绝非 loopback 的 `http` 回调（`invalid_redirect_uri`）。因此授权时浏览器需与 NextChats 在同一台机器；`https://` 访问则保留请求主机名。
+
+> Coralogix 数据区域：授权页里的“Your data region”由 MCP endpoint 的主机名决定，请使用与你的 Coralogix 数据区域一致的主机：
+>
+> | 区域 | MCP endpoint |
+> |---|---|
+> | EU1 | `https://api.eu1.coralogix.com/mgmt/api/v1/mcp` |
+> | EU2 | `https://api.eu2.coralogix.com/mgmt/api/v1/mcp` |
+> | AP1 | `https://api.ap1.coralogix.com/mgmt/api/v1/mcp` |
+> | AP2 | `https://api.ap2.coralogix.com/mgmt/api/v1/mcp` |
+> | AP3 | `https://api.ap3.coralogix.com/mgmt/api/v1/mcp` |
+> | US1 | `https://api.us1.coralogix.com/mgmt/api/v1/mcp` |
+> | US2 | `https://api.us2.coralogix.com/mgmt/api/v1/mcp` |
+>
+> （`api.coralogix.com` 目前指向 EU1。）MCP 服务器对话框提供 **Coralogix 区域** 选择器，会自动改写 endpoint 主机；更换 endpoint 会清空旧授权，需重新授权。
+
 ## MCP 参考
 - [What's new in MCP (2026-07-28)](https://blog.modelcontextprotocol.io/posts/2026-07-28/)
 - ModelContextProtocol C# SDK 2.2.0：`McpClient.CreateAsync` + `HttpClientTransport`（Streamable HTTP）/ `StdioClientTransport`

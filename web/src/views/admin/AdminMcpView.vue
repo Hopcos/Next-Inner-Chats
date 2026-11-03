@@ -21,6 +21,7 @@ const expandedServer = ref<string | null>(null)
 const form = reactive({
   name: '',
   transport: 'Http',
+  authMode: 'headers',
   endpoint: '',
   headersJson: '',
   enabled: true,
@@ -30,6 +31,31 @@ const form = reactive({
   stdioArgsJson: '',
   instructions: '',
 })
+
+// Coralogix MCP endpoint 决定授权页的 “Your data region”：提供区域切换，自动改 endpoint 主机
+const coralogixRegions = [
+  { value: 'ap1', label: 'AP1 · api.ap1.coralogix.com' },
+  { value: 'ap2', label: 'AP2 · api.ap2.coralogix.com' },
+  { value: 'ap3', label: 'AP3 · api.ap3.coralogix.com' },
+  { value: 'eu1', label: 'EU1 · api.eu1.coralogix.com' },
+  { value: 'eu2', label: 'EU2 · api.eu2.coralogix.com' },
+  { value: 'us1', label: 'US1 · api.us1.coralogix.com' },
+  { value: 'us2', label: 'US2 · api.us2.coralogix.com' },
+]
+
+function isCoralogixMcp(endpoint: string): boolean {
+  return /^https?:\/\/api\.(?:[a-z0-9]+\.)?coralogix\.com\/mgmt\/api\/v1\/mcp/i.test(endpoint.trim())
+}
+
+function coralogixRegion(endpoint: string): string {
+  const m = /^https?:\/\/api\.([a-z0-9]+)\.coralogix\.com\/mgmt\/api\/v1\/mcp/i.exec(endpoint.trim())
+  return (m?.[1] ?? '').toLowerCase()
+}
+
+function changeCoralogixRegion(region: string): void {
+  if (!region) return
+  form.endpoint = form.endpoint.trim().replace(/^https?:\/\/api\.(?:[a-z0-9]+\.)?coralogix\.com/i, `https://api.${region}.coralogix.com`)
+}
 
 async function load() {
   loading.value = true
@@ -44,14 +70,14 @@ async function load() {
 
 function openCreate() {
   editingId.value = null
-  Object.assign(form, { name: '', transport: 'Http', endpoint: '', headersJson: '', enabled: true, isVision: false, timeoutSeconds: 60, stdioCommand: '', stdioArgsJson: '', instructions: '' })
+  Object.assign(form, { name: '', transport: 'Http', authMode: 'headers', endpoint: '', headersJson: '', enabled: true, isVision: false, timeoutSeconds: 60, stdioCommand: '', stdioArgsJson: '', instructions: '' })
   dialogOpen.value = true
 }
 
 async function openEdit(row: McpServerDto) {
   editingId.value = row.id
   Object.assign(form, {
-    name: row.name, transport: row.transport, endpoint: row.endpoint ?? '', headersJson: '',
+    name: row.name, transport: row.transport, authMode: row.authMode ?? 'headers', endpoint: row.endpoint ?? '', headersJson: '',
     enabled: row.enabled, isVision: row.isVision, timeoutSeconds: row.timeoutSeconds, stdioCommand: row.stdioCommand ?? '', stdioArgsJson: row.stdioArgsJson ?? '',
     instructions: row.instructions ?? '',
   })
@@ -138,9 +164,36 @@ async function toggleItem(itemId: string, enabled: boolean) {
 
 async function toggleServer(row: McpServerDto, enabled: boolean) {
   await http.put(`/api/admin/mcp-servers/${row.id}`, {
-    name: row.name, transport: row.transport, endpoint: row.endpoint, headersJson: undefined,
+    name: row.name, transport: row.transport, authMode: row.authMode, endpoint: row.endpoint, headersJson: undefined,
     enabled, isVision: row.isVision, timeoutSeconds: row.timeoutSeconds,
   })
+  await load()
+}
+
+/** OAuth 2.1：生成授权 URL（自动发现/注册）并在新窗口打开，用户登录后点击 Authorize */
+const authBusy = ref<string | null>(null)
+
+async function authorize(row: McpServerDto) {
+  authBusy.value = row.id
+  try {
+    const res = await http.post<{ url: string; redirectUri: string }>(`/api/admin/mcp-servers/${row.id}/oauth/start`, {})
+    window.open(res.url, '_blank', 'noopener,noreferrer')
+    kernel.notify.success(t('admin.mcp.oauthStartOk'))
+  } catch (e) {
+    kernel.notify.error((e as { message?: string }).message ?? t('admin.mcp.fetchFailed'), (e as { code?: string }).code)
+  } finally {
+    authBusy.value = null
+  }
+}
+
+async function revokeOAuth(row: McpServerDto) {
+  try {
+    await ElMessageBox.confirm(t('admin.mcp.oauthRevokeConfirm', { name: row.name }), t('admin.mcp.oauthRevoke'), { type: 'warning' })
+  } catch {
+    return
+  }
+  await http.post(`/api/admin/mcp-servers/${row.id}/oauth/revoke`, {})
+  kernel.notify.success(t('admin.mcp.oauthRevoked'))
   await load()
 }
 
@@ -174,6 +227,7 @@ async function fetchInDialog() {
     let id = editingId.value
     const body = {
       name: form.name, transport: form.transport,
+      authMode: form.authMode,
       endpoint: form.endpoint || undefined,
       headersJson: form.headersJson || undefined,
       stdioCommand: form.stdioCommand || undefined,
@@ -245,6 +299,16 @@ onMounted(load)
       <el-table-column :label="t('admin.mcp.headers')" width="120">
         <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.headersMasked || t('common.placeholderDash') }}</span></template>
       </el-table-column>
+      <el-table-column :label="t('admin.mcp.authMode')" width="150">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.authMode === 'oauth' ? (row.oauth?.authorized ? 'success' : 'warning') : 'info'">
+            {{ row.authMode === 'oauth' ? t('admin.mcp.authOAuth') : t('admin.mcp.authHeaders') }}
+          </el-tag>
+          <div v-if="row.authMode === 'oauth'" class="nc-dim auth-meta">
+            {{ row.oauth?.authorized ? t('admin.mcp.oauthAuthorized') : t('admin.mcp.oauthNotAuthorized') }}
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column prop="toolCount" :label="t('admin.mcp.tools')" width="60" />
       <el-table-column :label="t('common.enabled')" width="80">
         <template #default="{ row }">
@@ -256,10 +320,12 @@ onMounted(load)
           <el-tag :type="row.isVision ? 'success' : 'info'" size="small">{{ row.isVision ? t('common.yes') : t('common.no') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="330" fixed="right">
+      <el-table-column :label="t('common.actions')" width="470" fixed="right">
         <template #default="{ row }">
           <div class="row-actions">
             <el-button size="small" type="primary" plain :loading="fetchingId === row.id" :disabled="ro" @click="fetchCatalog(row)">{{ t('admin.mcp.fetch') }}</el-button>
+            <el-button v-if="row.authMode === 'oauth'" size="small" type="success" plain :loading="authBusy === row.id" :disabled="ro" @click="authorize(row)">{{ t('admin.mcp.oauthAuth') }}</el-button>
+            <el-button v-if="row.authMode === 'oauth' && row.oauth?.authorized" size="small" text type="danger" :disabled="ro" @click="revokeOAuth(row)">{{ t('admin.mcp.oauthRevoke') }}</el-button>
             <el-button size="small" text :disabled="ro" @click="ping(row)">{{ t('common.ping') }}</el-button>
             <el-button size="small" text :disabled="ro" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
             <el-button size="small" text type="danger" :disabled="ro" @click="remove(row)">{{ t('common.delete') }}</el-button>
@@ -277,10 +343,23 @@ onMounted(load)
             <el-option :label="t('admin.mcp.transportStdio')" value="Stdio" />
           </el-select>
         </el-form-item>
+        <el-form-item v-if="form.transport === 'Http'" :label="t('admin.mcp.authMode')">
+          <el-select v-model="form.authMode">
+            <el-option :label="t('admin.mcp.authHeaders')" value="headers" />
+            <el-option :label="t('admin.mcp.authOAuth')" value="oauth" />
+          </el-select>
+          <div v-if="form.authMode === 'oauth'" class="nc-dim auth-hint">{{ t('admin.mcp.oauthHint') }}</div>
+        </el-form-item>
         <el-form-item v-if="form.transport === 'Http'" :label="t('admin.mcp.endpoint')" required>
           <el-input v-model="form.endpoint" placeholder="http://localhost:5300/mcp" />
         </el-form-item>
-        <el-form-item v-if="form.transport === 'Http'" :label="t('admin.mcp.headersJson')">
+        <el-form-item v-if="form.transport === 'Http' && isCoralogixMcp(form.endpoint)" :label="t('admin.mcp.coralogixRegion')">
+          <el-select :model-value="coralogixRegion(form.endpoint)" @change="changeCoralogixRegion">
+            <el-option v-for="r in coralogixRegions" :key="r.value" :label="r.label" :value="r.value" />
+          </el-select>
+          <div class="nc-dim auth-hint">{{ t('admin.mcp.coralogixRegionHint') }}</div>
+        </el-form-item>
+        <el-form-item v-if="form.transport === 'Http' && form.authMode === 'headers'" :label="t('admin.mcp.headersJson')">
           <el-input v-model="form.headersJson" type="textarea" :rows="3" placeholder='{"Authorization": "Bearer xxx"}' />
         </el-form-item>
         <el-form-item :label="t('admin.mcp.command')">
@@ -350,5 +429,16 @@ onMounted(load)
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+}
+
+.auth-meta {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.auth-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-top: 6px;
 }
 </style>

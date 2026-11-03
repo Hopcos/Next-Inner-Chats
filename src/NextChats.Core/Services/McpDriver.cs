@@ -26,15 +26,17 @@ public sealed class McpDriver : IMcpDriver
 
     private readonly IHttpClientProvider _http;
     private readonly ISecurityService _security;
+    private readonly IMcpOAuthService _oauth;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
     private readonly ConcurrentDictionary<Guid, Lazy<Task<McpClient>>> _connections = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
 
-    public McpDriver(IHttpClientProvider http, ISecurityService security, ILoggerFactory loggerFactory)
+    public McpDriver(IHttpClientProvider http, ISecurityService security, IMcpOAuthService oauth, ILoggerFactory loggerFactory)
     {
         _http = http;
         _security = security;
+        _oauth = oauth;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<McpDriver>();
     }
@@ -88,7 +90,7 @@ public sealed class McpDriver : IMcpDriver
 
     private async Task<McpClient> CreateClientAsync(McpServer server, CancellationToken ct)
     {
-        var transport = CreateTransport(server);
+        var transport = await CreateTransportAsync(server, ct).ConfigureAwait(false);
         var options = new McpClientOptions
         {
             ClientInfo = new Implementation { Name = ClientName, Version = ClientVersion },
@@ -101,8 +103,9 @@ public sealed class McpDriver : IMcpDriver
     /// <summary>
     /// 传输工厂：当前采用 Streamable HTTP（最新 MCP 规范），后续扩展 STDIO
     /// （McpServer.Transport == Stdio 时创建子进程传输）。
+    /// OAuth 模式下按令牌自动注入 Authorization 头（无需手工填 Bearer）。
     /// </summary>
-    private IClientTransport? CreateTransport(McpServer server)
+    private async Task<IClientTransport?> CreateTransportAsync(McpServer server, CancellationToken ct)
     {
         if (server.Transport == McpTransportType.Stdio)
         {
@@ -125,6 +128,18 @@ public sealed class McpDriver : IMcpDriver
         }
 
         var headers = DecodeHeaders(server);
+        // OAuth 2.1 模式：服务端用持久化令牌注入 Bearer（令牌过期时自动刷新）
+        if (string.Equals(server.AuthMode, "oauth", StringComparison.OrdinalIgnoreCase))
+        {
+            var token = await _oauth.GetAccessTokenAsync(server, ct).ConfigureAwait(false);
+            foreach (var key in headers.Keys.Where(k => string.Equals(k, "Authorization", StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                headers.Remove(key);
+            }
+            headers["Authorization"] = $"Bearer {token}";
+            _logger.LogInformation("MCP OAuth 令牌注入 server={Server}", server.Name);
+        }
+
         var options = new HttpClientTransportOptions
         {
             Endpoint = new Uri(server.Endpoint),
@@ -186,6 +201,25 @@ public sealed class McpDriver : IMcpDriver
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var attempts = 0;
         Exception? lastEx = null;
+
+        // OAuth 令牌即将过期：先刷新，并丢弃旧连接（下次连接即使用新令牌）
+        if (string.Equals(server.AuthMode, "oauth", StringComparison.OrdinalIgnoreCase))
+        {
+            var status = _oauth.GetStatus(server);
+            var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (status.ExpiresAt is not null && status.ExpiresAt <= nowUnix + 120)
+            {
+                try
+                {
+                    await _oauth.GetAccessTokenAsync(server, ct).ConfigureAwait(false);
+                    _connections.TryRemove(server.Id, out _);
+                }
+                catch (McpOAuthException ex)
+                {
+                    _logger.LogWarning("MCP OAuth 预刷新失败 server={Server} code={Code}", server.Name, ex.Code);
+                }
+            }
+        }
 
         for (var attempt = 1; attempt <= 2; attempt++) // 第一层：连接级重连一次
         {
