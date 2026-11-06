@@ -383,6 +383,80 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         return $"{baseUrl}/chat/completions";
     }
 
+    /// <summary>
+    /// 把 MCP 工具的 JSON Schema 转成网关（尤其是 Gemini 的 function_declarations）能接受的子集：
+    /// Gemini 只允许 OpenAPI 子集，属性 schema 的 type 必须是标量（string/number/integer/boolean/array/object）
+    /// 且不能出现 "value" 等非法字段；此处做深拷贝后逐属性规整，不改动原 InputSchema（多轮复用）。
+    /// </summary>
+    private static JsonObject SanitizeToolSchema(JsonObject? schema)
+    {
+        if (schema is null) return new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() };
+        var copy = (JsonObject)schema.DeepClone();
+        SanitizeNode(copy);
+        return copy;
+    }
+
+    private static readonly HashSet<string> GeminiTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "string", "number", "integer", "boolean", "array", "object",
+    };
+
+    private static void SanitizeNode(JsonObject node)
+    {
+        // 属性节点：type 必须是 Gemini 认可的标量类型，否则降级为 string
+        if (node["type"] is JsonValue tv && tv.TryGetValue<string>(out var t))
+        {
+            if (!GeminiTypes.Contains(t)) node["type"] = "string";
+        }
+        else if (node["type"] is JsonArray ta)
+        {
+            // OpenAPI 不允许 type 为数组（["string","null"]）：取第一个非 null 的标量
+            string? pick = null;
+            foreach (var x in ta)
+            {
+                if (x is JsonValue jv && jv.TryGetValue<string>(out var s) && s != "null" && GeminiTypes.Contains(s))
+                {
+                    pick = s;
+                    break;
+                }
+            }
+            node["type"] = pick ?? "string";
+        }
+        else if (node["type"] is JsonObject to)
+        {
+            // 畸形写法：type 被写成了一个 schema 对象（如 {"type":{"type":"array","items":{...}}}）。
+            // 这会让 Gemini 把 type 当成标量读取并报 "Starting an object on a scalar field"。
+            // 把内层 schema 的 type/items 提升到当前节点，保留数组语义；无法识别则降级为 string。
+            var innerType = to["type"] is JsonValue itv && itv.TryGetValue<string>(out var its) && GeminiTypes.Contains(its)
+                ? its
+                : "string";
+            node["type"] = innerType;
+            if (innerType == "array" && node["items"] is null && to["items"] is JsonObject innerItems)
+            {
+                node["items"] = innerItems.DeepClone();
+            }
+        }
+
+        // Gemini 对 "default": null 也会拒绝，直接移除 null 默认值
+        if (node["default"] is null && node.ContainsKey("default")) node.Remove("default");
+
+        // 对象/数组中的 value 字段若是对象，Gemini 会报 "Starting an object on a scalar field"
+        if (node["properties"] is JsonObject props)
+        {
+            foreach (var kv in props)
+            {
+                if (kv.Value is JsonObject child) SanitizeNode(child);
+                else props[kv.Key] = new JsonObject { ["type"] = "string" };
+            }
+        }
+        if (node["items"] is JsonObject items) SanitizeNode(items);
+        if (node["value"] is JsonObject valueNode)
+        {
+            // 标量字段（如 property.value）误写为对象：改为字符串描述，避免 Gemini 类型冲突
+            node["value"] = valueNode.ToJsonString();
+        }
+    }
+
     private HttpContent BuildPayload(LlmRequest request, bool stream)
     {
         var payload = new JsonObject
@@ -453,7 +527,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 {
                     ["name"] = t.Name,
                     ["description"] = t.Description,
-                    ["parameters"] = t.InputSchema?.DeepClone() ?? new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() },
+                    ["parameters"] = SanitizeToolSchema(t.InputSchema),
                 },
             }).ToArray());
             payload["tool_choice"] = "auto";
