@@ -9,7 +9,7 @@ public sealed class PolicyOptions
         ".*(delete|drop|remove|truncate|purge|destroy).*",
         ".*(exec|shell|command|run_script|bash|powershell).*",
         ".*(send_|transfer|payment|charge|approve|publish|release|deploy).*",
-        ".*(update_password|reset_password|revoke|ban|unban).*",
+        ".*(update_password|reset_password|revoke|(^|[^a-z])(ban|unban)([^a-z]|$)).*",
     ];
 
     /// <summary>豁免（危险名单但属于系统内置白名单工具）</summary>

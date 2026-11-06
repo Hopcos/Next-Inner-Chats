@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /** Markdown Preview 工具页：左侧编辑、右侧实时渲染；预览区域可导出 PNG（复用 html-to-image 封装） */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import mermaid from 'mermaid'
 import { kernel } from '@/kernel'
 import { captureElementToPng, downloadBlob, stamp } from '@/utils/capture'
 import SplitPane from '../components/SplitPane.vue'
@@ -13,6 +14,56 @@ const content = ref(loadContent())
 const html = computed(() => md.render(content.value))
 const previewEl = ref<HTMLElement | null>(null)
 const exporting = ref(false)
+
+// ---------------- Mermaid 图渲染 ----------------
+mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' })
+
+/** 输入过程中 Mermaid 块可能尚不完整，延迟一点再渲染，避免每敲一个字符都跑一遍解析 */
+const MERMAID_RENDER_DELAY = 220
+let mermaidTimer: ReturnType<typeof setTimeout> | undefined
+let mermaidBusy: Promise<void> | null = null
+
+/** 把预览区里尚未生成 SVG 的 ```mermaid 块交给 mermaid.run（失败时保留源码/错误提示，下次编辑再试） */
+function renderMermaid(): Promise<void> {
+  if (mermaidBusy) return mermaidBusy
+  const host = previewEl.value
+  if (!host) return Promise.resolve()
+  const blocks = Array.from(host.querySelectorAll<HTMLElement>('pre.mermaid')).filter(
+    (b) => !b.querySelector('svg'),
+  )
+  if (!blocks.length) return Promise.resolve()
+  mermaidBusy = (async () => {
+    try {
+      await mermaid.run({ nodes: blocks, suppressErrors: true })
+    } catch {
+      /* 语法错误/输入未完成：保留原始代码块，等下一次编辑重试 */
+    }
+    // 渲染期间若 v-html 又替换了 DOM，补渲染新出现的未完成块
+    const pending = Array.from(host.querySelectorAll<HTMLElement>('pre.mermaid')).filter(
+      (b) => !b.querySelector('svg'),
+    )
+    if (pending.length) {
+      try {
+        await mermaid.run({ nodes: pending, suppressErrors: true })
+      } catch {
+        /* 同上 */
+      }
+    }
+  })().finally(() => {
+    mermaidBusy = null
+  })
+  return mermaidBusy
+}
+
+function scheduleMermaidRender() {
+  clearTimeout(mermaidTimer)
+  mermaidTimer = setTimeout(() => void renderMermaid(), MERMAID_RENDER_DELAY)
+  }
+
+// v-html 更新后 DOM 里是新的 <pre class="mermaid">，必须等 DOM 更新后再渲染
+watch(html, () => scheduleMermaidRender(), { flush: 'post' })
+onMounted(() => scheduleMermaidRender())
+onBeforeUnmount(() => clearTimeout(mermaidTimer))
 
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(content, (v) => {
@@ -32,6 +83,8 @@ async function savePng() {
   const el = previewEl.value
   if (!el || exporting.value) return
   exporting.value = true
+  // Mermaid 图可能因输入延迟尚未转成 SVG；导出前先补齐，避免 PNG 里只有源码文本
+  await renderMermaid()
   // 记录并临时展开滚动容器，导出完整高度
   const prevOverflow = el.style.overflow
   const prevHeight = el.style.height
@@ -218,6 +271,25 @@ async function savePng() {
   color: inherit;
   font-size: 12.5px;
   line-height: 1.6;
+}
+
+/* Mermaid 图：浅色底、居中、可横向滚动，避免继承代码块的深色背景与等宽字体 */
+.mp-preview :deep(pre.mermaid) {
+  background: var(--nc-surface-2);
+  color: var(--nc-text);
+  border: 1px solid var(--nc-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  overflow: auto;
+  text-align: center;
+  font-family: inherit;
+}
+
+.mp-preview :deep(pre.mermaid svg) {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
 }
 
 .mp-preview :deep(blockquote) {

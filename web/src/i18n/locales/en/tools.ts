@@ -77,7 +77,7 @@ export default {
     },
     md: {
       name: 'Markdown Preview',
-      desc: 'Live GFM-flavored Markdown preview (tables, task lists, code blocks).',
+      desc: 'Live GFM-flavored Markdown preview (tables, task lists, code blocks, Mermaid diagrams).',
       source: 'Markdown Source',
       preview: 'Preview',
       placeholder: 'Enter Markdown here…',

@@ -77,7 +77,7 @@ export default {
     },
     md: {
       name: 'Markdown 预览',
-      desc: 'GFM 风格 Markdown 实时渲染预览（表格、任务列表、代码块）。',
+      desc: 'GFM 风格 Markdown 实时渲染预览（表格、任务列表、代码块、Mermaid 图）。',
       source: 'Markdown 源码',
       preview: '预览',
       placeholder: '在此输入 Markdown…',
