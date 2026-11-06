@@ -16,12 +16,64 @@ const previewEl = ref<HTMLElement | null>(null)
 const exporting = ref(false)
 
 // ---------------- Mermaid 图渲染 ----------------
-mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' })
+/**
+ * Mermaid 图区域使用统一的固定配色（白底 + 深色线/字），与当前主题无关，
+ * 保证在午夜、赛博等深色主题下文字与连线同样清晰。
+ */
+const MERMAID_FIXED_THEME = {
+  background: '#ffffff',
+  primaryColor: '#eef2ff',
+  primaryTextColor: '#0f172a',
+  primaryBorderColor: '#4f46e5',
+  secondaryColor: '#f1f5f9',
+  secondaryTextColor: '#0f172a',
+  secondaryBorderColor: '#64748b',
+  tertiaryColor: '#f8fafc',
+  tertiaryTextColor: '#0f172a',
+  tertiaryBorderColor: '#94a3b8',
+  lineColor: '#334155',
+  textColor: '#0f172a',
+  mainBkg: '#eef2ff',
+  nodeBorder: '#4f46e5',
+  nodeTextColor: '#0f172a',
+  clusterBkg: '#f8fafc',
+  clusterBorder: '#94a3b8',
+  titleColor: '#0f172a',
+  edgeLabelBackground: '#ffffff',
+  labelBackgroundColor: '#ffffff',
+  labelTextColor: '#0f172a',
+  loopTextColor: '#0f172a',
+  noteBkgColor: '#fef9c3',
+  noteTextColor: '#0f172a',
+  noteBorderColor: '#ca8a04',
+  actorBkg: '#eef2ff',
+  actorBorder: '#4f46e5',
+  actorTextColor: '#0f172a',
+  actorLineColor: '#334155',
+  signalColor: '#334155',
+  signalTextColor: '#0f172a',
+  activationBkgColor: '#e0e7ff',
+  activationBorderColor: '#4f46e5',
+  sequenceNumberColor: '#ffffff',
+  fontFamily: 'inherit',
+}
+
+function initMermaid() {
+  // 固定使用浅色基础主题 + 上面的统一配色，不随页面主题变化
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'base',
+    themeVariables: MERMAID_FIXED_THEME,
+  })
+}
 
 /** 输入过程中 Mermaid 块可能尚不完整，延迟一点再渲染，避免每敲一个字符都跑一遍解析 */
 const MERMAID_RENDER_DELAY = 220
 let mermaidTimer: ReturnType<typeof setTimeout> | undefined
 let mermaidBusy: Promise<void> | null = null
+/** 每个 Mermaid 图的交互状态（缩放/平移/拖动模式） */
+const mermaidViews = new WeakMap<HTMLElement, { scale: number; panX: number; panY: number; dragging: boolean }>()
 
 /** 把预览区里尚未生成 SVG 的 ```mermaid 块交给 mermaid.run（失败时保留源码/错误提示，下次编辑再试） */
 function renderMermaid(): Promise<void> {
@@ -32,6 +84,11 @@ function renderMermaid(): Promise<void> {
     (b) => !b.querySelector('svg'),
   )
   if (!blocks.length) return Promise.resolve()
+  // 渲染前保存源码（渲染后 pre 内容变为 SVG），以便切换主题时可重新渲染
+  blocks.forEach((b) => {
+    if (!b.dataset.src) b.dataset.src = b.textContent ?? ''
+  })
+  initMermaid()
   mermaidBusy = (async () => {
     try {
       await mermaid.run({ nodes: blocks, suppressErrors: true })
@@ -49,21 +106,140 @@ function renderMermaid(): Promise<void> {
         /* 同上 */
       }
     }
+    wrapMermaidBlocks(host)
   })().finally(() => {
     mermaidBusy = null
   })
   return mermaidBusy
 }
 
+/** 为每个已渲染的 Mermaid 图加工具条（放大/缩小/重置/拖动）；保证每图只包一次 */
+function wrapMermaidBlocks(host: HTMLElement) {
+  host.querySelectorAll<HTMLElement>('pre.mermaid').forEach((pre) => {
+    if (!pre.querySelector('svg') || pre.parentElement?.classList.contains('mermaid-box')) return
+    const wrap = document.createElement('div')
+    wrap.className = 'mermaid-box'
+    pre.parentNode!.insertBefore(wrap, pre)
+    wrap.appendChild(pre)
+    mermaidViews.set(wrap, { scale: 1, panX: 0, panY: 0, dragging: false })
+    const tools = document.createElement('div')
+    tools.className = 'mermaid-tools'
+    const acts: [string, string, string][] = [
+      ['out', t('tools.mermaid.zoomOut'), '−'],
+      ['in', t('tools.mermaid.zoomIn'), '＋'],
+      ['reset', t('tools.mermaid.reset'), '↺'],
+      ['drag', t('tools.mermaid.dragHint'), '✋'],
+    ]
+    for (const [act, title, label] of acts) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.dataset.act = act
+      btn.title = title
+      btn.textContent = label
+      tools.appendChild(btn)
+    }
+    wrap.appendChild(tools)
+    applyMermaidView(wrap)
+  })
+}
+
+function applyMermaidView(box: HTMLElement) {
+  const v = mermaidViews.get(box)
+  const svg = box.querySelector<SVGElement>('svg')
+  if (v && svg) {
+    svg.style.transform = `translate(${v.panX}px, ${v.panY}px) scale(${v.scale})`
+    svg.style.transformOrigin = 'center center'
+  }
+  box.classList.toggle('dragging', !!v?.dragging)
+}
+
+function onMermaidToolsClick(e: MouseEvent) {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('button[data-act]')
+  if (!btn) return
+  const box = btn.closest<HTMLElement>('.mermaid-box')
+  const v = box ? mermaidViews.get(box) : undefined
+  if (!box || !v) return
+  switch (btn.dataset.act) {
+    case 'in':
+      v.scale = Math.min(4, v.scale * 1.2)
+      break
+    case 'out':
+      v.scale = Math.max(0.25, v.scale / 1.2)
+      break
+    case 'reset':
+      v.scale = 1
+      v.panX = 0
+      v.panY = 0
+      break
+    case 'drag':
+      v.dragging = !v.dragging
+      break
+  }
+  applyMermaidView(box)
+  e.stopPropagation()
+}
+
+function onMermaidPanStart(e: MouseEvent) {
+  const box = (e.target as HTMLElement).closest<HTMLElement>('.mermaid-box')
+  const v = box ? mermaidViews.get(box) : undefined
+  if (!box || !v || !v.dragging) return
+  const start = { x: e.clientX, y: e.clientY }
+  const move = (ev: MouseEvent) => {
+    v.panX += ev.clientX - start.x
+    v.panY += ev.clientY - start.y
+    start.x = ev.clientX
+    start.y = ev.clientY
+    applyMermaidView(box)
+  }
+  const up = () => {
+    window.removeEventListener('mousemove', move)
+    window.removeEventListener('mouseup', up)
+  }
+  window.addEventListener('mousemove', move)
+  window.addEventListener('mouseup', up)
+  e.preventDefault()
+}
+
+function onMermaidWheel(e: WheelEvent) {
+  const box = (e.target as HTMLElement).closest<HTMLElement>('.mermaid-box')
+  const v = box ? mermaidViews.get(box) : undefined
+  if (!box || !v) return
+  const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
+  v.scale = Math.min(4, Math.max(0.25, v.scale * factor))
+  applyMermaidView(box)
+  e.preventDefault()
+}
+
 function scheduleMermaidRender() {
   clearTimeout(mermaidTimer)
   mermaidTimer = setTimeout(() => void renderMermaid(), MERMAID_RENDER_DELAY)
-  }
+}
+
+// 切换主题时重新渲染 Mermaid（颜色变量随主题变化）
+let themeObserver: MutationObserver | undefined
 
 // v-html 更新后 DOM 里是新的 <pre class="mermaid">，必须等 DOM 更新后再渲染
 watch(html, () => scheduleMermaidRender(), { flush: 'post' })
-onMounted(() => scheduleMermaidRender())
-onBeforeUnmount(() => clearTimeout(mermaidTimer))
+onMounted(() => {
+  scheduleMermaidRender()
+  // 主题属性变化（data-theme）时，清掉已渲染的 SVG 并重绘，使连线/文字颜色与新主题匹配
+  themeObserver = new MutationObserver(() => {
+    const host = previewEl.value
+    if (!host) return
+    host.querySelectorAll<HTMLElement>('pre.mermaid').forEach((pre) => {
+      const src = pre.dataset.src
+      if (src) pre.textContent = src
+      pre.removeAttribute('data-processed')
+      pre.querySelector('svg')?.remove()
+    })
+    scheduleMermaidRender()
+  })
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})
+onBeforeUnmount(() => {
+  clearTimeout(mermaidTimer)
+  themeObserver?.disconnect()
+})
 
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(content, (v) => {
@@ -123,7 +299,14 @@ async function savePng() {
           </button>
         </div>
         <!-- markdown-it html:false，输出仅安全标签，无 XSS 风险 -->
-        <div ref="previewEl" class="mp-preview nc-scroll" v-html="html" />
+        <div
+          ref="previewEl"
+          class="mp-preview nc-scroll"
+          v-html="html"
+          @click="onMermaidToolsClick"
+          @mousedown="onMermaidPanStart"
+          @wheel="onMermaidWheel"
+        />
       </template>
     </SplitPane>
   </div>
@@ -273,23 +456,81 @@ async function savePng() {
   line-height: 1.6;
 }
 
-/* Mermaid 图：浅色底、居中、可横向滚动，避免继承代码块的深色背景与等宽字体 */
-.mp-preview :deep(pre.mermaid) {
-  background: var(--nc-surface-2);
-  color: var(--nc-text);
-  border: 1px solid var(--nc-border);
-  border-radius: 10px;
-  padding: 12px 14px;
+/* Mermaid 图：跟随当前主题配色，居中；外层 .mermaid-box 提供工具条与缩放/拖动 */
+.mp-preview :deep(.mermaid-box) {
+  position: relative;
   margin: 12px 0;
-  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff; /* 固定白底：与主题无关，深色主题下图仍清晰 */
+  overflow: hidden;
+  min-height: 80px;
+}
+
+.mp-preview :deep(pre.mermaid) {
+  background: #ffffff;
+  color: #0f172a;
+  border: 0;
+  border-radius: 0;
+  padding: 36px 14px 14px;
+  margin: 0;
+  overflow: visible;
   text-align: center;
   font-family: inherit;
+  min-height: 80px;
 }
 
 .mp-preview :deep(pre.mermaid svg) {
   max-width: 100%;
   height: auto;
   vertical-align: middle;
+  transition: transform 0.12s ease-out;
+}
+
+.mp-preview :deep(.mermaid-box.dragging) {
+  cursor: grab;
+}
+
+.mp-preview :deep(.mermaid-box.dragging:active) {
+  cursor: grabbing;
+}
+
+.mp-preview :deep(.mermaid-box.dragging svg) {
+  transition: none;
+}
+
+/* 图上方的浮动工具条：放大 / 缩小 / 重置 / 拖动（悬停显示） */
+.mp-preview :deep(.mermaid-tools) {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+  z-index: 1;
+}
+
+.mp-preview :deep(.mermaid-box:hover .mermaid-tools) {
+  opacity: 1;
+}
+
+.mp-preview :deep(.mermaid-tools button) {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 1;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mp-preview :deep(.mermaid-tools button:hover) {
+  color: #4f46e5;
+  border-color: #4f46e5;
 }
 
 .mp-preview :deep(blockquote) {
