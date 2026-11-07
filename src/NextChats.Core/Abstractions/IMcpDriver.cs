@@ -5,11 +5,16 @@ namespace NextChats.Core.Abstractions;
 /// <summary>暴露给模型的统一工具视图（MCP 工具 + Skill 元工具）</summary>
 public sealed record UnifiedTool(
     string ServerName,   // MCP server 名或 "skill"
-    string Name,         // 工具名（MCP 原名 / skill.MetaToolName）
+    string Name,         // 工具名（模型端唯一名：MCP 原名 / 消歧后名称 / skill.MetaToolName）
     string Description,
     string? SchemaJson,
     bool IsSkill,
-    bool DestructiveHint = false);
+    bool DestructiveHint = false,
+    string? RawName = null)
+{
+    /// <summary>底层实际调用的工具原名（未发生命名冲突消歧时即 Name）</summary>
+    public string EffectiveRawName => !string.IsNullOrEmpty(RawName) ? RawName : Name;
+}
 
 /// <summary>工具调用结果（“错误进循环 + 重试”）：无论成败都返回结构化结果</summary>
 public sealed record McpToolResult(

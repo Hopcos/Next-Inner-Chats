@@ -357,6 +357,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             }
         }
 
+        // ---------- 工具名称消歧（多 MCP 服务器可能存在同名工具，如 list_environments） ----------
+        unifiedTools = ToolDisambiguator.Disambiguate(unifiedTools).ToList();
+
         // ---------- 图片：所选模型支持视觉 → 多模态直接发给 LLM；否则走 MCP 视觉识别为文本 ----------
         var visionLines = new List<string>();
         int ocrMs = 0;
@@ -865,7 +868,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
         if (tool.IsSkill)
         {
-            if (!skillByName.TryGetValue(tool.Name, out var skill))
+            if (!skillByName.TryGetValue(tool.EffectiveRawName, out var skill) && !skillByName.TryGetValue(tool.Name, out skill))
             {
                 return new McpToolResult(false, "", Texts.Get("SKILL_NOT_FOUND", lang), "SKILL_NOT_FOUND", 0, 1);
             }
@@ -876,7 +879,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
         if (tool.ServerName == BuiltinToolServer)
         {
-            return tool.Name switch
+            return tool.EffectiveRawName switch
             {
                 HttpFetchToolName => await ExecuteHttpFetchAsync(args, traceId, lang, ct),
                 McpPromptToolName => await ExecuteMcpPromptAsync(args, servers, traceId, lang, ct),
@@ -884,8 +887,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 McpReadResourceToolName => await ExecuteMcpReadResourceAsync(args, servers, sessionImages ?? [], traceId, lang, ct),
                 DelegateTaskToolName => await ExecuteDelegateTaskAsync(args, request, subAgentModelId, traceId, lang, ct),
                 // 工作空间工具：仅当会话绑定工作空间且已注入时可用；每次执行重校验角色绑定（权限即时生效）
-                _ when wsCtx is not null && IsWorkspaceTool(tool.Name)
-                    => await ExecuteWorkspaceToolAsync(tool.Name, args, wsCtx, request, traceId, lang, ct),
+                _ when wsCtx is not null && IsWorkspaceTool(tool.EffectiveRawName)
+                    => await ExecuteWorkspaceToolAsync(tool.EffectiveRawName, args, wsCtx, request, traceId, lang, ct),
                 _ => new McpToolResult(false, "", Texts.Get("TOOL_NOT_FOUND", lang, tool.Name), "TOOL_NOT_FOUND", 0, 1),
             };
         }
@@ -895,7 +898,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         {
             return new McpToolResult(false, "", Texts.Get("MCP_SERVER_NOT_FOUND", lang), "SERVER_NOT_FOUND", 0, 1);
         }
-        return await _mcp.CallToolAsync(server, tool.Name, args, traceId, lang, ct);
+        return await _mcp.CallToolAsync(server, tool.EffectiveRawName, args, traceId, lang, ct);
     }
 
     private static bool IsWorkspaceTool(string name) =>

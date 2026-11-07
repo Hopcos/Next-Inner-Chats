@@ -520,22 +520,34 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         {
             // 注意：多轮 Agent 循环会复用同一套工具定义；InputSchema 必须深拷贝，否则同一 JsonNode
             // 二次挂载到新 payload 树会抛 "The node already has a parent" → LLM 调用中断。
-            payload["tools"] = new JsonArray(request.Tools.Select(t => new JsonObject
+            // 防御性去重：上游多 MCP 服务器若由于任何原因存在同名函数，在此做最终兜底，避免触发 OpenAI / Gemini 400 重复函数声明错误
+            var seenToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var toolDefs = new List<JsonObject>();
+            foreach (var t in request.Tools)
             {
-                ["type"] = "function",
-                ["function"] = new JsonObject
+                if (!seenToolNames.Add(t.Name)) continue;
+                toolDefs.Add(new JsonObject
                 {
-                    ["name"] = t.Name,
-                    ["description"] = t.Description,
-                    ["parameters"] = SanitizeToolSchema(t.InputSchema),
-                },
-            }).ToArray());
-            payload["tool_choice"] = "auto";
+                    ["type"] = "function",
+                    ["function"] = new JsonObject
+                    {
+                        ["name"] = t.Name,
+                        ["description"] = t.Description,
+                        ["parameters"] = SanitizeToolSchema(t.InputSchema),
+                    },
+                });
+            }
+
+            if (toolDefs.Count > 0)
+            {
+                payload["tools"] = new JsonArray(toolDefs.ToArray());
+                payload["tool_choice"] = "auto";
+            }
         }
 
         // 思考模式下思维链须回传：携带 tools 的对话轮，assistant 消息必须带 reasoning_content 回传，
         // 否则 DeepSeek 官方 API 返回 400（工具调用场景强制要求；无 tools 传了也会被忽略）
-        payload["messages"] = BuildMessages(request.Messages, request.Tools is { Count: > 0 });
+        payload["messages"] = BuildMessages(request.Messages, payload.ContainsKey("tools"));
 
         if (stream)
         {

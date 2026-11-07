@@ -151,6 +151,9 @@ public sealed class TeamToolExecutor
             }
         }
 
+        // ---------- 工具名称消歧（多 MCP 服务器可能存在同名工具，如 list_environments） ----------
+        unifiedTools = ToolDisambiguator.Disambiguate(unifiedTools).ToList();
+
         return new TeamToolContext(unifiedTools, servers, skillByName, wsCtx);
     }
 
@@ -165,7 +168,7 @@ public sealed class TeamToolExecutor
 
         if (tool.IsSkill)
         {
-            if (!skillByName.TryGetValue(tool.Name, out var skill))
+            if (!skillByName.TryGetValue(tool.EffectiveRawName, out var skill) && !skillByName.TryGetValue(tool.Name, out skill))
             {
                 return new McpToolResult(false, "", Texts.Get("SKILL_NOT_FOUND", lang), "SKILL_NOT_FOUND", 0, 1);
             }
@@ -176,14 +179,14 @@ public sealed class TeamToolExecutor
 
         if (tool.ServerName == BuiltinToolServer)
         {
-            return tool.Name switch
+            return tool.EffectiveRawName switch
             {
                 HttpFetchToolName => await ExecuteHttpFetchAsync(args, traceId, lang, ct),
                 McpPromptToolName => await ExecuteMcpPromptAsync(args, servers, traceId, lang, ct),
                 McpResourcesToolName => await ExecuteMcpResourcesAsync(args, servers, traceId, lang, ct),
                 McpReadResourceToolName => await ExecuteMcpReadResourceAsync(args, servers, traceId, lang, ct),
-                _ when wsCtx is not null && IsWorkspaceTool(tool.Name)
-                    => await ExecuteWorkspaceToolAsync(tool.Name, args, wsCtx, userId, traceId, lang, ct),
+                _ when wsCtx is not null && IsWorkspaceTool(tool.EffectiveRawName)
+                    => await ExecuteWorkspaceToolAsync(tool.EffectiveRawName, args, wsCtx, userId, traceId, lang, ct),
                 _ => new McpToolResult(false, "", Texts.Get("TOOL_NOT_FOUND", lang, tool.Name), "TOOL_NOT_FOUND", 0, 1),
             };
         }
@@ -193,7 +196,7 @@ public sealed class TeamToolExecutor
         {
             return new McpToolResult(false, "", Texts.Get("MCP_SERVER_NOT_FOUND", lang), "SERVER_NOT_FOUND", 0, 1);
         }
-        return await _mcp.CallToolAsync(server, tool.Name, args, traceId, lang, ct);
+        return await _mcp.CallToolAsync(server, tool.EffectiveRawName, args, traceId, lang, ct);
     }
 
     private static bool IsWorkspaceTool(string name) =>

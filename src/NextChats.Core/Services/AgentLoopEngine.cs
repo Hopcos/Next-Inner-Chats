@@ -223,7 +223,16 @@ public sealed class AgentLoopEngine : IAgentLoopEngine
                         continue;
                     }
 
-                    var verdict = _policy.Evaluate(tool.ServerName, tool.Name, argsJson);
+                    var verdict = _policy.Evaluate(tool.ServerName, tool.EffectiveRawName, argsJson);
+                    if (verdict != PolicyVerdict.Deny && tool.Name != tool.EffectiveRawName)
+                    {
+                        var v2 = _policy.Evaluate(tool.ServerName, tool.Name, argsJson);
+                        if (v2 == PolicyVerdict.Deny || (v2 == PolicyVerdict.RequireApproval && verdict == PolicyVerdict.Allow))
+                        {
+                            verdict = v2;
+                        }
+                    }
+
                     if (verdict == PolicyVerdict.Deny)
                     {
                         usage.ToolErrors++;
