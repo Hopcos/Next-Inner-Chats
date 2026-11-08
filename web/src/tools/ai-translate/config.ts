@@ -15,9 +15,51 @@ export const LS = {
   direction: 'nc.tool.ai-translate.direction',
   model: 'nc.tool.ai-translate.model',
   stream: 'nc.tool.ai-translate.stream',
+  source: 'nc.tool.ai-translate.source',
+  target: 'nc.tool.ai-translate.target',
 } as const
 
 export type Direction = 'en2zh' | 'zh2en'
+
+export function loadSource(): string {
+  try {
+    return localStorage.getItem(LS.source) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveSource(v: string): void {
+  try {
+    if (v) {
+      localStorage.setItem(LS.source, v)
+    } else {
+      localStorage.removeItem(LS.source)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadTarget(): string {
+  try {
+    return localStorage.getItem(LS.target) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveTarget(v: string): void {
+  try {
+    if (v) {
+      localStorage.setItem(LS.target, v)
+    } else {
+      localStorage.removeItem(LS.target)
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 export function loadPrompt(): string {
   try {

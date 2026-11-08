@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n'
 import { kernel } from '@/kernel'
 import { http, streamPost } from '@/api/http'
 import { copyText } from '@/utils/clipboard'
-import { DEFAULT_TRANSLATE_PROMPT, LS, loadDirection, loadModel, loadPrompt, loadStreamMode, savePrompt, saveStreamMode } from './config'
+import { DEFAULT_TRANSLATE_PROMPT, LS, loadDirection, loadModel, loadPrompt, loadSource, loadStreamMode, loadTarget, savePrompt, saveSource, saveStreamMode, saveTarget } from './config'
 import type { Direction } from './config'
 
 const { t } = useI18n()
@@ -66,10 +66,23 @@ watch(
   { immediate: true },
 )
 
-// ---------------- 翻译（流式输出） ----------------
-const source = ref('')
-const target = ref('')
+// ---------------- 翻译（原文与译文持久化到 localStorage） ----------------
+const source = ref(loadSource())
+const target = ref(loadTarget())
 const busy = ref(false)
+
+// 防抖保存原文与译文到 localStorage，避免高频按键触发频繁写入
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+function queueSaveText() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    saveSource(source.value)
+    saveTarget(target.value)
+  }, 200)
+}
+
+watch(source, () => queueSaveText())
+watch(target, () => queueSaveText())
 // 等待反馈：完整模式全程静默等待最易被感知为"卡住"，与聊天一致地显示已等待秒数
 const elapsed = ref(0)
 let elapsedTimer: ReturnType<typeof setInterval> | null = null
@@ -167,6 +180,13 @@ function swap() {
   setDir(en2zh.value ? 'zh2en' : 'en2zh')
 }
 
+function clearAll() {
+  source.value = ''
+  target.value = ''
+  saveSource('')
+  saveTarget('')
+}
+
 // ---------------- 复制 / 朗读 ----------------
 async function copy(which: 'source' | 'target') {
   const text = which === 'source' ? source.value : target.value
@@ -210,7 +230,14 @@ function stopSpeak() {
   speaking.value = ''
 }
 
-onBeforeUnmount(stopSpeak)
+onBeforeUnmount(() => {
+  stopSpeak()
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveSource(source.value)
+    saveTarget(target.value)
+  }
+})
 </script>
 
 <template>
@@ -295,6 +322,13 @@ onBeforeUnmount(stopSpeak)
               <svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" />
                 <path d="M16 9.5l5 5M21 9.5l-5 5" />
+              </svg>
+            </button>
+            <button class="tr-icon-btn" :title="t('common.clear')" :disabled="!source.trim() && !target.trim()" @click="clearAll">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
               </svg>
             </button>
           </footer>
