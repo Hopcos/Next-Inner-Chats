@@ -9,10 +9,10 @@ namespace NextChats.Api.Controllers;
 public sealed class AdminApprovalController(IApprovalCoordinator coordinator, IChatStore chat, IAuditLogger audit) : AdminControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] Guid? userId, [FromQuery] int take = 100)
+    public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] Guid? userId, [FromQuery] int take = 5000)
     {
         var s = Enum.TryParse<ApprovalStatus>(status, true, out var st) ? st : (ApprovalStatus?)null;
-        var approvals = await chat.ListApprovalsAsync(userId, s, Math.Min(take, 500));
+        var approvals = await chat.ListApprovalsAsync(userId, s, Math.Clamp(take, 10, 10000));
         return Ok(approvals);
     }
 
@@ -51,11 +51,11 @@ public sealed class AdminApprovalController(IApprovalCoordinator coordinator, IC
 public sealed class AdminAuditController(IAdminStore store) : AdminControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid? userId, [FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 200)
+    public async Task<IActionResult> List([FromQuery] Guid? userId, [FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 5000)
     {
-        var fromTime = from > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(from) : DateTimeOffset.UtcNow.AddDays(-7);
+        var fromTime = from > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(from) : DateTimeOffset.UtcNow.AddDays(-30);
         var toTime = to > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(to) : DateTimeOffset.UtcNow.AddDays(1);
-        var logs = await store.QueryAuditLogsAsync(userId, fromTime, toTime, Math.Min(take, 1000));
+        var logs = await store.QueryAuditLogsAsync(userId, fromTime, toTime, Math.Clamp(take, 10, 10000));
         return Ok(logs);
     }
 }
