@@ -65,11 +65,11 @@ public sealed class AdminAuditController(IAdminStore store) : AdminControllerBas
 public sealed class AdminMetricsController(IChatStore chat, IAdminStore admin) : AdminControllerBase
 {
     [HttpGet("usage")]
-    public async Task<IActionResult> Usage([FromQuery] Guid? userId, [FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 500)
+    public async Task<IActionResult> Usage([FromQuery] Guid? userId, [FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 5000)
     {
         var fromTime = from > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(from) : DateTimeOffset.UtcNow.AddDays(-7);
         var toTime = to > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(to) : DateTimeOffset.UtcNow.AddDays(1);
-        var records = await chat.QueryUsageAsync(userId, fromTime, toTime, Math.Min(take, 2000));
+        var records = await chat.QueryUsageAsync(userId, fromTime, toTime, Math.Clamp(take, 100, 50000));
 
         var totals = new
         {
@@ -97,11 +97,11 @@ public sealed class AdminMetricsController(IChatStore chat, IAdminStore admin) :
 
     /// <summary>各用户用量统计：用户名 / 请求数 / Tokens / 成本 / 最后请求时间 / 最后登录时间</summary>
     [HttpGet("usage/users")]
-    public async Task<IActionResult> UsageUsers([FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 500)
+    public async Task<IActionResult> UsageUsers([FromQuery] long from = 0, [FromQuery] long to = 0, [FromQuery] int take = 5000)
     {
         var fromTime = from > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(from) : DateTimeOffset.UtcNow.AddDays(-7);
         var toTime = to > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(to) : DateTimeOffset.UtcNow.AddDays(1);
-        var records = await chat.QueryUsageAsync(null, fromTime, toTime, Math.Min(take, 2000), HttpContext.RequestAborted);
+        var records = await chat.QueryUsageAsync(null, fromTime, toTime, Math.Clamp(take, 100, 50000), HttpContext.RequestAborted);
         var users = await admin.ListUsersAsync(HttpContext.RequestAborted);
         var userMap = users.ToDictionary(u => u.Id);
 
