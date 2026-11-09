@@ -181,6 +181,8 @@ export default {
       saved: 'Saved',
       deleteConfirm: 'Delete user "{username}"?',
       readonly: 'Read-only',
+      lastLogin: 'Last login',
+      neverLoggedIn: 'Never',
       readonlyTip: 'Read-only users can only view the backend; they cannot create, edit, or delete anything',
       readonlySelfBlocked: 'You cannot set the currently signed-in account to read-only, otherwise nobody could manage the backend',
     },

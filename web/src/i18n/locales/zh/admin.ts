@@ -181,6 +181,8 @@ export default {
       saved: '已保存',
       deleteConfirm: '删除用户「{username}」？',
       readonly: '只读',
+      lastLogin: '最后登录',
+      neverLoggedIn: '从未登录',
       readonlyTip: '只读用户仅可查看后台，不能新增、编辑、删除任何内容',
       readonlySelfBlocked: '不能将当前登录账号设为只读，否则将无人可继续管理后台',
     },

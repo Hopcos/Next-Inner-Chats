@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { http } from '@/api/http'
@@ -9,6 +9,7 @@ import { kernel } from '@/kernel'
 const { t } = useI18n()
 
 const users = ref<UserDto[]>([])
+const tableRef = ref<{ sort: (prop: string, order: 'ascending' | 'descending') => void } | null>(null)
 const roles = ref<RoleDto[]>([])
 const loading = ref(false)
 const dialogOpen = ref(false)
@@ -34,6 +35,9 @@ async function load() {
     ])
     users.value = u
     roles.value = r
+    // 数据到达后按最后登录降序（初次渲染时数据可能为空，default-sort 不一定生效）
+    await nextTick()
+    tableRef.value?.sort('lastLoginAt', 'descending')
   } catch (e) {
     kernel.notify.error((e as { message?: string }).message ?? t('admin.users.loadFailed'), (e as { code?: string }).code)
   } finally {
@@ -87,6 +91,19 @@ async function remove(row: UserDto) {
   await load()
 }
 
+/** 最后登录时间展示（与审计页一致使用本地时区） */
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined)
+}
+
+/** 排序：从未登录（null）视为最早 */
+function sortByLastLogin(a: UserDto, b: UserDto): number {
+  const ta = a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : 0
+  const tb = b.lastLoginAt ? new Date(b.lastLoginAt).getTime() : 0
+  return ta - tb
+}
+
 onMounted(load)
 </script>
 
@@ -96,7 +113,14 @@ onMounted(load)
       <h3>{{ t('admin.users.title') }}</h3>
       <el-button type="primary" :disabled="ro" :title="ro ? t('admin.readonlyBanner') : undefined" @click="openCreate">{{ t('admin.users.create') }}</el-button>
     </div>
-    <el-table :data="users" v-loading="loading" size="small" stripe>
+    <el-table
+      ref="tableRef"
+      :data="users"
+      v-loading="loading"
+      size="small"
+      stripe
+      :default-sort="{ prop: 'lastLoginAt', order: 'descending' }"
+    >
       <el-table-column prop="username" :label="t('admin.users.username')" width="140" />
       <el-table-column :label="t('admin.users.authType')" width="100">
         <template #default="{ row }">
@@ -123,6 +147,18 @@ onMounted(load)
         <template #default="{ row }">
           <el-tag v-if="row.isReadonly" type="warning" size="small">{{ t('common.yes') }}</el-tag>
           <span v-else class="nc-dim">{{ t('common.no') }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        prop="lastLoginAt"
+        :label="t('admin.users.lastLogin')"
+        width="170"
+        sortable
+        :sort-method="sortByLastLogin"
+      >
+        <template #default="{ row }">
+          <span v-if="row.lastLoginAt">{{ fmtDateTime(row.lastLoginAt) }}</span>
+          <span v-else class="nc-dim">{{ t('admin.users.neverLoggedIn') }}</span>
         </template>
       </el-table-column>
       <el-table-column :label="t('common.actions')" width="140" fixed="right">
