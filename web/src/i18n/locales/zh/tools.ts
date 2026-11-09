@@ -82,6 +82,9 @@ export default {
       leftPlaceholder: '粘贴原始文本…',
       rightPlaceholder: '粘贴要对比的文本…',
       identical: '两侧内容一致',
+      keysOnly: '仅对比 Key',
+      keysOnlyHint: '检测到两侧均为 JSON，勾选后将仅保留键名结构进行对比',
+      keysOnlyBadge: '仅对比 Key 模式',
     },
     md: {
       name: 'Markdown 预览',

@@ -82,6 +82,9 @@ export default {
       leftPlaceholder: 'Original text…',
       rightPlaceholder: 'Changed text…',
       identical: 'Both sides are identical',
+      keysOnly: 'Keys Only',
+      keysOnlyHint: 'Both sides are valid JSON. Check to compare key structure only',
+      keysOnlyBadge: 'Keys Only Mode',
     },
     md: {
       name: 'Markdown Preview',

@@ -2,6 +2,7 @@
 export const LS = {
   left: 'nc.tool.text-compare.left',
   right: 'nc.tool.text-compare.right',
+  keysOnly: 'nc.tool.text-compare.keysOnly',
 } as const
 
 export function loadSide(key: string): string {

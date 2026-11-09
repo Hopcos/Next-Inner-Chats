@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Text Compare 工具页：行级 diff，逐行严格对齐双栏对比（仅增/删行着色，相同行无背景） */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { diffLines } from 'diff'
 import SplitPane from '../components/SplitPane.vue'
@@ -11,6 +11,11 @@ const { t } = useI18n()
 const leftText = ref(loadSide(LS.left))
 const rightText = ref(loadSide(LS.right))
 const comparing = ref(false)
+const keysOnly = ref(loadSide(LS.keysOnly) === 'true')
+
+watch(keysOnly, (val) => {
+  saveSide(LS.keysOnly, String(val))
+})
 
 interface DiffPart {
   value: string
@@ -28,6 +33,58 @@ interface DiffLinePair {
   kind: PairKind
 }
 
+function parseJsonSafe(text: string): unknown | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+}
+
+/** 深度提取 JSON 的纯 Key 结构并排序，格式化为标准多行字符串 */
+function extractKeysStructure(val: unknown): unknown {
+  if (val === null || typeof val !== 'object') {
+    return null
+  }
+  if (Array.isArray(val)) {
+    // 数组：提取内部元素的所有 key 集合并统一合并，代表数组成员的键结构
+    const merged = new Set<string>()
+    for (const item of val) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        for (const k of Object.keys(item)) merged.add(k)
+      }
+    }
+    if (merged.size > 0) {
+      const sortedKeys = Array.from(merged).sort()
+      const childObj: Record<string, unknown> = {}
+      for (const k of sortedKeys) {
+        // 查找包含该 key 的样例值递归提取
+        const sample = (val as Record<string, unknown>[]).find((it) => it && typeof it === 'object' && k in it)?.[k]
+        childObj[k] = extractKeysStructure(sample)
+      }
+      return [childObj]
+    }
+    // 基础类型数组或空数组：表示为 []
+    return []
+  }
+
+  // 对象：按 key 字母排序，值为其递归 key 结构（非对象终节点为 null）
+  const obj = val as Record<string, unknown>
+  const sortedKeys = Object.keys(obj).sort()
+  const result: Record<string, unknown> = {}
+  for (const k of sortedKeys) {
+    result[k] = extractKeysStructure(obj[k])
+  }
+  return result
+}
+
+const isLeftJson = computed(() => parseJsonSafe(leftText.value) !== null)
+const isRightJson = computed(() => parseJsonSafe(rightText.value) !== null)
+const bothJson = computed(() => isLeftJson.value && isRightJson.value)
+
 /**
  * 规范化换行符：Windows(\r\n)/老 Mac(\r) 统一为 \n。
  * diff 按行比较时若一侧是 \r\n、另一侧是 \n，每一行都会因多出的 \r 被判为不同，
@@ -37,9 +94,29 @@ function normalizeLines(s: string): string {
   return s.replace(/\r\n?/g, '\n')
 }
 
+/** 实际参与对比的左侧文本 */
+const effectiveLeftText = computed(() => {
+  if (keysOnly.value && bothJson.value) {
+    const parsed = parseJsonSafe(leftText.value)
+    const keysObj = extractKeysStructure(parsed)
+    return JSON.stringify(keysObj, null, 2)
+  }
+  return leftText.value
+})
+
+/** 实际参与对比的右侧文本 */
+const effectiveRightText = computed(() => {
+  if (keysOnly.value && bothJson.value) {
+    const parsed = parseJsonSafe(rightText.value)
+    const keysObj = extractKeysStructure(parsed)
+    return JSON.stringify(keysObj, null, 2)
+  }
+  return rightText.value
+})
+
 const diffResult = computed<DiffPart[] | null>(() => {
   if (!comparing.value) return null
-  return diffLines(normalizeLines(leftText.value), normalizeLines(rightText.value))
+  return diffLines(normalizeLines(effectiveLeftText.value), normalizeLines(effectiveRightText.value))
 })
 
 /**
@@ -104,7 +181,26 @@ function backToEdit() {
         <svg class="tc-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13h10M5.5 13l-2-2 6.7-6.7a1.2 1.2 0 0 1 1.7 0l.3.3a1.2 1.2 0 0 1 0 1.7L5.5 13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg>
         {{ t('tools.compare.backToEdit') }}
       </el-button>
+
+      <!-- 当左右两侧均识别为有效 JSON 时，展示仅对比 Key 选项 -->
+      <el-checkbox
+        v-if="bothJson"
+        v-model="keysOnly"
+        size="small"
+        class="tc-keys-opt"
+        :title="t('tools.compare.keysOnlyHint')"
+      >
+        <span class="tc-keys-label">
+          <svg class="tc-keys-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 2a4 4 0 0 0-4 4c0 .4.1.8.2 1.2L2 11.4V14h2.6l1.2-1.2h1.6v-1.6l1.4-1.4c.4.1.8.2 1.2.2a4 4 0 1 0 0-8Z" />
+            <circle cx="11.5" cy="4.5" r=".8" fill="currentColor" />
+          </svg>
+          {{ t('tools.compare.keysOnly') }}
+        </span>
+      </el-checkbox>
+
       <div v-if="comparing" class="tc-stats">
+        <span v-if="keysOnly && bothJson" class="tc-stat json-mode">{{ t('tools.compare.keysOnlyBadge') }}</span>
         <span v-if="stats.added === 0 && stats.removed === 0" class="tc-stat same">{{ t('tools.compare.identical') }}</span>
         <template v-else>
           <span class="tc-stat add">+{{ stats.added }} {{ t('tools.compare.added') }}</span>
@@ -204,6 +300,31 @@ function backToEdit() {
 .tc-stat.del {
   color: color-mix(in srgb, #dc2626 55%, var(--nc-text));
   background: color-mix(in srgb, #ef4444 12%, transparent);
+}
+
+.tc-stat.json-mode {
+  color: var(--nc-primary);
+  background: color-mix(in srgb, var(--nc-primary) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--nc-primary) 30%, transparent);
+}
+
+.tc-keys-opt {
+  margin-left: 2px;
+}
+
+.tc-keys-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--nc-text);
+  user-select: none;
+}
+
+.tc-keys-ico {
+  width: 14px;
+  height: 14px;
+  color: var(--nc-primary);
 }
 
 .tc-hint {
