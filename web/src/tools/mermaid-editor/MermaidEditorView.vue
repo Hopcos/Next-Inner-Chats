@@ -54,7 +54,7 @@ onMounted(() => void renderDiagram())
 onBeforeUnmount(() => clearTimeout(timer))
 
 function handleZoom(delta: number) {
-  scale.value = Math.max(0.1, Math.min(5, scale.value + delta))
+  scale.value = Math.max(0.1, Math.min(10, scale.value + delta))
 }
 
 function resetView() {

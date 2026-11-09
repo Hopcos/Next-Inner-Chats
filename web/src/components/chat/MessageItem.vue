@@ -451,6 +451,7 @@ async function renderMermaid() {
       ['reset', '重置（1:1）', '↺'],
       ['drag', '拖动', '✋'],
       ['source', '查看源码', '📄'],
+      ['copy', '复制源码', '📋'],
     ]
     for (const [act, title, label] of acts) {
       const btn = document.createElement('button')
@@ -556,6 +557,14 @@ function onMermaidToolsClick(e: MouseEvent) {
       break
     case 'source':
       v.showingSource = !v.showingSource
+      break
+    case 'copy':
+      if (v.source) {
+        void copyText(v.source).then((ok) => {
+          if (ok) kernel.notify.success(t('chat.copied'))
+          else kernel.notify.warning(t('chat.copyFailed'))
+        })
+      }
       break
   }
   applyMermaidView(box, v)
