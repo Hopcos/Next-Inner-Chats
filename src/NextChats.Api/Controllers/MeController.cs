@@ -98,6 +98,42 @@ public sealed class MeController(
         return Ok(tools.Select(t => new { t.Id, key = t.ToolKey, t.Name, t.Icon, t.Description, t.BaseUrl, t.SortOrder }));
     }
 
+    /// <summary>用户-工具配置：读取某工具的个人配置（无记录 = 使用出厂默认，isDefault=true）</summary>
+    [HttpGet("tool-settings/{toolKey}")]
+    public async Task<IActionResult> GetToolSetting(string toolKey)
+    {
+        if (!IsValidToolKey(toolKey)) return BadRequest(Err("TOOL_KEY_INVALID"));
+        var json = await config.GetUserToolSettingAsync(UserId, toolKey);
+        JsonElement? cfgValue = json is null ? null : JsonSerializer.Deserialize<JsonElement>(json);
+        return Ok(new { toolKey, isDefault = json is null, config = cfgValue });
+    }
+
+    /// <summary>用户-工具配置：保存某工具的个人配置（整体覆盖，JSON 对象）</summary>
+    [HttpPut("tool-settings/{toolKey}")]
+    public async Task<IActionResult> PutToolSetting(string toolKey, [FromBody] JsonElement body)
+    {
+        if (!IsValidToolKey(toolKey)) return BadRequest(Err("TOOL_KEY_INVALID"));
+        if (body.ValueKind != JsonValueKind.Object) return BadRequest(Err("TOOL_CONFIG_INVALID"));
+        var raw = body.GetRawText();
+        if (raw.Length > MaxToolConfigChars) return BadRequest(Err("INPUT_TOO_LARGE", MaxToolConfigChars));
+        await config.SetUserToolSettingAsync(UserId, toolKey, raw);
+        return Ok(new { toolKey, isDefault = false, config = body });
+    }
+
+    /// <summary>用户-工具配置：删除某工具的个人配置，恢复出厂默认</summary>
+    [HttpDelete("tool-settings/{toolKey}")]
+    public async Task<IActionResult> DeleteToolSetting(string toolKey)
+    {
+        if (!IsValidToolKey(toolKey)) return BadRequest(Err("TOOL_KEY_INVALID"));
+        await config.DeleteUserToolSettingAsync(UserId, toolKey);
+        return Ok(new { toolKey, isDefault = true, config = (object?)null });
+    }
+
+    private const int MaxToolConfigChars = 8000;
+
+    private static bool IsValidToolKey(string toolKey)
+        => !string.IsNullOrWhiteSpace(toolKey) && toolKey.Length <= 64 && toolKey.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_');
+
     /// <summary>读取个人设置（JSON 值原样返回，前端解析）</summary>
     [HttpGet("settings")]
     public async Task<IActionResult> GetSettings()

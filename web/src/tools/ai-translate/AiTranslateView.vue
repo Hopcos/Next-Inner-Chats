@@ -9,16 +9,15 @@ import { useI18n } from 'vue-i18n'
 import { kernel } from '@/kernel'
 import { http, streamPost } from '@/api/http'
 import { copyText } from '@/utils/clipboard'
-import { DEFAULT_TRANSLATE_PROMPT, LS, loadDirection, loadModel, loadPrompt, loadSource, loadStreamMode, loadTarget, savePrompt, saveSource, saveStreamMode, saveTarget } from './config'
+import { DEFAULT_TRANSLATE_PROMPT, LS, loadDirection, loadModel, loadSource, loadStreamMode, loadTarget, saveSource, saveStreamMode, saveTarget } from './config'
 import type { Direction } from './config'
 
 const { t } = useI18n()
 
 const MAX_CHARS = 50000
 
-// ---------------- 状态（localStorage-only） ----------------
+// ---------------- 状态 ----------------
 const direction = ref<Direction>(loadDirection())
-const promptText = ref(loadPrompt())
 const showPrompt = ref(false)
 // 输出模式：false(默认)= 完整模式（非流式，杜绝上游流式首增量偶发丢字）；true = 流式打字机
 const streamMode = ref(loadStreamMode())
@@ -33,14 +32,110 @@ function setDir(d: Direction) {
   }
 }
 
-function onPromptInput() {
-  savePrompt(promptText.value)
+// ---------------- 专家提示词（服务端 UserToolSettings 持久化，按用户 × 工具） ----------------
+// 状态机：loading（读取中）→ default（出厂默认）/ custom（已自定义）→ saving → saved | error
+type PromptStatus = 'loading' | 'default' | 'custom' | 'saving' | 'saved' | 'error'
+const TOOL_KEY = 'ai-translate'
+const promptText = ref(DEFAULT_TRANSLATE_PROMPT)
+const promptStatus = ref<PromptStatus>('loading')
+// 服务端最后确认保存的内容（用于判断“是否真的有改动”，避免空保存）
+let savedPrompt = DEFAULT_TRANSLATE_PROMPT
+let promptSaveTimer: ReturnType<typeof setTimeout> | null = null
+/** 旧版 localStorage 提示词（仅用于一次性迁移，迁移后删除） */
+function readLegacyPrompt(): string | null {
+  try {
+    return localStorage.getItem('nc.tool.ai-translate.prompt')
+  } catch {
+    return null
+  }
+}
+function clearLegacyPrompt() {
+  try {
+    localStorage.removeItem('nc.tool.ai-translate.prompt')
+  } catch {
+    /* ignore */
+  }
 }
 
-function resetPrompt() {
-  promptText.value = DEFAULT_TRANSLATE_PROMPT
-  savePrompt(DEFAULT_TRANSLATE_PROMPT)
+const promptDirty = computed(() => promptText.value !== savedPrompt)
+const promptIsDefault = computed(() => promptText.value.trim() === DEFAULT_TRANSLATE_PROMPT.trim())
+
+async function loadPromptFromServer() {
+  try {
+    const r = await http.get<{ isDefault: boolean; config: { systemPrompt?: string } | null }>(`/api/me/tool-settings/${TOOL_KEY}`)
+    const custom = r?.config?.systemPrompt
+    if (!r?.isDefault && typeof custom === 'string' && custom.trim()) {
+      promptText.value = custom
+      savedPrompt = custom
+      promptStatus.value = 'custom'
+    } else {
+      // 一次性迁移：旧版存于 localStorage 的自定义提示词 → 上推到服务端，避免用户已有修改丢失
+      const legacy = readLegacyPrompt()
+      if (legacy && legacy.trim() !== DEFAULT_TRANSLATE_PROMPT.trim()) {
+        promptText.value = legacy
+        savedPrompt = DEFAULT_TRANSLATE_PROMPT
+        promptStatus.value = 'saving'
+        await persistPrompt()
+      } else {
+        promptText.value = DEFAULT_TRANSLATE_PROMPT
+        savedPrompt = DEFAULT_TRANSLATE_PROMPT
+        promptStatus.value = 'default'
+      }
+      clearLegacyPrompt()
+    }
+  } catch {
+    // 读取失败：回退到出厂默认并提示，不阻断翻译
+    promptText.value = DEFAULT_TRANSLATE_PROMPT
+    savedPrompt = DEFAULT_TRANSLATE_PROMPT
+    promptStatus.value = 'error'
+  }
 }
+void loadPromptFromServer()
+
+async function persistPrompt(): Promise<void> {
+  if (!promptDirty.value) {
+    // 输入又改回已保存内容：无需请求，状态回到与服务端一致
+    promptStatus.value = promptIsDefault.value ? 'default' : 'custom'
+    return
+  }
+  const value = promptText.value
+  promptStatus.value = 'saving'
+  try {
+    if (promptIsDefault.value) {
+      // 与出厂默认一致 → 删除个人配置（恢复为默认，不占用存储）
+      await http.delete(`/api/me/tool-settings/${TOOL_KEY}`)
+      savedPrompt = DEFAULT_TRANSLATE_PROMPT
+      promptStatus.value = 'default'
+    } else {
+      await http.put(`/api/me/tool-settings/${TOOL_KEY}`, { systemPrompt: value })
+      savedPrompt = value
+      promptStatus.value = 'saved'
+    }
+  } catch {
+    promptStatus.value = 'error'
+  }
+}
+
+function onPromptInput() {
+  promptStatus.value = 'saving'
+  if (promptSaveTimer) clearTimeout(promptSaveTimer)
+  promptSaveTimer = setTimeout(() => void persistPrompt(), 600)
+}
+
+async function resetPrompt() {
+  if (promptSaveTimer) clearTimeout(promptSaveTimer)
+  promptText.value = DEFAULT_TRANSLATE_PROMPT
+  await persistPrompt()
+}
+
+onBeforeUnmount(() => {
+  // 离开页面前若有未落库的修改，立即冲刷保存
+  if (promptSaveTimer) {
+    clearTimeout(promptSaveTimer)
+    promptSaveTimer = null
+    void persistPrompt()
+  }
+})
 
 // ---------------- 模型（当前用户权限下的 LLM 列表） ----------------
 if (!kernel.catalog.state.loaded) void kernel.catalog.load().catch(() => {})
@@ -278,8 +373,9 @@ onBeforeUnmount(() => {
         <div v-show="showPrompt" class="tr-prompt-panel">
           <div class="tr-prompt-head">
             <span class="tr-prompt-title">{{ t('tools.translate.prompt') }}</span>
+            <span class="tr-prompt-status" :class="`st-${promptStatus}`">{{ t(`tools.translate.promptStatus.${promptStatus}`) }}</span>
             <span class="tr-prompt-tip">{{ t('tools.translate.promptTip') }}</span>
-            <button class="tr-ghost-btn small" @click="resetPrompt">{{ t('tools.translate.promptReset') }}</button>
+            <button class="tr-ghost-btn small" :disabled="promptIsDefault && !promptDirty" @click="resetPrompt">{{ t('tools.translate.promptReset') }}</button>
           </div>
           <el-input v-model="promptText" type="textarea" :rows="5" resize="none" @input="onPromptInput" />
         </div>
@@ -527,6 +623,30 @@ onBeforeUnmount(() => {
   flex: 1;
   font-size: 12px;
   color: var(--nc-text-dim, #8a94a6);
+}
+
+/* 提示词状态徽标：默认 / 自定义 / 保存中 / 已保存 / 失败 */
+.tr-prompt-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(127, 127, 127, 0.14);
+  color: var(--nc-text-dim, #8a94a6);
+}
+.tr-prompt-status.st-custom,
+.tr-prompt-status.st-saved {
+  background: rgba(34, 197, 94, 0.16);
+  color: #16a34a;
+}
+.tr-prompt-status.st-saving,
+.tr-prompt-status.st-loading {
+  background: rgba(59, 130, 246, 0.14);
+  color: #2563eb;
+}
+.tr-prompt-status.st-error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #dc2626;
 }
 
 .tr-grid {

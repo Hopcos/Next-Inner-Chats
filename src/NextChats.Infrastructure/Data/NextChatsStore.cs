@@ -287,6 +287,37 @@ public sealed class NextChatsStore : IConfigStore, IChatStore, IAdminStore, ITea
         }, TimeSpan.FromSeconds(30), ct);
     }
 
+    public async Task<string?> GetUserToolSettingAsync(Guid userId, string toolKey, CancellationToken ct = default)
+    {
+        await using var db = await _db.CreateDbContextAsync(ct);
+        return await db.UserToolSettings.AsNoTracking()
+            .Where(s => s.UserId == userId && s.ToolKey == toolKey)
+            .Select(s => s.ConfigJson)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task SetUserToolSettingAsync(Guid userId, string toolKey, string configJson, CancellationToken ct = default)
+    {
+        await using var db = await _db.CreateDbContextAsync(ct);
+        var row = await db.UserToolSettings.FirstOrDefaultAsync(s => s.UserId == userId && s.ToolKey == toolKey, ct);
+        if (row is null)
+        {
+            db.UserToolSettings.Add(new UserToolSetting { UserId = userId, ToolKey = toolKey, ConfigJson = configJson });
+        }
+        else
+        {
+            row.ConfigJson = configJson;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteUserToolSettingAsync(Guid userId, string toolKey, CancellationToken ct = default)
+    {
+        await using var db = await _db.CreateDbContextAsync(ct);
+        await db.UserToolSettings.Where(s => s.UserId == userId && s.ToolKey == toolKey).ExecuteDeleteAsync(ct);
+    }
+
     public async Task SetUserSettingAsync(Guid userId, string key, string valueJson, CancellationToken ct = default)
     {
         await using var db = await _db.CreateDbContextAsync(ct);

@@ -255,6 +255,18 @@ public static class InfrastructureExtensions
                 );
                 CREATE INDEX "IX_AppToolRoleBindings_RoleId" ON "AppToolRoleBindings" ("RoleId");
                 """);
+            // ---------- 用户-工具配置（每用户每工具一份个性化设置，如 AI 翻译专家提示词） ----------
+            await AddTableIfMissingAsync(conn, "UserToolSettings", """
+                CREATE TABLE "UserToolSettings" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_UserToolSettings" PRIMARY KEY,
+                    "UserId" TEXT NOT NULL,
+                    "ToolKey" TEXT NOT NULL,
+                    "ConfigJson" TEXT NOT NULL DEFAULT '{}',
+                    "CreatedAt" TEXT NOT NULL,
+                    "UpdatedAt" TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX "IX_UserToolSettings_UserId_ToolKey" ON "UserToolSettings" ("UserId", "ToolKey");
+                """);
             // ---------- 团队协作（会话级工程师 + 配置） ----------
             await AddColumnIfMissingAsync(conn, "ChatSessions", "TeamMode", "INTEGER NOT NULL DEFAULT 0");
             await AddColumnIfMissingAsync(conn, "ChatSessions", "TeamConfigJson", "TEXT");

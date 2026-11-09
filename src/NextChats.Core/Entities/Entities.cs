@@ -723,6 +723,27 @@ public class UserSetting
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>
+/// 用户-工具配置（用户 × 沉浸式工具）：每个用户对每个工具保存一份个性化设置（如 AI 翻译的专家提示词）。
+/// 无记录 = 使用工具出厂默认；以 (UserId, ToolKey) 唯一。ConfigJson 为工具自定义的 JSON 对象。
+/// </summary>
+public class UserToolSetting
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid UserId { get; set; }
+
+    /// <summary>工具唯一标识（对应 AppTool.ToolKey / 前端插件 key，如 ai-translate）</summary>
+    [Required, MaxLength(64)] public string ToolKey { get; set; } = null!;
+
+    /// <summary>工具配置 JSON 对象（如 { "systemPrompt": "..." }）</summary>
+    public string ConfigJson { get; set; } = "{}";
+
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 /// <summary>系统/后台全局设置（key-value；如内置工具 http_fetch 域名白名单）。管理端可配置，运行时即时生效。</summary>
 public class SystemSetting
 {

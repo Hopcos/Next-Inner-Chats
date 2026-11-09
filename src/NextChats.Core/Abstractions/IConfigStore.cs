@@ -80,6 +80,16 @@ public interface IConfigStore
 
     Task SetUserSettingAsync(Guid userId, string key, string valueJson, CancellationToken ct = default);
 
+    // ---------- 用户-工具配置（每用户每工具一份；无记录 = 出厂默认） ----------
+    /// <summary>读取用户对某工具的配置 JSON；无记录返回 null</summary>
+    Task<string?> GetUserToolSettingAsync(Guid userId, string toolKey, CancellationToken ct = default);
+
+    /// <summary>保存（新增或覆盖）用户对某工具的配置 JSON</summary>
+    Task SetUserToolSettingAsync(Guid userId, string toolKey, string configJson, CancellationToken ct = default);
+
+    /// <summary>删除用户对某工具的配置（恢复出厂默认）</summary>
+    Task DeleteUserToolSettingAsync(Guid userId, string toolKey, CancellationToken ct = default);
+
     // ---------- 系统/后台设置（全局 key-value；管理端可写，引擎运行时读取） ----------
     Task<string?> GetSystemSettingAsync(string key, CancellationToken ct = default);
 
