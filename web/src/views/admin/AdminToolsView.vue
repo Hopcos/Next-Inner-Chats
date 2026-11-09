@@ -219,36 +219,36 @@ async function saveFetchHosts() {
     </div>
     <p class="tip">{{ t('admin.tools.tip') }}</p>
 
-    <el-table v-loading="loading" :data="tools" size="small" class="tbl">
-      <el-table-column width="52">
+    <el-table v-loading="loading" :data="tools" size="small" class="tbl" border>
+      <el-table-column width="52" min-width="52" align="center" resizable>
         <template #default="{ row }">
           <span class="cell-ico"><ToolIcon :icon="row.icon" :size="18" /></span>
         </template>
       </el-table-column>
-      <el-table-column prop="toolKey" :label="t('admin.tools.toolKey')" width="130">
+      <el-table-column prop="toolKey" :label="t('admin.tools.toolKey')" width="140" min-width="110" resizable show-overflow-tooltip>
         <template #default="{ row }"><code class="key">{{ row.toolKey }}</code></template>
       </el-table-column>
-      <el-table-column prop="name" :label="t('admin.tools.name')" width="150" />
-      <el-table-column prop="sortOrder" :label="t('admin.tools.sortOrder')" width="80" align="center" />
-      <el-table-column prop="description" :label="t('admin.tools.description')" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="baseUrl" :label="t('admin.tools.endpoint')" min-width="180" show-overflow-tooltip />
-      <el-table-column :label="t('admin.tools.headers')" min-width="170" show-overflow-tooltip>
+      <el-table-column prop="name" :label="t('admin.tools.name')" width="150" min-width="110" resizable show-overflow-tooltip />
+      <el-table-column prop="sortOrder" :label="t('admin.tools.sortOrder')" width="80" min-width="70" align="center" resizable />
+      <el-table-column prop="description" :label="t('admin.tools.description')" min-width="200" resizable show-overflow-tooltip />
+      <el-table-column prop="baseUrl" :label="t('admin.tools.endpoint')" min-width="180" resizable show-overflow-tooltip />
+      <el-table-column :label="t('admin.tools.headers')" min-width="170" resizable show-overflow-tooltip>
         <template #default="{ row }">
           <span class="nc-mono nc-dim">{{ row.headersMasked || t('common.placeholderDash') }}</span>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.tools.roles')" width="200">
+      <el-table-column :label="t('admin.tools.roles')" width="200" min-width="150" resizable>
         <template #default="{ row }">
           <el-tag v-for="rn in row.roleNames" :key="rn" size="small" class="role-tag">{{ rn }}</el-tag>
           <span v-if="!row.roleNames.length" class="admin-only">{{ t('admin.tools.adminOnly') }}</span>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.tools.enabled')" width="80">
+      <el-table-column :label="t('admin.tools.enabled')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? 'ON' : 'OFF' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="130">
+      <el-table-column :label="t('common.actions')" min-width="140" resizable>
         <template #default="{ row }">
           <el-button size="small" text type="primary" :disabled="ro" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <el-button size="small" text type="danger" :disabled="ro" @click="onDelete(row)">{{ t('common.delete') }}</el-button>

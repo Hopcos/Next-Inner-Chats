@@ -201,13 +201,13 @@ onMounted(load)
       <el-button type="primary" :disabled="ro" @click="createRole">{{ t('admin.roles.create') }}</el-button>
     </div>
 
-    <el-table :data="roles" v-loading="loading" size="small" stripe>
-      <el-table-column prop="name" :label="t('common.name')" width="140" />
-      <el-table-column prop="code" :label="t('admin.roles.code')" width="120">
+    <el-table :data="roles" v-loading="loading" size="small" stripe border>
+      <el-table-column prop="name" :label="t('common.name')" width="140" min-width="110" resizable show-overflow-tooltip />
+      <el-table-column prop="code" :label="t('admin.roles.code')" width="120" min-width="90" resizable>
         <template #default="{ row }"><span class="nc-mono">{{ row.code }}</span></template>
       </el-table-column>
-      <el-table-column prop="description" :label="t('common.description')" min-width="180" show-overflow-tooltip />
-      <el-table-column :label="t('admin.roles.bindings')" width="220">
+      <el-table-column prop="description" :label="t('common.description')" min-width="180" resizable show-overflow-tooltip />
+      <el-table-column :label="t('admin.roles.bindings')" width="240" min-width="200" resizable>
         <template #default="{ row }">
           <el-tag size="small" type="warning">MCP {{ row.mcpServerIds.length }}</el-tag>
           <el-tag size="small" type="primary" style="margin-left: 4px">Prompt {{ row.promptIds.length }}</el-tag>
@@ -215,12 +215,12 @@ onMounted(load)
           <el-tag size="small" type="info" style="margin-left: 4px">LLM {{ row.modelIds.length }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.roles.system')" width="70">
+      <el-table-column :label="t('admin.roles.system')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-tag v-if="row.isSystem" size="small">{{ t('admin.roles.builtin') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="160" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="160" resizable>
         <template #default="{ row }">
           <el-button size="small" type="primary" plain :disabled="ro" @click="openBindings(row)">{{ t('admin.roles.bind') }}</el-button>
           <el-button size="small" text type="danger" :disabled="ro" @click="remove(row)">{{ t('common.delete') }}</el-button>

@@ -267,22 +267,22 @@ onMounted(load)
       <el-button type="primary" :disabled="ro" @click="openCreate">{{ t('admin.mcp.create') }}</el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" size="small" stripe>
+    <el-table :data="list" v-loading="loading" size="small" stripe border>
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="expand">
             <div class="sec-title">{{ t('admin.mcp.catalogSummary', { tools: row.toolCount, prompts: row.promptCount, resources: row.resourceCount }) }}</div>
-            <el-table :data="row.items" size="small">
-              <el-table-column :label="t('admin.mcp.kind')" width="100">
+            <el-table :data="row.items" size="small" border>
+              <el-table-column :label="t('admin.mcp.kind')" width="100" min-width="80" resizable>
                 <template #default="{ row: it }">
                   <el-tag size="small" :type="it.kind === 'Tool' ? 'primary' : it.kind === 'Prompt' ? 'warning' : 'success'">
                     {{ it.kind }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="name" :label="t('common.name')" width="180" />
-              <el-table-column prop="description" :label="t('common.description')" show-overflow-tooltip />
-              <el-table-column :label="t('common.enabled')" width="90">
+              <el-table-column prop="name" :label="t('common.name')" width="180" min-width="120" resizable show-overflow-tooltip />
+              <el-table-column prop="description" :label="t('common.description')" min-width="200" resizable show-overflow-tooltip />
+              <el-table-column :label="t('common.enabled')" min-width="90" resizable>
                 <template #default="{ row: it }">
                   <el-switch :model-value="it.enabled" size="small" :disabled="ro" @change="(v: boolean) => toggleItem(it.id, v)" />
                 </template>
@@ -291,15 +291,15 @@ onMounted(load)
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="name" :label="t('common.name')" width="150" />
-      <el-table-column prop="transport" :label="t('admin.mcp.transport')" width="90" />
-      <el-table-column :label="t('admin.mcp.endpoint')" min-width="180">
+      <el-table-column prop="name" :label="t('common.name')" width="150" min-width="110" resizable show-overflow-tooltip />
+      <el-table-column prop="transport" :label="t('admin.mcp.transport')" width="90" min-width="80" resizable />
+      <el-table-column :label="t('admin.mcp.endpoint')" min-width="180" resizable show-overflow-tooltip>
         <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.transport === 'Stdio' ? (row.stdioCommand || row.stdioArgsJson || t('common.placeholderDash')) : (row.endpoint || t('common.placeholderDash')) }}</span></template>
       </el-table-column>
-      <el-table-column :label="t('admin.mcp.headers')" width="120">
+      <el-table-column :label="t('admin.mcp.headers')" width="120" min-width="100" resizable show-overflow-tooltip>
         <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.headersMasked || t('common.placeholderDash') }}</span></template>
       </el-table-column>
-      <el-table-column :label="t('admin.mcp.authMode')" width="150">
+      <el-table-column :label="t('admin.mcp.authMode')" width="150" min-width="120" resizable>
         <template #default="{ row }">
           <el-tag size="small" :type="row.authMode === 'oauth' ? (row.oauth?.authorized ? 'success' : 'warning') : 'info'">
             {{ row.authMode === 'oauth' ? t('admin.mcp.authOAuth') : t('admin.mcp.authHeaders') }}
@@ -309,18 +309,18 @@ onMounted(load)
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="toolCount" :label="t('admin.mcp.tools')" width="60" />
-      <el-table-column :label="t('common.enabled')" width="80">
+      <el-table-column prop="toolCount" :label="t('admin.mcp.tools')" width="70" min-width="60" resizable />
+      <el-table-column :label="t('common.enabled')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-switch :model-value="row.enabled" size="small" :disabled="ro" @change="(v: boolean) => toggleServer(row, v)" />
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.mcp.isVision')" width="90">
+      <el-table-column :label="t('admin.mcp.isVision')" width="90" min-width="80" resizable>
         <template #default="{ row }">
           <el-tag :type="row.isVision ? 'success' : 'info'" size="small">{{ row.isVision ? t('common.yes') : t('common.no') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="470" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="470" resizable>
         <template #default="{ row }">
           <div class="row-actions">
             <el-button size="small" type="primary" plain :loading="fetchingId === row.id" :disabled="ro" @click="fetchCatalog(row)">{{ t('admin.mcp.fetch') }}</el-button>

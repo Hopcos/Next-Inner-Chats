@@ -154,10 +154,10 @@ function onFsSelect(p: string) {
       <el-button size="small" type="primary" @click="openCreate">＋ {{ t('workspace.create') }}</el-button>
     </div>
 
-    <el-table :data="rows" v-loading="loading" size="small" stripe>
-      <el-table-column prop="name" :label="t('workspace.name')" min-width="140" />
-      <el-table-column prop="rootPath" :label="t('workspace.rootPath')" min-width="260" show-overflow-tooltip />
-      <el-table-column :label="t('workspace.roleBindings')" min-width="220">
+    <el-table :data="rows" v-loading="loading" size="small" stripe border>
+      <el-table-column prop="name" :label="t('workspace.name')" width="160" min-width="120" resizable show-overflow-tooltip />
+      <el-table-column prop="rootPath" :label="t('workspace.rootPath')" min-width="260" resizable show-overflow-tooltip />
+      <el-table-column :label="t('workspace.roleBindings')" min-width="220" resizable>
         <template #default="{ row }">
           <el-tag v-for="b in row.bindings" :key="b.roleId" size="small" class="ws-tag" :type="b.level >= 30 ? 'danger' : b.level >= 20 ? 'warning' : 'info'">
             {{ b.roleName }}: {{ b.level >= 40 ? t('workspace.levelAuto') : b.level >= 30 ? t('workspace.levelFull') : b.level >= 20 ? t('workspace.levelWrite') : t('workspace.levelRead') }}
@@ -165,12 +165,12 @@ function onFsSelect(p: string) {
           <span v-if="row.bindings.length === 0" class="ws-none-bind">{{ t('workspace.noBindings') }}</span>
         </template>
       </el-table-column>
-      <el-table-column :label="t('workspace.enabled')" width="90">
+      <el-table-column :label="t('workspace.enabled')" width="90" min-width="80" resizable>
         <template #default="{ row }">
           <el-tag size="small" :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? t('common.yes') : t('common.no') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="215" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="215" resizable>
         <template #default="{ row }">
           <div style="display: flex; align-items: center; gap: 4px; white-space: nowrap;">
             <el-button size="small" text @click="openEdit(row)">{{ t('common.edit') }}</el-button>

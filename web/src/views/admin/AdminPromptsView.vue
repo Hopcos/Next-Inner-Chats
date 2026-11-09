@@ -87,18 +87,18 @@ onMounted(load)
       <h3>{{ t('admin.prompts.title', { syntax: syntaxVar }) }}</h3>
       <el-button type="primary" :disabled="ro" @click="openCreate">{{ t('admin.prompts.create') }}</el-button>
     </div>
-    <el-table :data="list" v-loading="loading" size="small" stripe>
-      <el-table-column prop="name" :label="t('common.name')" width="160" />
-      <el-table-column prop="summary" :label="t('common.summary')" min-width="220" show-overflow-tooltip />
-      <el-table-column :label="t('common.enabled')" width="80">
+    <el-table :data="list" v-loading="loading" size="small" stripe border>
+      <el-table-column prop="name" :label="t('common.name')" width="160" min-width="120" resizable show-overflow-tooltip />
+      <el-table-column prop="summary" :label="t('common.summary')" min-width="220" resizable show-overflow-tooltip />
+      <el-table-column :label="t('common.enabled')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? t('common.enabled') : t('common.disabled') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="updatedAt" :label="t('common.updatedAt')" width="170">
+      <el-table-column prop="updatedAt" :label="t('common.updatedAt')" width="170" min-width="140" resizable>
         <template #default="{ row }">{{ new Date(row.updatedAt).toLocaleString(undefined) }}</template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="140" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="140" resizable>
         <template #default="{ row }">
           <el-button size="small" text :disabled="ro" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <el-button size="small" text type="danger" :disabled="ro" @click="remove(row)">{{ t('common.delete') }}</el-button>

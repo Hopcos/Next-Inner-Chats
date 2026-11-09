@@ -485,15 +485,15 @@ onMounted(load)
 
         <!-- 数据表格展示（支持分页） -->
         <div v-else class="table-wrapper">
-          <el-table :data="pagedByDay" size="small">
-            <el-table-column prop="day" :label="t('admin.metrics.day')" width="140" />
-            <el-table-column :label="t('admin.metrics.requests')" width="120">
+          <el-table :data="pagedByDay" size="small" border>
+            <el-table-column prop="day" :label="t('admin.metrics.day')" width="140" min-width="110" resizable />
+            <el-table-column :label="t('admin.metrics.requests')" width="120" min-width="90" resizable>
               <template #default="{ row }">{{ row.requests }}</template>
             </el-table-column>
-            <el-table-column :label="t('admin.metrics.tokens')">
+            <el-table-column :label="t('admin.metrics.tokens')" min-width="140" resizable>
               <template #default="{ row }">{{ row.tokens.toLocaleString() }}</template>
             </el-table-column>
-            <el-table-column :label="t('admin.metrics.cost')">
+            <el-table-column :label="t('admin.metrics.cost')" min-width="120" resizable>
               <template #default="{ row }">{{ row.cost.toFixed(4) }}</template>
             </el-table-column>
           </el-table>
@@ -514,21 +514,21 @@ onMounted(load)
       <!-- 用户使用情况卡片 -->
       <el-card class="table-card" shadow="never">
         <template #header>{{ t('admin.metrics.userUsage') }}</template>
-        <el-table :data="users" size="small">
-          <el-table-column prop="userName" :label="t('admin.metrics.userName')" min-width="150" />
-          <el-table-column :label="t('admin.metrics.requests')" width="110">
+        <el-table :data="users" size="small" border>
+          <el-table-column prop="userName" :label="t('admin.metrics.userName')" min-width="160" resizable show-overflow-tooltip />
+          <el-table-column :label="t('admin.metrics.requests')" width="110" min-width="90" resizable>
             <template #default="{ row }">{{ row.requests }}</template>
           </el-table-column>
-          <el-table-column :label="t('admin.metrics.tokens')" width="130">
+          <el-table-column :label="t('admin.metrics.tokens')" width="130" min-width="100" resizable>
             <template #default="{ row }">{{ row.tokens.toLocaleString() }}</template>
           </el-table-column>
-          <el-table-column :label="t('admin.metrics.cost')" width="130">
+          <el-table-column :label="t('admin.metrics.cost')" width="130" min-width="100" resizable>
             <template #default="{ row }">${{ row.cost.toFixed(4) }}</template>
           </el-table-column>
-          <el-table-column :label="t('admin.metrics.lastRequest')" width="180">
+          <el-table-column :label="t('admin.metrics.lastRequest')" width="180" min-width="140" resizable>
             <template #default="{ row }">{{ fmtTime(row.lastRequestAt) }}</template>
           </el-table-column>
-          <el-table-column :label="t('admin.metrics.lastLogin')" width="180">
+          <el-table-column :label="t('admin.metrics.lastLogin')" min-width="180" resizable>
             <template #default="{ row }">{{ fmtTime(row.lastLoginAt) }}</template>
           </el-table-column>
         </el-table>

@@ -208,7 +208,7 @@ onMounted(load)
       <el-button type="primary" @click="openCreate">{{ t('admin.llm.create') }}</el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" size="small" stripe>
+    <el-table :data="list" v-loading="loading" size="small" stripe border>
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="expand">
@@ -217,23 +217,23 @@ onMounted(load)
               <el-button size="small" text type="primary" :disabled="ro" @click="openModelCreate(row)">＋ {{ t('admin.llm.addModel') }}</el-button>
             </div>
             <div v-if="row.models.length === 0" class="nc-dim">{{ t('admin.llm.noModels') }}</div>
-            <el-table :data="row.models" size="small">
-              <el-table-column prop="name" :label="t('common.name')" width="170" />
-              <el-table-column :label="t('admin.llm.isVision')" width="80">
+            <el-table :data="row.models" size="small" border>
+              <el-table-column prop="name" :label="t('common.name')" width="170" min-width="120" resizable show-overflow-tooltip />
+              <el-table-column :label="t('admin.llm.isVision')" width="80" min-width="70" resizable>
                 <template #default="{ row: m }">
                   <el-tag :type="m.isVision ? 'success' : 'info'" size="small">{{ m.isVision ? t('common.yes') : t('common.no') }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="contextWindow" :label="t('admin.llm.colContext')" width="110" />
-              <el-table-column prop="priceInPer1K" :label="t('admin.llm.priceIn')" width="130" />
-              <el-table-column prop="priceOutPer1K" :label="t('admin.llm.priceOut')" width="130" />
-              <el-table-column prop="priority" :label="t('admin.llm.colPriority')" width="70" />
-              <el-table-column :label="t('common.enabled')" width="80">
+              <el-table-column prop="contextWindow" :label="t('admin.llm.colContext')" width="110" min-width="90" resizable />
+              <el-table-column prop="priceInPer1K" :label="t('admin.llm.priceIn')" width="130" min-width="100" resizable />
+              <el-table-column prop="priceOutPer1K" :label="t('admin.llm.priceOut')" width="130" min-width="100" resizable />
+              <el-table-column prop="priority" :label="t('admin.llm.colPriority')" width="70" min-width="60" resizable />
+              <el-table-column :label="t('common.enabled')" width="80" min-width="70" resizable>
                 <template #default="{ row: m }">
                   <el-tag :type="m.enabled ? 'success' : 'info'" size="small">{{ m.enabled ? t('common.enabled') : t('common.disabled') }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column :label="t('common.actions')" width="150">
+              <el-table-column :label="t('common.actions')" min-width="150" resizable>
                 <template #default="{ row: m, $index }">
                   <el-button size="small" text :disabled="ro || row.models.length <= 1" @click="removeModel(m)">{{ t('common.delete') }}</el-button>
                   <el-button size="small" text :disabled="ro" @click="openModelEdit(m)">{{ t('common.edit') }}</el-button>
@@ -244,28 +244,28 @@ onMounted(load)
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="name" :label="t('common.name')" width="150" />
-      <el-table-column prop="kind" :label="t('admin.llm.colKind')" width="120" />
-      <el-table-column :label="t('admin.llm.colModels')" width="100">
+      <el-table-column prop="name" :label="t('common.name')" width="150" min-width="110" resizable show-overflow-tooltip />
+      <el-table-column prop="kind" :label="t('admin.llm.colKind')" width="120" min-width="90" resizable />
+      <el-table-column :label="t('admin.llm.colModels')" width="100" min-width="80" resizable>
         <template #default="{ row }">{{ row.models.length }} <span class="nc-dim">models</span></template>
       </el-table-column>
-      <el-table-column :label="t('admin.llm.baseUrl')" min-width="180">
+      <el-table-column :label="t('admin.llm.baseUrl')" min-width="180" resizable show-overflow-tooltip>
         <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.baseUrl || t('common.placeholderDash') }}</span></template>
       </el-table-column>
-      <el-table-column :label="t('admin.llm.colKey')" width="110">
+      <el-table-column :label="t('admin.llm.colKey')" width="110" min-width="90" resizable>
         <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.apiKeyMasked || t('admin.llm.notConfigured') }}</span></template>
       </el-table-column>
-      <el-table-column :label="t('common.enabled')" width="70">
+      <el-table-column :label="t('common.enabled')" width="70" min-width="60" resizable>
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? t('common.enabled') : t('common.disabled') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.llm.colHealth')" width="80">
+      <el-table-column :label="t('admin.llm.colHealth')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-tag :type="row.isHealthy ? 'success' : 'danger'" size="small">{{ row.isHealthy ? t('admin.llm.healthy') : t('admin.llm.circuitBroken') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="330" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="330" resizable>
         <template #default="{ row }">
           <div class="row-actions">
             <el-button size="small" text type="primary" :disabled="ro" @click="fetchModelsFor(row)">{{ t('admin.llm.fetchModels') }}</el-button>

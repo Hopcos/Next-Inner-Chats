@@ -119,31 +119,32 @@ onMounted(load)
       v-loading="loading"
       size="small"
       stripe
+      border
       :default-sort="{ prop: 'lastLoginAt', order: 'descending' }"
     >
-      <el-table-column prop="username" :label="t('admin.users.username')" width="140" />
-      <el-table-column :label="t('admin.users.authType')" width="100">
+      <el-table-column prop="username" :label="t('admin.users.username')" min-width="120" show-overflow-tooltip resizable />
+      <el-table-column :label="t('admin.users.authType')" min-width="100" resizable>
         <template #default="{ row }">
           <el-tag size="small" :type="row.authType && row.authType !== 'default' ? 'warning' : 'info'">
             {{ row.authType && row.authType !== 'default' ? row.authType : t('admin.users.authTypeDefault') }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="displayName" :label="t('admin.users.displayName')" width="120" />
-      <el-table-column prop="email" :label="t('admin.users.email')" min-width="160" />
-      <el-table-column :label="t('admin.users.roles')" min-width="160">
+      <el-table-column prop="displayName" :label="t('admin.users.displayName')" min-width="120" show-overflow-tooltip resizable />
+      <el-table-column prop="email" :label="t('admin.users.email')" min-width="180" show-overflow-tooltip resizable />
+      <el-table-column :label="t('admin.users.roles')" min-width="180" resizable>
         <template #default="{ row }">
           <el-tag v-for="r in row.roles" :key="r.id" size="small" :type="r.code === 'admin' ? 'danger' : 'primary'" style="margin: 1px">
             {{ r.name }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.status')" width="80">
+      <el-table-column :label="t('common.status')" min-width="80" resizable>
         <template #default="{ row }">
           <el-tag :type="row.status === 'Active' ? 'success' : 'info'" size="small">{{ row.status }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.users.readonly')" width="90">
+      <el-table-column :label="t('admin.users.readonly')" min-width="90" resizable>
         <template #default="{ row }">
           <el-tag v-if="row.isReadonly" type="warning" size="small">{{ t('common.yes') }}</el-tag>
           <span v-else class="nc-dim">{{ t('common.no') }}</span>
@@ -152,8 +153,9 @@ onMounted(load)
       <el-table-column
         prop="lastLoginAt"
         :label="t('admin.users.lastLogin')"
-        width="170"
+        min-width="170"
         sortable
+        resizable
         :sort-method="sortByLastLogin"
       >
         <template #default="{ row }">
@@ -161,7 +163,7 @@ onMounted(load)
           <span v-else class="nc-dim">{{ t('admin.users.neverLoggedIn') }}</span>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="140" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="140" resizable>
         <template #default="{ row }">
           <el-button size="small" text :disabled="ro" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <el-button size="small" text type="danger" :disabled="ro" @click="remove(row)">{{ t('common.delete') }}</el-button>

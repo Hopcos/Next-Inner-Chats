@@ -195,30 +195,30 @@ onMounted(load)
 
     <!-- 表格与分页 -->
     <el-card class="table-card" shadow="never">
-      <el-table :data="pagedList" v-loading="loading" size="small" stripe>
-        <el-table-column prop="createdAt" :label="t('admin.approvals.time')" width="165">
+      <el-table :data="pagedList" v-loading="loading" size="small" stripe border>
+        <el-table-column prop="createdAt" :label="t('admin.approvals.time')" width="165" min-width="140" resizable>
           <template #default="{ row }">{{ new Date(row.createdAt).toLocaleString(undefined) }}</template>
         </el-table-column>
-        <el-table-column :label="t('admin.approvals.tool')" min-width="190">
+        <el-table-column :label="t('admin.approvals.tool')" width="220" min-width="170" resizable show-overflow-tooltip>
           <template #default="{ row }">
             <span class="nc-mono tool-name">{{ row.mcpServerName }}.{{ row.toolName }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('admin.approvals.args')" min-width="220">
+        <el-table-column :label="t('admin.approvals.args')" min-width="220" resizable show-overflow-tooltip>
           <template #default="{ row }">
             <el-tooltip :content="prettyArgs(row.argumentsJson)" placement="top" :show-after="300">
               <span class="nc-mono nc-dim args-text">{{ (row.argumentsJson ?? '').slice(0, 80) }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column :label="t('common.status')" width="100">
+        <el-table-column :label="t('common.status')" width="100" min-width="80" resizable>
           <template #default="{ row }">
             <el-tag :type="row.status === 'Pending' ? 'warning' : row.status === 'Approved' ? 'success' : row.status === 'Rejected' ? 'danger' : 'info'" size="small">
               {{ row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('common.actions')" width="140" fixed="right">
+        <el-table-column :label="t('common.actions')" min-width="140" resizable>
           <template #default="{ row }">
             <template v-if="row.status === 'Pending'">
               <el-button size="small" type="success" plain :disabled="ro" @click="decide(row, true)">{{ t('admin.approvals.approve') }}</el-button>

@@ -888,3 +888,55 @@ html.nc-chat[data-theme='cyber'] .el-dropdown__popper.el-popper {
     animation: none;
   }
 }
+
+/* ================= 后台管理通用数据表格样式（表头与数据行鲜明对比 + 拖拽体验优化） ================= */
+.el-table {
+  --el-table-header-bg-color: var(--nc-surface-2, rgba(148, 163, 184, 0.08));
+  --el-table-border-color: var(--nc-border, rgba(148, 163, 184, 0.14));
+}
+
+/* 表头：明显更深/具有实体感的质感底色、加粗字重、与数据行鲜明区隔的底边框及文字颜色 */
+.el-table th.el-table__cell {
+  background-color: var(--nc-surface-solid, #141d2f) !important;
+  color: var(--nc-text, #e6edf6) !important;
+  font-weight: 700 !important;
+  font-size: 12.5px !important;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid var(--nc-border-strong, rgba(148, 163, 184, 0.28)) !important;
+  user-select: none;
+}
+
+/* 明亮主题下的表头对比度提升 */
+html[data-theme='dawn'] .el-table th.el-table__cell {
+  background-color: #ebf0f7 !important;
+  color: #0f172a !important;
+  border-bottom: 2px solid rgba(15, 23, 42, 0.22) !important;
+}
+
+/* 数据行与单元格：正常字重、柔和字色 */
+.el-table td.el-table__cell {
+  font-weight: 400;
+  color: var(--nc-text, #e6edf6);
+  border-bottom: 1px solid var(--nc-border, rgba(148, 163, 184, 0.14));
+}
+
+/* 表头列与列之间的拖动分割线更清晰，鼠标 hover 时呈现主色高亮 */
+.el-table--border th.el-table__cell {
+  border-right: 1px solid var(--nc-border-strong, rgba(148, 163, 184, 0.24)) !important;
+}
+
+/* fixed 固定列（操作栏等）背景与阴影融合，避免透明穿透 */
+.el-table th.el-table-fixed-column--right,
+.el-table th.el-table-fixed-column--left {
+  background-color: var(--nc-surface-solid, #141d2f) !important;
+}
+html[data-theme='dawn'] .el-table th.el-table-fixed-column--right,
+html[data-theme='dawn'] .el-table th.el-table-fixed-column--left {
+  background-color: #ebf0f7 !important;
+}
+
+/* 操作列（最后一列通常无需自身右侧向空白处拖动，避免引发“拖动右侧没反应”或右侧悬空拖拽的错觉） */
+.el-table th.col-no-resize {
+  cursor: default !important;
+}
+

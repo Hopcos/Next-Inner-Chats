@@ -237,23 +237,23 @@ onMounted(load)
 
     <!-- 表格与分页 -->
     <el-card class="table-card" shadow="never">
-      <el-table :data="pagedList" v-loading="loading" size="small" stripe>
-        <el-table-column prop="createdAt" :label="t('admin.audit.time')" width="165">
+      <el-table :data="pagedList" v-loading="loading" size="small" stripe border>
+        <el-table-column prop="createdAt" :label="t('admin.audit.time')" width="165" min-width="140" resizable>
           <template #default="{ row }">{{ new Date(row.createdAt).toLocaleString(undefined) }}</template>
         </el-table-column>
-        <el-table-column :label="t('admin.audit.action')" width="170">
+        <el-table-column :label="t('admin.audit.action')" width="170" min-width="140" resizable>
           <template #default="{ row }">
             <el-tag :type="(actionTypes[row.action] as any) ?? 'info'" size="small">{{ row.action }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('admin.audit.traceId')" width="180">
+        <el-table-column :label="t('admin.audit.traceId')" width="180" min-width="140" resizable show-overflow-tooltip>
           <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.traceId }}</span></template>
         </el-table-column>
-        <el-table-column prop="target" :label="t('admin.audit.target')" min-width="150" show-overflow-tooltip />
-        <el-table-column :label="t('admin.audit.detail')" min-width="220" show-overflow-tooltip>
+        <el-table-column prop="target" :label="t('admin.audit.target')" width="180" min-width="140" resizable show-overflow-tooltip />
+        <el-table-column :label="t('admin.audit.detail')" min-width="220" resizable show-overflow-tooltip>
           <template #default="{ row }"><span class="nc-mono nc-dim">{{ row.detailJson ?? t('common.placeholderDash') }}</span></template>
         </el-table-column>
-        <el-table-column :label="t('admin.audit.suspicious')" width="80" align="center">
+        <el-table-column :label="t('admin.audit.suspicious')" min-width="90" align="center" resizable>
           <template #default="{ row }">
             <el-tag v-if="row.isSuspicious" type="danger" size="small">{{ t('admin.audit.yes') }}</el-tag>
             <span v-else class="nc-dim">{{ t('admin.audit.no') }}</span>

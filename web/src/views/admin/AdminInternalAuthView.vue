@@ -167,30 +167,30 @@ onMounted(load)
       <el-button type="primary" :disabled="ro" @click="openCreate">{{ t('admin.internalAuth.create') }}</el-button>
     </div>
 
-    <el-table :data="providers" v-loading="loading" size="small" stripe>
-      <el-table-column prop="name" :label="t('admin.internalAuth.colName')" width="100">
+    <el-table :data="providers" v-loading="loading" size="small" stripe border>
+      <el-table-column prop="name" :label="t('admin.internalAuth.colName')" width="110" min-width="90" resizable>
         <template #default="{ row }"><span class="nc-mono">{{ row.name }}</span></template>
       </el-table-column>
-      <el-table-column prop="api" :label="t('admin.internalAuth.colApi')" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="httpMethod" :label="t('admin.internalAuth.colMethod')" width="80" />
-      <el-table-column :label="t('admin.internalAuth.colRules')" width="90">
+      <el-table-column prop="api" :label="t('admin.internalAuth.colApi')" min-width="220" resizable show-overflow-tooltip />
+      <el-table-column prop="httpMethod" :label="t('admin.internalAuth.colMethod')" width="90" min-width="80" resizable />
+      <el-table-column :label="t('admin.internalAuth.colRules')" width="100" min-width="80" resizable>
         <template #default="{ row }">
           <el-tag size="small" type="warning">{{ row.successRules.length }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.internalAuth.colRoles')" min-width="150">
+      <el-table-column :label="t('admin.internalAuth.colRoles')" min-width="150" resizable>
         <template #default="{ row }">
           <el-tag v-for="rid in row.defaultRoleIds" :key="rid" size="small" style="margin: 1px">
             {{ allRoles.find((r) => r.id === rid)?.name ?? rid.slice(0, 8) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.status')" width="80">
+      <el-table-column :label="t('common.status')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? t('admin.internalAuth.enabled') : t('admin.internalAuth.disabled') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="200" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="200" resizable>
         <template #default="{ row }">
           <el-button size="small" type="primary" plain :disabled="ro" @click="testProvider(row)">{{ t('admin.internalAuth.test') }}</el-button>
           <el-button size="small" text :disabled="ro" @click="openEdit(row)">{{ t('common.edit') }}</el-button>

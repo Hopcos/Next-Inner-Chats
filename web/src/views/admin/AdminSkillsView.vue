@@ -95,16 +95,16 @@ onMounted(load)
       <h3>{{ t('admin.skills.title') }}</h3>
       <el-button type="primary" :disabled="ro" @click="openCreate">{{ t('admin.skills.create') }}</el-button>
     </div>
-    <el-table :data="list" v-loading="loading" size="small" stripe>
-      <el-table-column prop="name" :label="t('common.name')" width="140" />
-      <el-table-column prop="metaToolName" :label="t('admin.skills.colMetaTool')" width="150" class-name="nc-mono" />
-      <el-table-column prop="summary" :label="t('common.summary')" min-width="200" show-overflow-tooltip />
-      <el-table-column :label="t('common.enabled')" width="80">
+    <el-table :data="list" v-loading="loading" size="small" stripe border>
+      <el-table-column prop="name" :label="t('common.name')" width="140" min-width="110" resizable show-overflow-tooltip />
+      <el-table-column prop="metaToolName" :label="t('admin.skills.colMetaTool')" width="150" min-width="120" resizable class-name="nc-mono" show-overflow-tooltip />
+      <el-table-column prop="summary" :label="t('common.summary')" min-width="200" resizable show-overflow-tooltip />
+      <el-table-column :label="t('common.enabled')" width="80" min-width="70" resizable>
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? t('common.enabled') : t('common.disabled') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="140" fixed="right">
+      <el-table-column :label="t('common.actions')" min-width="140" resizable>
         <template #default="{ row }">
           <el-button size="small" text :disabled="ro" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <el-button size="small" text type="danger" :disabled="ro" @click="remove(row)">{{ t('common.delete') }}</el-button>
