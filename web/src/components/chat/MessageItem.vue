@@ -404,6 +404,7 @@ const roundHtmlMap = computed<Record<string, string>>(() => {
 watch(
   () => [shownContent.value, props.message.content] as const,
   async () => {
+    if (!isAssistant.value) return
     const full = props.message.content
     const typing = props.message.live && textShown.value < full.length
     if (typing) {
@@ -696,12 +697,16 @@ function prettyArgs(raw?: string): string {
       <!-- 正文（打字机揭示 → Markdown + Mermaid；带轮次锚点的新数据按“思考→工具→输出”逐轮展示，
            仅带 outputBefore 的中期数据按“输出段↔工具卡”交替，旧数据整段展示） -->
       <div
-        v-if="message.content || segmentedEnabled || roundLayoutEnabled || message.status !== 'sending'"
+        v-if="(isAssistant && (message.content || segmentedEnabled || roundLayoutEnabled || message.status !== 'sending')) || (!isAssistant && message.content)"
         ref="bubbleRef"
         class="bubble"
         :class="{ streaming: streamingNow }"
       >
-        <template v-if="roundLayoutEnabled">
+        <!-- 提问（User 消息）：保留原样输入格式（换行、缩进等），移除代码框样式以防框不全 -->
+        <template v-if="!isAssistant">
+          <div class="user-text">{{ message.content }}</div>
+        </template>
+        <template v-else-if="roundLayoutEnabled">
           <div ref="contentRef" class="md-host round-host" @click="onContentClick" @mousedown="onMermaidPanStart" @wheel="onMermaidWheel">
             <div v-if="nonRoundNotes.length" class="context-notes">
               <div v-for="(note, i) in nonRoundNotes" :key="'n' + i" class="context-note nc-dim">
@@ -1081,6 +1086,15 @@ function prettyArgs(raw?: string): string {
 /* ---- 打字机阶段的纯文本 ---- */
 .plain-text {
   white-space: pre-wrap;
+}
+
+/* ---- 提问（User 消息）文本：保留原样输入格式（换行、缩进），无代码框装饰 ---- */
+.user-text {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--nc-text);
 }
 </style>
 
