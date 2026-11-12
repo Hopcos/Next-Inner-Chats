@@ -157,12 +157,12 @@ function isAuthPath(path: string): boolean {
 }
 
 export const http = {
-  get: <T = unknown>(path: string) => request<T>(path, { method: 'GET' }),
-  post: <T = unknown>(path: string, body?: unknown) =>
-    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
-  put: <T = unknown>(path: string, body?: unknown) =>
-    request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body) }),
-  delete: <T = unknown>(path: string) => request<T>(path, { method: 'DELETE' }),
+  get: <T = unknown>(path: string, options?: RequestInit) => request<T>(path, { method: 'GET', ...options }),
+  post: <T = unknown>(path: string, body?: unknown, options?: RequestInit) =>
+    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), ...options }),
+  put: <T = unknown>(path: string, body?: unknown, options?: RequestInit) =>
+    request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body), ...options }),
+  delete: <T = unknown>(path: string, options?: RequestInit) => request<T>(path, { method: 'DELETE', ...options }),
 }
 
 /** 流式 POST（SSE）：读取 data: 行并回调解析后的 JSON 对象；401 自动刷新后重放一次 */
@@ -211,27 +211,47 @@ export async function streamPost(
   const decoder = new TextDecoder()
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
+  const onAbort = () => {
+    reader.cancel().catch(() => {})
+  }
+  if (signal) {
+    if (signal.aborted) {
+      onAbort()
+      throw new DOMException('The operation was aborted', 'AbortError')
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  }
 
-    let sepIndex = buffer.indexOf('\n\n')
-    while (sepIndex >= 0) {
-      const chunk = buffer.slice(0, sepIndex)
-      buffer = buffer.slice(sepIndex + 2)
-      for (const line of chunk.split('\n')) {
-        if (line.startsWith('data:')) {
-          const payload = line.slice(5).trim()
-          if (!payload) continue
-          try {
-            onEvent(JSON.parse(payload) as Record<string, unknown>)
-          } catch {
-            /* 忽略非 JSON 行 */
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let sepIndex = buffer.indexOf('\n\n')
+      while (sepIndex >= 0) {
+        const chunk = buffer.slice(0, sepIndex)
+        buffer = buffer.slice(sepIndex + 2)
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data:')) {
+            const payload = line.slice(5).trim()
+            if (!payload) continue
+            try {
+              onEvent(JSON.parse(payload) as Record<string, unknown>)
+            } catch {
+              /* 忽略非 JSON 行 */
+            }
           }
         }
+        sepIndex = buffer.indexOf('\n\n')
       }
-      sepIndex = buffer.indexOf('\n\n')
+    }
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted', 'AbortError')
+    }
+  } finally {
+    if (signal) {
+      signal.removeEventListener('abort', onAbort)
     }
   }
 }

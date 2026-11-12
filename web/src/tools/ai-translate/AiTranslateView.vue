@@ -244,12 +244,16 @@ async function run() {
       )
     } else {
       // 完整模式（默认）：非流式补全 —— 单次完整 JSON 响应，无增量边界，可根除"译文缺开头几个字"
-      const res = await http.post<{ text: string }>('/api/tools/llm/complete', {
-        modelId: modelId.value,
-        systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
-        prompt: userPrompt,
-        maxTokens: 64000,
-      })
+      const res = await http.post<{ text: string }>(
+        '/api/tools/llm/complete',
+        {
+          modelId: modelId.value,
+          systemPrompt: promptText.value.trim() || DEFAULT_TRANSLATE_PROMPT,
+          prompt: userPrompt,
+          maxTokens: 64000,
+        },
+        { signal: abort.signal },
+      )
       target.value = res?.text ?? ''
     }
     if (streamErr) throw streamErr
@@ -326,6 +330,7 @@ function stopSpeak() {
 }
 
 onBeforeUnmount(() => {
+  abort?.abort()
   stopSpeak()
   if (saveTimer) {
     clearTimeout(saveTimer)
@@ -439,7 +444,23 @@ onBeforeUnmount(() => {
               <path d="M20 16H8a4 4 0 0 1-4-4V11" />
             </svg>
           </button>
-          <el-button type="primary" class="tr-go" :loading="busy" size="large" @click="run">
+          <el-button
+            :type="busy ? 'danger' : 'primary'"
+            class="tr-go"
+            size="large"
+            @click="run"
+          >
+            <svg
+              v-if="busy"
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="currentColor"
+              aria-hidden="true"
+              style="margin-right: 6px; flex-shrink: 0;"
+            >
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
             {{ busy ? t('tools.translate.stop') : t('tools.translate.translateBtn') }}
           </el-button>
           <span v-if="busy && elapsed > 0" class="tr-wait">{{ t('tools.translate.waiting', { s: elapsed }) }}</span>
