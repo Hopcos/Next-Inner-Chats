@@ -9,6 +9,7 @@ import { KafkaExplorerToolPlugin } from './kafka-explorer/plugin'
 import { K8sExplorerToolPlugin } from './k8s-explorer/plugin'
 import { KafkaProducerToolPlugin } from './kafka-producer/plugin'
 import { SchemaRegistryExplorerToolPlugin } from './schema-registry-explorer/plugin'
+import { NewsRadarToolPlugin } from './news-radar/plugin'
 
 /**
  * 工具插件聚合入口 —— 沉浸式工具栏的"插拔面板"：
@@ -26,4 +27,5 @@ export const toolPlugins = [
   K8sExplorerToolPlugin,
   KafkaProducerToolPlugin,
   SchemaRegistryExplorerToolPlugin,
+  NewsRadarToolPlugin,
 ]
