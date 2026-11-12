@@ -15,6 +15,7 @@ import { useI18n } from 'vue-i18n'
 import { http } from '@/api/http'
 import { kernel } from '@/kernel'
 import type { NewsItem, NewsListResponse, NewsSearchResponse, NewsSource, SearchMode, SourcesResponse } from './types'
+import { renderNewsMarkdown } from './markdown'
 
 const { t } = useI18n()
 const TOOL_KEY = 'news-radar'
@@ -413,11 +414,12 @@ onMounted(async () => {
                 </h2>
               </div>
 
-              <!-- 新闻描述正文区域：柔和字色、适宜行高与轻微内缩，形成自然阅读层次 -->
+              <!-- 新闻描述正文区域：通过 GFM Markdown 风格展示（富文本排版、代码块、列表、引用、表格等） -->
               <div class="nr-desc-block">
-                <div class="nr-desc">
-                  {{ cleanDescription(isOriginal(item.id) ? (item.description_original || item.description_zh) : (item.description_zh || item.description_original)) }}
-                </div>
+                <div
+                  class="nr-desc nr-md-content"
+                  v-html="renderNewsMarkdown(isOriginal(item.id) ? (item.description_original || item.description_zh) : (item.description_zh || item.description_original))"
+                />
               </div>
             </div>
           </article>
@@ -862,8 +864,129 @@ onMounted(async () => {
   font-size: 13.8px;
   line-height: 1.75;
   color: var(--nc-text-muted);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* GFM Markdown 富文本正文排版（对标系统设计规范） */
+.nr-md-content :deep(p) {
+  margin: 6px 0;
+}
+
+.nr-md-content :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.nr-md-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.nr-md-content :deep(h1),
+.nr-md-content :deep(h2),
+.nr-md-content :deep(h3),
+.nr-md-content :deep(h4) {
+  margin: 12px 0 6px;
+  font-weight: 700;
+  color: var(--nc-text);
+  line-height: 1.4;
+}
+
+.nr-md-content :deep(h1) {
+  font-size: 16px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--nc-border);
+}
+
+.nr-md-content :deep(h2) {
+  font-size: 15px;
+}
+
+.nr-md-content :deep(h3) {
+  font-size: 14px;
+}
+
+.nr-md-content :deep(ul),
+.nr-md-content :deep(ol) {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.nr-md-content :deep(li) {
+  margin: 2px 0;
+}
+
+.nr-md-content :deep(code) {
+  font-family: Consolas, 'JetBrains Mono', Menlo, monospace;
+  font-size: 12px;
+  background: rgba(148, 163, 184, 0.16);
+  border-radius: 4px;
+  padding: 1.5px 5px;
+  color: var(--nc-primary);
+}
+
+.nr-md-content :deep(pre) {
+  background: rgba(15, 23, 42, 0.88);
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.nr-md-content :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.nr-md-content :deep(blockquote) {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--nc-primary);
+  color: var(--nc-text-muted);
+  background: color-mix(in srgb, var(--nc-primary) 6%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+.nr-md-content :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+  font-size: 12.5px;
+}
+
+.nr-md-content :deep(th),
+.nr-md-content :deep(td) {
+  border: 1px solid var(--nc-border);
+  padding: 5px 9px;
+  text-align: left;
+}
+
+.nr-md-content :deep(th) {
+  background: color-mix(in srgb, var(--nc-surface) 80%, transparent);
+  font-weight: 600;
+  color: var(--nc-text);
+}
+
+.nr-md-content :deep(a) {
+  color: var(--nc-primary);
+  text-decoration: none;
+}
+
+.nr-md-content :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.nr-md-content :deep(strong) {
+  color: var(--nc-text);
+  font-weight: 600;
+}
+
+.nr-md-content :deep(hr) {
+  border: 0;
+  border-top: 1px solid var(--nc-border);
+  margin: 10px 0;
 }
 
 @media (max-width: 768px) {
