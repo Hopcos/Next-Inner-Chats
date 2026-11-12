@@ -137,6 +137,7 @@ export default {
       clearHistory: 'Clear',
       historyEmpty: 'No history yet — pick a color',
       noEyeDropper: 'This browser does not support the EyeDropper API (Chrome / Edge recommended). Use the palette or HEX input instead.',
+      insecureContextTip: 'The page is accessed over an insecure context (HTTP IP/LAN), where the browser disables the EyeDropper API. The palette has been opened automatically, or access via HTTPS / localhost.',
       copiedFmt: 'Copied {fmt} color',
       pickFromHistory: 'Click to make current',
     },

@@ -137,6 +137,7 @@ export default {
       clearHistory: '清空',
       historyEmpty: '暂无历史，先取一个颜色吧',
       noEyeDropper: '当前浏览器不支持 EyeDropper 屏幕取色（推荐 Chrome / Edge），可使用色板或 HEX 输入取色。',
+      insecureContextTip: '当前页面处于非安全环境（HTTP 局域网/IP 访问），浏览器限制了原生屏幕取色 API。已自动为您唤起调色板，或请使用 HTTPS / localhost 访问。',
       copiedFmt: '已复制 {fmt} 格式颜色',
       pickFromHistory: '点击设为当前颜色',
     },
