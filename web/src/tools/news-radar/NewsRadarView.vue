@@ -857,6 +857,9 @@ onMounted(async () => {
   border-radius: 8px;
   padding: 12px 16px;
   margin-top: 2px;
+  overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* 描述全文：字号13.8px、行高1.75、次级字色（--nc-text-muted），与标题产生明快舒适的阅读反差 */
@@ -865,9 +868,22 @@ onMounted(async () => {
   line-height: 1.75;
   color: var(--nc-text-muted);
   word-break: break-word;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
 }
 
 /* GFM Markdown 富文本正文排版（对标系统设计规范） */
+.nr-md-content :deep(img) {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  border-radius: 8px;
+  margin: 8px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  object-fit: contain;
+  box-sizing: border-box;
+}
 .nr-md-content :deep(p) {
   margin: 6px 0;
 }
