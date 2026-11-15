@@ -3,6 +3,32 @@ import MarkdownIt from 'markdown-it'
 import type { StateBlock as MdBlockState, StateInline as MdInlineState } from 'markdown-it'
 
 /**
+ * 预处理 LaTeX 数学公式文本：
+ * 1. 自动转义未被转义的百分号（如 0.05%、100% -> 0.05\%、100\%）
+ *    在标准 LaTeX 中，% 是行注释符（Comment Character）；
+ *    若 LLM 生成类似 \frac{0.004745}{0.05%} = ... 时未加反斜杠，
+ *    KaTeX 会将 % 之后的所有内容当作注释丢弃，导致花括号丢失并报错：
+ *    "Unexpected end of input in a macro argument, expected '}' at end of input"
+ * 2. 规整中文全角常见符号（如全角空格转为 \quad，全角逗号/分号规整）
+ */
+function preprocessLatex(raw: string): string {
+  if (!raw) return ''
+  let code = raw
+
+  // 1. 将未转义的百分号 % 转义为 \%（排除前面已有奇数个反斜杠转义的情况）
+  // 匹配非反斜杠结尾处紧邻的 %，或者字符串开头的 %
+  code = code.replace(/(^|[^\\])(?:\\\\)*%/g, (match) => {
+    // 若匹配项以 % 结尾，将其替换为保留前导字符 + \%
+    return match.slice(0, -1) + '\\%'
+  })
+
+  // 2. 全角空格转为 LaTeX 间距 \quad
+  code = code.replace(/　/g, '\\quad ')
+
+  return code
+}
+
+/**
  * 给 markdown-it 挂载 KaTeX 数学渲染（与聊天/markdown 预览共用）：
  * - 块级公式：独占一行的 $$...$$（可跨多行），输出 <div class="math-block">
  * - 行内公式：$...$
@@ -114,8 +140,9 @@ export function installMarkdownMath(md: InstanceType<typeof MarkdownIt>): void {
 }
 
 function safeRender(code: string, displayMode: boolean, md: InstanceType<typeof MarkdownIt>): string {
+  const processed = preprocessLatex(code)
   try {
-    return katex.renderToString(code, { displayMode, throwOnError: false, strict: 'ignore' })
+    return katex.renderToString(processed, { displayMode, throwOnError: false, strict: 'ignore' })
   } catch {
     // 极端情况兜底：回退为带边框的原文（保持可读、无 XSS：内容已转义）
     const raw = displayMode ? `$$\n${code}\n$$` : `$${code}$`
