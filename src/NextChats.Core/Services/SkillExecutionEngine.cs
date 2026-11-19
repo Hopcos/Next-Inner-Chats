@@ -8,20 +8,19 @@ using NextChats.Core.Localization;
 namespace NextChats.Core.Services;
 
 /// <summary>
-/// SKILL 执行引擎：
-///  - 懒加载：元工具只下名称/描述（占 Token 极小）；完整指令在模型调用时才注入，防止 Token 爆炸。
-///  - 每个 Skill 暴露为元工具（meta tool），由模型决定是否调用。
-///  - 执行：取指令模板 → {{input}} 注入 → 嵌套 LLM 调用（可用 ModelOverride 指定模型）。
+/// 标准 Agent Skill 执行引擎（机制 A）：
+///  - 启动时：元工具仅下发名称与描述（Name + Description），只占用极低 Token（~15 Tokens/个）。
+///  - 触发时：当用户意图命中某技能时，模型调用该技能元工具，引擎在本地直接读取并渲染出该 Skill 的完整
+///    规范、操作守则与工作流模板（Instruction），将其作为工具结果返回注入进当前会话上下文；
+///  - 零网络开销：完全在内存中展开，不发起嵌套的二次远程 LLM 网络请求，彻底避免网络波动、上游不可达及状态割裂。
 /// </summary>
 public sealed class SkillExecutionEngine : ISkillExecutionEngine
 {
-    private readonly ILlmRouter _router;
     private readonly IPromptTemplateEngine _templates;
     private readonly ILogger _logger;
 
-    public SkillExecutionEngine(ILlmRouter router, IPromptTemplateEngine templates, ILogger<SkillExecutionEngine> logger)
+    public SkillExecutionEngine(IPromptTemplateEngine templates, ILogger<SkillExecutionEngine> logger)
     {
-        _router = router;
         _templates = templates;
         _logger = logger;
     }
@@ -36,57 +35,46 @@ public sealed class SkillExecutionEngine : ISkillExecutionEngine
                 ["type"] = "object",
                 ["properties"] = new JsonObject
                 {
-                    ["input"] = new JsonObject
+                    ["query"] = new JsonObject
                     {
                         ["type"] = "string",
-                        ["description"] = Texts.Get("SKILL_INPUT_DESC", "en"),
-                    },
-                    ["target"] = new JsonObject
-                    {
-                        ["type"] = "string",
-                        ["description"] = Texts.Get("SKILL_TARGET_DESC", "en"),
+                        ["description"] = "Optional context or specific focus when loading this skill",
                     },
                 },
-                ["required"] = new JsonArray("input"),
             };
-            defs.Add(new LlmToolDef(skill.MetaToolName, skill.Description ?? Texts.Get("SKILL_DESC_FALLBACK", "en", skill.Name), schema));
+            var toolDesc = $"{skill.Description ?? Texts.Get("SKILL_DESC_FALLBACK", "en", skill.Name)}. Call this skill to load its full instructions, rules, and guidelines into your current context.";
+            defs.Add(new LlmToolDef(skill.MetaToolName, toolDesc, schema));
         }
         return defs;
     }
 
-    /// <summary>懒加载执行：此刻才读取/注入完整指令并调用嵌套 LLM</summary>
-    public async Task<(bool Success, string Result, string? Error)> ExecuteAsync(Skill skill, string input, string traceId, CancellationToken ct)
+    /// <summary>展开 Skill：在本地直接渲染完整指令并注入会话上下文，零外部网络请求</summary>
+    public Task<(bool Success, string Result, string? Error)> ExecuteAsync(Skill skill, string input, string traceId, CancellationToken ct)
     {
         try
         {
-            // 懒加载：指令模板在调用时才渲染（防止 Token 爆炸）
-            var instruction = _templates.Render(skill.Instruction, new Dictionary<string, object?>
+            // 懒加载：将 Skill 的完整指南、排版准则与流程模板在本地渲染（支持模板变量插值）
+            var rendered = _templates.Render(skill.Instruction, new Dictionary<string, object?>
             {
                 ["input"] = input,
                 ["skill"] = skill.Name,
                 ["trace_id"] = traceId,
             });
 
-            var client = await _router.SelectClientAsync(null, null, null, ct);
-            var request = new LlmRequest
-            {
-                Messages =
-                [
-                    LlmChatMessage.System(instruction),
-                    LlmChatMessage.User(input),
-                ],
-                Stream = false,
-                Model = skill.ModelOverride,
-                MaxTokens = 2048,
-            };
-            var result = await client.CompleteAsync(request, ct);
-            return (true, result.Message.Content ?? Texts.Get("SKILL_NO_OUTPUT", "en"), null);
+            // 包装为标准的 Skill 上下文挂载结果，指导当前主模型在此后的回复中无缝遵循该规则
+            var output = $"<skill_content name=\"{skill.MetaToolName}\">\n" +
+                         $"<skill_name>{skill.Name}</skill_name>\n" +
+                         $"<skill_instructions>\n{rendered.Trim()}\n</skill_instructions>\n" +
+                         $"</skill_content>\n\n" +
+                         $"Skill \"{skill.Name}\" is now active in your context. Follow the above skill_instructions strictly to complete the user's request in your following response.";
+
+            _logger.LogInformation("Skill {Skill} ({Meta}) activated and loaded into context trace={TraceId}", skill.Name, skill.MetaToolName, traceId);
+            return Task.FromResult<(bool Success, string Result, string? Error)>((true, output, null));
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Skill {Skill} 执行失败 trace={TraceId}", skill.Name, traceId);
-            var msg = ex is LlmUnavailableException || ex is LlmHttpException ? Texts.Get("SKILL_LLM_UNAVAILABLE", "en") : ex.Message;
-            return (false, "", msg);
+            _logger.LogWarning(ex, "Skill {Skill} 展开失败 trace={TraceId}", skill.Name, traceId);
+            return Task.FromResult<(bool Success, string Result, string? Error)>((false, string.Empty, ex.Message));
         }
     }
 }
